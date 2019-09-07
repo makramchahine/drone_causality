@@ -5,9 +5,9 @@
     <arg name="id" default=""/>
 
     <!-- <include file="$(find bebop_driver)/launch/bebop_node.launch"/> -->
-    <include file="$(find bebop_tools)/launch/joy_teleop.launch"
+    <include file="$(find bebop_tools)/launch/joy_teleop.launch">
         <arg name="joy_config" value="xbox360"/>
-    />
+    </include>
 
     <node pkg="deepdrone" name="move_camera_down" type="move_camera_down.py" output="screen" />
 
