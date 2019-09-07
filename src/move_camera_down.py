@@ -4,7 +4,7 @@ import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 
-def talker():
+def move_camera_down():
     pub = rospy.Publisher('/bebop/camera_control', Twist, queue_size=10)
     rospy.init_node('deepdrone', anonymous=True)
     rate = rospy.Rate(1) # 10hz
@@ -22,6 +22,6 @@ def talker():
 
 if __name__ == '__main__':
     try:
-        talker()
+        move_camera_down()
     except rospy.ROSInterruptException:
         pass

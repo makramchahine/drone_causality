@@ -28,6 +28,7 @@ def listener():
     rospy.init_node('listener', anonymous=True)
 
     rospy.Subscriber("/bebop/image_raw", Image, callback)
+    # rospy.Subscriber("/bebop/image_raw", Image, callback)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
