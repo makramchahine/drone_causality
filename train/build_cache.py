@@ -1,5 +1,4 @@
 import argparse
-import cv2
 from collections import OrderedDict as odict
 import numpy as np
 from cv_bridge import CvBridge
@@ -56,7 +55,7 @@ plt.plot(sample_times, odom)
 plt.title('odometry readings')
 plt.show()
 
-f = h5py.File(args.cache)
+f = h5py.File(args.cache, 'w')
 f.create_dataset("images", data=images)
 f.create_dataset("odom", data=odom)
 f.close()

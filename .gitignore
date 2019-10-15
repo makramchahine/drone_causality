@@ -1,3 +1,11 @@
+*.pyc
+
+save/
+log/
+
 # Ignore PyCharm idea files
 .idea
+__pycache__
+
+# caches
 *.h5
