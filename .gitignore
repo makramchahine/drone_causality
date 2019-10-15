@@ -1,2 +1,3 @@
 # Ignore PyCharm idea files
 .idea
+*.h5
