@@ -6,153 +6,223 @@ import sys
 import time 
 import random 
 import numpy as np
+import pprint
 
+# Images to collect
+imagesRequests = [
+    airsim.ImageRequest("front_center", airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
+
+    airsim.ImageRequest("front_center", airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True),
+
+    airsim.ImageRequest("front_center", airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.DepthVis, pixels_as_float = False, compress = True),
+
+    airsim.ImageRequest("front_center", airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True),
+
+    airsim.ImageRequest("front_center", airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.Segmentation, pixels_as_float = False, compress = True),
+
+    airsim.ImageRequest("front_center", airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True),
+
+    airsim.ImageRequest("front_center", airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_right",  airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("front_left",   airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("fpv",          airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
+    airsim.ImageRequest("back_center",  airsim.ImageType.Infrared, pixels_as_float = False, compress = True),  
+]
+
+# Start up
 client = airsim.MultirotorClient() 
 client.confirmConnection() 
 client.enableApiControl(True) 
 
-def rotate(v, quaternion): 
-    u = np.array([quaternion.x_val, quaternion.y_val, quaternion.z_val])
-    s = np.array([quaternion.w_val])
+state = client.getMultirotorState()
+s = pprint.pformat(state)
 
-    return 2 * np.dot(u, v) * u + (s*s - np.dot(u,u)) * v + 2 * s * np.cross(u, v)
-
-def getCentroid(face):
-    return (face[0] + face[1] + face[2]) / 3
-
-def distancePoint2Face(point, face):
-    faceNormal = np.cross(face[0] - face[1], face[1] - face[2])
-    faceNormal = faceNormal / np.linalg.norm(faceNormal)
-    pass
-
-# IMPORTANT! This needs to be the starting location of the drone in UE Coordinates
-NED_OFFSET = np.array((-44187.0, -74102.0, 22867.0))
-CENTIMETERS_TO_METERS = 0.01
-
-# List of returned meshes are received via this function
-meshes=client.simGetMeshPositionVertexBuffers()
-faces = []
-centroids = []
-for m in meshes:
-
-    # Convert the lists to numpy arrays
-    vertices = np.array(m.vertices, dtype=np.float32)
-    indices  = np.array(m.indices, dtype=np.uint32)
-    numVertices = len(vertices) // 3
-    numIndices  = len(indices)
-    
-    vertices = vertices.reshape((numVertices, 3))
-    indices  = indices.reshape((numIndices // 3, 3))
-
-    for i in indices:
-        faces.append(np.array((
-            CENTIMETERS_TO_METERS*(vertices[i[0]] - NED_OFFSET), 
-            CENTIMETERS_TO_METERS*(vertices[i[1]] - NED_OFFSET), 
-            CENTIMETERS_TO_METERS*(vertices[i[2]] - NED_OFFSET))))
-        centroids.append(getCentroid(faces[-1]))
-
-MIN_CLEARANCE = 1.0
-def checkOccupied(point):
-    for c in centroids:
-        if np.dot(point - c, point - c) < MIN_CLEARANCE**2:
-            return True
-    return False
-
-radius = 5.0
-endpoint = Vector3r( radius*random.random(),  radius*random.random(), - radius*random.random())
-speed    = 1 # m/s
-
-# Mark the endpoint
-client.simPlotPoints([endpoint], size = 10, is_persistent = True)
-
-# Build voxel map
-# Player start = (-44187.0, -74102.0, 22867.0)
-# def convert2UECoordinates(point):
-#     return meters2Centimeters * Vector3r(point.x, point.y, -point.z) + nedOffset
-
-class voxelOccupancyMap:
-
-    def __init__(self, diameter=20, cellWidth=1):
-        sideLength = diameter / cellWidth
-        self.data = [[[]]]
-
-        for x in range(sideLength):
-            for y in range (sideLength):
-                for z in range(sideLength):
-                    pointNED = Vector3r(x, y, z)
-
-
+radius = 25
+toleranace = 1.0
+endpoint = radius * np.array([random.random(), random.random(), -random.random()])
+client.simPlotPoints([Vector3r(endpoint[0], endpoint[1], endpoint[2])], is_persistent = True) 
  
-# # Find a collision-free path to the endpoint
-# gridCellLength = 1
-# grid = np.zeros((20,20,20))
-# 
-# def getDroneWorldPosition():
-#     return client.simGetVehiclePose().position +
-# 
-# def checkIsOccupied(i, j, k):
-#     dronePosition = getDroneWorldPosition()
-#     cellPosition = dronePosition + (i, j, k)
-# 
-#     for vertex in meshes.vertices:
-#         if abs(cellPosition - vertex) < gridCellLength / 2.0:
-#             return True
-# 
-#     return False
-# 
-# def fillOccupied(g):
-#     for i in len(g):
-#         for j in len(g):
-#             for k in len(g):
-#                 g[i, j, k] = checkIsOccupied(i, j, k)
-# 
-# print(fillOccupied(grid))
+class VoxelOccupancyMap:
+    def __init__(self, radius, cellSize):
+        self.cellSize = cellSize
+        self.radius   = radius
 
-# client.armDisarm(True)
-# client.takeoffAsync().join()
+        sideLength = int(2*radius / cellSize + 0.5)
+        self.sideLength = sideLength
 
-# print("Taken off")
+        self.data = np.full((sideLength, sideLength, sideLength), False)
+        self.occupiedVoxels = set()
+    
+    def addPoint(self, point):
+        i, j, k = self.indexOf(point)
+        self.data[i, j, k] = True
+        self.occupiedVoxels.add((i,j,k))
 
-# images = []
-#         airsim.ImageRequest("fpv",          airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-#       
-#         airsim.ImageRequest("front_center", airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_right",  airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_left",   airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("fpv",          airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True),
-#       
-#         airsim.ImageRequest("front_center", airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_right",  airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_left",   airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("fpv",          airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.DepthVis, pixels_as_float = False, compress = True),
-#       
-#         airsim.ImageRequest("front_center", airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_right",  airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_left",   airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("fpv",          airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True),
-#        
-#         airsim.ImageRequest("front_center", airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_right",  airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_left",   airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("fpv",          airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.Segmentation, pixels_as_float = False, compress = True),
-#       
-#         airsim.ImageRequest("front_center", airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_right",  airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_left",   airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("fpv",          airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True),
-#       
-#         airsim.ImageRequest("front_center", airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_right",  airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("front_left",   airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("fpv",          airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-#         airsim.ImageRequest("back_center",  airsim.ImageType.Infrared, pixels_as_float = False, compress = True),  
-#     ])) 
+    def isOccupied(self, point):
+        i, j, k = self.indexOf(point)
+        return self.data[i, j, k]
+
+    def indexOf(self, point):
+        i = int((self.radius + point[0]) / self.cellSize)
+        j = int((self.radius + point[1]) / self.cellSize)
+        k = int((self.radius + point[2]) / self.cellSize)
+
+        if any([v < 0 for v in (i, j, k)]) or any([v >= self.sideLength for v in (i, j, k)]):
+            raise ValueError("Passed point " + str(point) + " is outside voxel map bounds.")
+
+        return i, j, k
+
+    def getAdjacent(self, idx):
+        neighbors = []
+        for i in (-1, 0, 1):
+            for j in (-1, 0, 1):
+                for k in (-1, 0, 1):
+                    if i == 0 and j == 0 and k == 0:
+                        continue
+
+                    newIdx = (idx[0] + i, idx[1] + j, idx[2] + k)
+
+                    if newIdx[0] < 0 or newIdx[1] < 0 or newIdx[2] < 0:
+                        continue
+
+                    if newIdx[0] >= self.sideLength or newIdx[1] >= self.sideLength or newIdx[2] >= self.sideLength:
+                        continue
+                    
+                    if self.data[newIdx[0], newIdx[1], newIdx[2]]:
+                        continue
+                    
+                    neighbors.append(newIdx)
+
+        return neighbors
+
+
+    def idx2Point(self, idx):
+        return np.array((self.cellSize * idx[0] - self.radius, self.cellSize * idx[1] - self.radius, self.cellSize * idx[2] - self.radius))
+
+    def plotOccupancies(self):
+        occupiedPoints = [self.idx2Point(idx) for idx in self.occupiedVoxels]
+        occupiedPoints = [Vector3r(float(p[0]), float(p[1]), float(p[2])) for p in occupiedPoints]
+        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=1.5) 
+
+    def h(self, idx):
+        return np.linalg.norm(endpoint - self.idx2Point(idx))
+
+    def d(self, idx1, idx2):
+        return np.linalg.norm(self.idx2Point(idx2) - self.idx2Point(idx1))
+
+
+
+# A* Path finding 
+def findPath(startpoint, endpoint, map):
+    start = map.indexOf(startpoint)
+    end   = map.indexOf(endpoint)
+
+    openSet = {start}
+    cameFrom = dict()
+
+    gScore = dict()
+    gScore[start] = 0
+
+    fScore = dict()
+    fScore[start] = map.h(start)
+
+    while openSet:
+        current = min(openSet, key = lambda n: fScore.get(n, float("inf")))
+
+        if current == end:
+            path = [current]
+            while path[-1] != start:
+                current = cameFrom[current]
+                path.append(current)
+            
+            return [map.idx2Point(idx) for idx in reversed(path)]
+
+        openSet.remove(current)
+
+        for neighbor in map.getAdjacent(current):
+            tentativeGScore = gScore.get(current, float("inf")) + map.d(current, neighbor)
+
+            if tentativeGScore < gScore.get(neighbor, float('inf')):
+                cameFrom[neighbor] = current
+                gScore[neighbor]   = tentativeGScore
+                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + map.h(neighbor)
+
+                if neighbor not in openSet:
+                    openSet.add(neighbor)
+    
+    raise ValueError("Couldn't find a path")
+
+map = VoxelOccupancyMap(100, 1)
+
+client.armDisarm(True)
+client.takeoffAsync()
+
+speed = 2.0 # m/s
+
+steps = 0
+
+controlPeriod = 0.5
+plotPeriod = 4.0
+
+position = np.zeros((3,))
+while np.linalg.norm(endpoint - position) > toleranace:
+    pose = client.simGetVehiclePose()
+    position = pose.position.to_numpy_array()
+
+    lidarData = client.getLidarData()
+    lidarPoints = np.array(lidarData.point_cloud, dtype=np.dtype('f4'))
+    if len(lidarPoints) >=3:
+        lidarPoints = np.reshape(lidarPoints, (lidarPoints.shape[0] // 3, 3))
+
+        for p in lidarPoints:
+            map.addPoint(p + position)
+
+    trajectory = findPath(position, endpoint, map)
+    trajectoryLine = [Vector3r(float(trajectory[i][0]), float(trajectory[i][1]), float(trajectory[i][2])) for i in range(len(trajectory))]
+
+    if (steps % int(plotPeriod / controlPeriod + 0.5)):
+        client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=1.5) 
+        map.plotOccupancies()
+
+    if len(trajectory) > 2:
+        nextStep = (float(trajectory[2][0]), float(trajectory[2][1]), float(trajectory[1][2]))
+    else:
+        nextStep = endpoint
+
+    print("p: " + str(position))
+    print("n: " + str(nextStep))
+
+    client.moveToPositionAsync(*nextStep, speed)
+    
+    time.sleep(controlPeriod)
+
+    steps += 1
+
+client.simFlushPersistentMarkers()
 
 #     time.sleep(0.1)
 #   
