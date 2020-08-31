@@ -7,6 +7,7 @@ import time
 import random 
 import numpy as np
 import pprint
+import heapq
 
 # Images to collect
 imagesRequests = [
@@ -58,45 +59,31 @@ client = airsim.MultirotorClient()
 client.confirmConnection() 
 client.enableApiControl(True) 
 
-state = client.getMultirotorState()
-s = pprint.pformat(state)
+# Constants
+ENDPOINT_TOLERANCE = 1.5
+ENDPOINT_RADIUS = 25
+PLOT_PERIOD = 4.0
+CONTROL_PERIOD = 0.5
+SPEED = 1.0 # m/s
 
-radius = 25
-toleranace = 1.0
-endpoint = radius * np.array([random.random(), random.random(), -random.random()])
-client.simPlotPoints([Vector3r(endpoint[0], endpoint[1], endpoint[2])], is_persistent = True) 
- 
-class VoxelOccupancyMap:
-    def __init__(self, radius, cellSize):
-        self.cellSize = cellSize
-        self.radius   = radius
-
-        sideLength = int(2*radius / cellSize + 0.5)
-        self.sideLength = sideLength
-
-        self.data = np.full((sideLength, sideLength, sideLength), False)
+# Utilities
+class SparseVoxelOccupancyMap:
+    def __init__(self, voxelSize):
+        self.voxelSize = voxelSize
         self.occupiedVoxels = set()
-    
+
     def addPoint(self, point):
-        i, j, k = self.indexOf(point)
-        self.data[i, j, k] = True
-        self.occupiedVoxels.add((i,j,k))
+        voxel = self.point2Voxel(point)
+        self.occupiedVoxels.add(voxel)
 
     def isOccupied(self, point):
-        i, j, k = self.indexOf(point)
-        return self.data[i, j, k]
+        voxel = self.point2Voxel(point)
+        return voxel in self.occupiedVoxels
+    
+    def point2Voxel(self, point):
+        return tuple(self.voxelSize * (v // self.voxelSize) for v in point)
 
-    def indexOf(self, point):
-        i = int((self.radius + point[0]) / self.cellSize)
-        j = int((self.radius + point[1]) / self.cellSize)
-        k = int((self.radius + point[2]) / self.cellSize)
-
-        if any([v < 0 for v in (i, j, k)]) or any([v >= self.sideLength for v in (i, j, k)]):
-            raise ValueError("Passed point " + str(point) + " is outside voxel map bounds.")
-
-        return i, j, k
-
-    def getAdjacent(self, idx):
+    def getNeighbors(self, voxel):
         neighbors = []
         for i in (-1, 0, 1):
             for j in (-1, 0, 1):
@@ -104,54 +91,108 @@ class VoxelOccupancyMap:
                     if i == 0 and j == 0 and k == 0:
                         continue
 
-                    newIdx = (idx[0] + i, idx[1] + j, idx[2] + k)
-
-                    if newIdx[0] < 0 or newIdx[1] < 0 or newIdx[2] < 0:
-                        continue
-
-                    if newIdx[0] >= self.sideLength or newIdx[1] >= self.sideLength or newIdx[2] >= self.sideLength:
-                        continue
-                    
-                    if self.data[newIdx[0], newIdx[1], newIdx[2]]:
-                        continue
-                    
-                    neighbors.append(newIdx)
+                    neighboringVoxel = tuple(self.voxelSize * np.array([i, j, k])  + voxel)
+                    if neighboringVoxel not in self.occupiedVoxels:
+                        neighbors.append(neighboringVoxel)
 
         return neighbors
-
-
-    def idx2Point(self, idx):
-        return np.array((self.cellSize * idx[0] - self.radius, self.cellSize * idx[1] - self.radius, self.cellSize * idx[2] - self.radius))
-
+    
     def plotOccupancies(self):
-        occupiedPoints = [self.idx2Point(idx) for idx in self.occupiedVoxels]
-        occupiedPoints = [Vector3r(float(p[0]), float(p[1]), float(p[2])) for p in occupiedPoints]
-        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=1.5) 
+        occupiedPoints = [Vector3r(float(v[0]), float(v[1]), float(v[2])) for v in self.occupiedVoxels]
+        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=PLOT_PERIOD-0.5) 
 
-    def h(self, idx):
-        return np.linalg.norm(endpoint - self.idx2Point(idx))
+class Heap:
+    def __init__(self, map=min):
+        self.data = []
+        self.map  = map
 
-    def d(self, idx1, idx2):
-        return np.linalg.norm(self.idx2Point(idx2) - self.idx2Point(idx1))
+    def parent(self, i):
+        if i == 0:
+            return None
+        else:
+            return (i - 1) // 2
 
+    def left(self, i):
+        ret = 2*i + 1
+        if ret >= len(self.data):
+            return None
+        else:
+            return ret
+    
+    def right(self, i):
+        ret = 2*i + 2
+        if ret >= len(self.data):
+            return None
+        else:
+            return ret
+    
+    def heapify(self, i):
+        l = self.left(i)
+        r = self.right(i)
+        top = i
 
+        if l is not None and self.map(self.data[l]) > self.map(self.data[i]):
+            top = l
+
+        if  r is not None and self.map(self.data[top]) < self.map(self.data[r]):
+            top = r
+        
+        if top != i:
+            swp = self.data[i]
+            self.data[i] = self.data[top]
+            self.data[top] = swp
+            self.heapify(top)
+
+    def pop(self):
+        # Replace top element with bottom leaf
+        top = self.data[0]
+        self.data[0] = self.data[-1]
+        del self.data[-1]
+
+        # Fix the heap
+        self.heapify(0)
+        return top
+
+    def add(self, key):
+        self.data.append(-float('inf'))
+        self.increaseKey(len(self.data), key)
+
+    def increaseKey(self, i, key):
+        if key < A[i]:
+            raise("New key " + str(key) + " is not larger than previous key " + str(self.data[i]) + " at location i=" + str(i))
+
+        self.data[i] = key
+        while self.parent(i) is not None and self.data[self.parent(i)] < self.data[i]:
+            swp = self.data[i]
+            self.data[i] = self.data[self.parent(i)]
+            self.data[self.parent(i)] = swp
+            i = self.parent(i)
+
+def h(voxel, map, endpoint):
+    return np.linalg.norm(endpoint - np.array(voxel))
+
+def d(voxel1, voxel2, map):
+    return np.linalg.norm(np.array(voxel2) - np.array(voxel1))
 
 # A* Path finding 
 def findPath(startpoint, endpoint, map):
-    start = map.indexOf(startpoint)
-    end   = map.indexOf(endpoint)
+    start = map.point2Voxel(startpoint)
+    end   = map.point2Voxel(endpoint)
 
-    openSet = {start}
     cameFrom = dict()
 
     gScore = dict()
     gScore[start] = 0
 
     fScore = dict()
-    fScore[start] = map.h(start)
+    fScore[start] = h(start, map, endpoint)
+
+    openSet = Heap(map=fScore.get)
+    
 
     while openSet:
-        current = min(openSet, key = lambda n: fScore.get(n, float("inf")))
+        # TODO(cvorbach) use a heap here for big performace gains
+        current =  
 
         if current == end:
             path = [current]
@@ -159,37 +200,33 @@ def findPath(startpoint, endpoint, map):
                 current = cameFrom[current]
                 path.append(current)
             
-            return [map.idx2Point(idx) for idx in reversed(path)]
+            return list(reversed(path))
 
-        openSet.remove(current)
-
-        for neighbor in map.getAdjacent(current):
-            tentativeGScore = gScore.get(current, float("inf")) + map.d(current, neighbor)
+        for neighbor in map.getNeighbors(current):
+            tentativeGScore = gScore.get(current, float("inf")) + d(current, neighbor, map)
 
             if tentativeGScore < gScore.get(neighbor, float('inf')):
                 cameFrom[neighbor] = current
                 gScore[neighbor]   = tentativeGScore
-                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + map.h(neighbor)
+                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + h(neighbor, map, endpoint)
 
-                if neighbor not in openSet:
-                    openSet.add(neighbor)
-    
+                heapq.heappush(openSet, (fScore[neighbor], neighbor))
+        
     raise ValueError("Couldn't find a path")
 
-map = VoxelOccupancyMap(100, 1)
+# Takeoff
+# client.armDisarm(True)
+# client.takeoffAsync().join()
 
-client.armDisarm(True)
-client.takeoffAsync()
+endpoint = ENDPOINT_RADIUS * np.array([random.random(), random.random(), -random.random()])
+client.simPlotPoints([Vector3r(endpoint[0], endpoint[1], endpoint[2])], is_persistent = True) 
 
-speed = 2.0 # m/s
-
+map = SparseVoxelOccupancyMap(1)
 steps = 0
-
-controlPeriod = 0.5
-plotPeriod = 4.0
+controlThread = None
 
 position = np.zeros((3,))
-while np.linalg.norm(endpoint - position) > toleranace:
+while np.linalg.norm(endpoint - position) > ENDPOINT_TOLERANCE:
     pose = client.simGetVehiclePose()
     position = pose.position.to_numpy_array()
 
@@ -199,29 +236,26 @@ while np.linalg.norm(endpoint - position) > toleranace:
         lidarPoints = np.reshape(lidarPoints, (lidarPoints.shape[0] // 3, 3))
 
         for p in lidarPoints:
-            map.addPoint(p + position)
+            map.addPoint(p)
 
     trajectory = findPath(position, endpoint, map)
     trajectoryLine = [Vector3r(float(trajectory[i][0]), float(trajectory[i][1]), float(trajectory[i][2])) for i in range(len(trajectory))]
 
-    if (steps % int(plotPeriod / controlPeriod + 0.5)):
-        client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=1.5) 
+    if (steps % int(PLOT_PERIOD / CONTROL_PERIOD) == 0):
+        print("Replotted :)")
+        client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=PLOT_PERIOD-0.5) 
         map.plotOccupancies()
 
-    if len(trajectory) > 2:
-        nextStep = (float(trajectory[2][0]), float(trajectory[2][1]), float(trajectory[1][2]))
-    else:
-        nextStep = endpoint
+    nextStep = trajectory[1] - position
+    nextStep = SPEED / np.linalg.norm(nextStep) * nextStep
 
-    print("p: " + str(position))
-    print("n: " + str(nextStep))
-
-    client.moveToPositionAsync(*nextStep, speed)
+    if controlThread is not None:
+        controlThread.join()
+    controlThread = client.moveByVelocityAsync(float(nextStep[0]), float(nextStep[1]), float(nextStep[2]), CONTROL_PERIOD)
     
-    time.sleep(controlPeriod)
-
     steps += 1
 
+controlThread.join()
 client.simFlushPersistentMarkers()
 
 #     time.sleep(0.1)
