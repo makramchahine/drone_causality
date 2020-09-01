@@ -9,6 +9,8 @@ import numpy as np
 import pprint
 import heapq
 
+# from scipy.interpolate import UnivariateSpline
+
 # Images to collect
 imagesRequests = [
     airsim.ImageRequest("front_center", airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
@@ -60,11 +62,13 @@ client.confirmConnection()
 client.enableApiControl(True) 
 
 # Constants
-ENDPOINT_TOLERANCE = 1.5
-ENDPOINT_RADIUS = 25
-PLOT_PERIOD = 4.0
+ENDPOINT_TOLERANCE = 2.5
+ENDPOINT_RADIUS = 15
+PLOT_PERIOD = 5.0
 CONTROL_PERIOD = 0.5
-SPEED = 1.0 # m/s
+SPEED = 0.5 # m/s
+# BOUNDING_RADIUS = 2.5
+VOXEL_SIZE = 3.0
 
 # Utilities
 class SparseVoxelOccupancyMap:
@@ -75,7 +79,14 @@ class SparseVoxelOccupancyMap:
     def addPoint(self, point):
         voxel = self.point2Voxel(point)
         self.occupiedVoxels.add(voxel)
+        # voxelRadius = int(BOUNDING_RADIUS // self.voxelSize)
 
+        # for i in range(-voxelRadius - 1, voxelRadius):
+        #     for j in range(-voxelRadius - 1, voxelRadius):
+        #         for k in range(-voxelRadius - 1, voxelRadius):
+        #             neighboringVoxel = tuple(self.voxelSize * np.array([i, j, k])  + voxel)
+        #             self.occupiedVoxels.add(neighboringVoxel)
+        
     def isOccupied(self, point):
         voxel = self.point2Voxel(point)
         return voxel in self.occupiedVoxels
@@ -99,74 +110,7 @@ class SparseVoxelOccupancyMap:
     
     def plotOccupancies(self):
         occupiedPoints = [Vector3r(float(v[0]), float(v[1]), float(v[2])) for v in self.occupiedVoxels]
-        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=PLOT_PERIOD-0.5) 
-
-class Heap:
-    def __init__(self, map=min):
-        self.data = []
-        self.map  = map
-
-    def parent(self, i):
-        if i == 0:
-            return None
-        else:
-            return (i - 1) // 2
-
-    def left(self, i):
-        ret = 2*i + 1
-        if ret >= len(self.data):
-            return None
-        else:
-            return ret
-    
-    def right(self, i):
-        ret = 2*i + 2
-        if ret >= len(self.data):
-            return None
-        else:
-            return ret
-    
-    def heapify(self, i):
-        l = self.left(i)
-        r = self.right(i)
-        top = i
-
-        if l is not None and self.map(self.data[l]) > self.map(self.data[i]):
-            top = l
-
-        if  r is not None and self.map(self.data[top]) < self.map(self.data[r]):
-            top = r
-        
-        if top != i:
-            swp = self.data[i]
-            self.data[i] = self.data[top]
-            self.data[top] = swp
-            self.heapify(top)
-
-    def pop(self):
-        # Replace top element with bottom leaf
-        top = self.data[0]
-        self.data[0] = self.data[-1]
-        del self.data[-1]
-
-        # Fix the heap
-        self.heapify(0)
-        return top
-
-    def add(self, key):
-        self.data.append(-float('inf'))
-        self.increaseKey(len(self.data), key)
-
-    def increaseKey(self, i, key):
-        if key < A[i]:
-            raise("New key " + str(key) + " is not larger than previous key " + str(self.data[i]) + " at location i=" + str(i))
-
-        self.data[i] = key
-        while self.parent(i) is not None and self.data[self.parent(i)] < self.data[i]:
-            swp = self.data[i]
-            self.data[i] = self.data[self.parent(i)]
-            self.data[self.parent(i)] = swp
-            i = self.parent(i)
+        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=PLOT_PERIOD-1.0) 
 
 def h(voxel, map, endpoint):
     return np.linalg.norm(endpoint - np.array(voxel))
@@ -187,12 +131,11 @@ def findPath(startpoint, endpoint, map):
     fScore = dict()
     fScore[start] = h(start, map, endpoint)
 
-    openSet = Heap(map=fScore.get)
-    
+    openSet = [(fScore[start], start)]
 
     while openSet:
         # TODO(cvorbach) use a heap here for big performace gains
-        current =  
+        current = heapq.heappop(openSet)[1]
 
         if current == end:
             path = [current]
@@ -208,6 +151,12 @@ def findPath(startpoint, endpoint, map):
             if tentativeGScore < gScore.get(neighbor, float('inf')):
                 cameFrom[neighbor] = current
                 gScore[neighbor]   = tentativeGScore
+
+                if neighbor in fScore:
+                    try:
+                        openSet.remove((fScore[neighbor], neighbor))
+                    except:
+                        pass
                 fScore[neighbor]   = gScore.get(neighbor, float('inf')) + h(neighbor, map, endpoint)
 
                 heapq.heappush(openSet, (fScore[neighbor], neighbor))
@@ -215,48 +164,82 @@ def findPath(startpoint, endpoint, map):
     raise ValueError("Couldn't find a path")
 
 # Takeoff
-# client.armDisarm(True)
-# client.takeoffAsync().join()
+client.armDisarm(True)
+client.takeoffAsync().join()
+print("Taken off")
 
-endpoint = ENDPOINT_RADIUS * np.array([random.random(), random.random(), -random.random()])
-client.simPlotPoints([Vector3r(endpoint[0], endpoint[1], endpoint[2])], is_persistent = True) 
+map = SparseVoxelOccupancyMap(VOXEL_SIZE)
 
-map = SparseVoxelOccupancyMap(1)
-steps = 0
-controlThread = None
+for i in range(100):
+    controlThread = None
 
-position = np.zeros((3,))
-while np.linalg.norm(endpoint - position) > ENDPOINT_TOLERANCE:
+    endpoint = map.point2Voxel(ENDPOINT_RADIUS * np.array([random.random(), random.random(), -random.random()]))
+    client.simPlotPoints([Vector3r(endpoint[0], endpoint[1], endpoint[2])], is_persistent = True) 
+
     pose = client.simGetVehiclePose()
     position = pose.position.to_numpy_array()
+    displacement = endpoint - position
 
-    lidarData = client.getLidarData()
-    lidarPoints = np.array(lidarData.point_cloud, dtype=np.dtype('f4'))
-    if len(lidarPoints) >=3:
-        lidarPoints = np.reshape(lidarPoints, (lidarPoints.shape[0] // 3, 3))
+    endpointYaw = np.arctan2(displacement[1], displacement[0]) * 180 / 3.14
+    client.rotateToYawAsync(endpointYaw).join()
+    print("Pointed to endpoint")
 
-        for p in lidarPoints:
-            map.addPoint(p)
+    lastPlotTime = 0
 
-    trajectory = findPath(position, endpoint, map)
-    trajectoryLine = [Vector3r(float(trajectory[i][0]), float(trajectory[i][1]), float(trajectory[i][2])) for i in range(len(trajectory))]
+    # client.startRecording()
+    while np.linalg.norm(endpoint - position) > ENDPOINT_TOLERANCE:
+        time = 1e-9 * client.getMultirotorState().timestamp
 
-    if (steps % int(PLOT_PERIOD / CONTROL_PERIOD) == 0):
-        print("Replotted :)")
-        client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=PLOT_PERIOD-0.5) 
-        map.plotOccupancies()
+        pose = client.simGetVehiclePose()
+        position = pose.position.to_numpy_array()
+        displacement = endpoint - position
 
-    nextStep = trajectory[1] - position
-    nextStep = SPEED / np.linalg.norm(nextStep) * nextStep
+        if map.isOccupied(endpoint):
+            break
+
+        if map.isOccupied(position):
+            raise ValueError("Drone in occupied position")
+
+        endpointYaw = np.arctan2(displacement[0], displacement[1])
+
+        lidarData = client.getLidarData()
+        lidarPoints = np.array(lidarData.point_cloud, dtype=np.dtype('f4'))
+        if len(lidarPoints) >=3:
+            lidarPoints = np.reshape(lidarPoints, (lidarPoints.shape[0] // 3, 3))
+
+            for p in lidarPoints:
+                map.addPoint(p)
+
+        print("Lidar data added")
+
+        trajectory = findPath(position, endpoint, map)
+        trajectoryLine = [Vector3r(float(trajectory[i][0]), float(trajectory[i][1]), float(trajectory[i][2])) for i in range(len(trajectory))]
+
+        if time >= PLOT_PERIOD + lastPlotTime:
+            lastPlotTime = time
+            client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=PLOT_PERIOD-1.0) 
+            map.plotOccupancies()
+            print("Replotted :)")
+
+        nextStep = trajectory[1] - position
+        nextStep = SPEED / np.linalg.norm(nextStep) * nextStep
+
+        if controlThread is not None:
+            controlThread.join()
+
+        endpointYaw = np.arctan2(displacement[1], displacement[0]) * 180 / 3.14
+        client.rotateToYawAsync(endpointYaw, timeout_sec = 0.1).join()
+
+        controlThread = client.moveByVelocityAsync(float(nextStep[0]), float(nextStep[1]), float(nextStep[2]), CONTROL_PERIOD)
+        print("Moving")
+
+        print("Turning")
+
+    # client.stopRecording()
 
     if controlThread is not None:
         controlThread.join()
-    controlThread = client.moveByVelocityAsync(float(nextStep[0]), float(nextStep[1]), float(nextStep[2]), CONTROL_PERIOD)
-    
-    steps += 1
-
-controlThread.join()
-client.simFlushPersistentMarkers()
+    client.simFlushPersistentMarkers()
 
 #     time.sleep(0.1)
 #   
