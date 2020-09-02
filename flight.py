@@ -8,8 +8,9 @@ import random
 import numpy as np
 import pprint
 import heapq
+import pickle
 
-# from scipy.interpolate import UnivariateSpline
+from scipy.interpolate import UnivariateSpline
 
 # Images to collect
 imagesRequests = [
@@ -62,13 +63,18 @@ client.confirmConnection()
 client.enableApiControl(True) 
 
 # Constants
-ENDPOINT_TOLERANCE = 2.5
+ENDPOINT_TOLERANCE = 1.0
 ENDPOINT_RADIUS = 15
-PLOT_PERIOD = 5.0
+PLOT_PERIOD = 7.0
+PLOT_DELAY = 2.0
 CONTROL_PERIOD = 0.5
 SPEED = 0.5 # m/s
+YAW_TIMEOUT = 0.1
 # BOUNDING_RADIUS = 2.5
-VOXEL_SIZE = 3.0
+VOXEL_SIZE = 1.0
+LOOK_AHEAD_DIST = 1.0
+ENABLE_PLOTTING = False
+ENABLE_RECORDING = True
 
 # Utilities
 class SparseVoxelOccupancyMap:
@@ -79,20 +85,49 @@ class SparseVoxelOccupancyMap:
     def addPoint(self, point):
         voxel = self.point2Voxel(point)
         self.occupiedVoxels.add(voxel)
-        # voxelRadius = int(BOUNDING_RADIUS // self.voxelSize)
 
-        # for i in range(-voxelRadius - 1, voxelRadius):
-        #     for j in range(-voxelRadius - 1, voxelRadius):
-        #         for k in range(-voxelRadius - 1, voxelRadius):
-        #             neighboringVoxel = tuple(self.voxelSize * np.array([i, j, k])  + voxel)
-        #             self.occupiedVoxels.add(neighboringVoxel)
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] - 1, voxel[2] - 1))
+        self.occupiedVoxels.add((voxel[0],     voxel[1] - 1, voxel[2] - 1))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] - 1, voxel[2] - 1))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1], voxel[2] - 1))
+        self.occupiedVoxels.add((voxel[0],     voxel[1], voxel[2] - 1))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1], voxel[2] - 1))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] + 1, voxel[2] - 1))
+        self.occupiedVoxels.add((voxel[0],     voxel[1] + 1, voxel[2] - 1))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] + 1, voxel[2] - 1))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] - 1, voxel[2]))
+        self.occupiedVoxels.add((voxel[0],     voxel[1] - 1, voxel[2]))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] - 1, voxel[2]))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1], voxel[2]))
+        self.occupiedVoxels.add((voxel[0],     voxel[1], voxel[2]))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1], voxel[2]))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] + 1, voxel[2]))
+        self.occupiedVoxels.add((voxel[0],     voxel[1] + 1, voxel[2]))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] + 1, voxel[2]))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] - 1, voxel[2] + 1))
+        self.occupiedVoxels.add((voxel[0],     voxel[1] - 1, voxel[2] + 1))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] - 1, voxel[2] + 1))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1], voxel[2] + 1))
+        self.occupiedVoxels.add((voxel[0],     voxel[1], voxel[2] + 1))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1], voxel[2] + 1))
+
+        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] + 1, voxel[2] + 1))
+        self.occupiedVoxels.add((voxel[0],     voxel[1] + 1, voxel[2] + 1))
+        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] + 1, voxel[2] + 1))
         
     def isOccupied(self, point):
         voxel = self.point2Voxel(point)
         return voxel in self.occupiedVoxels
     
     def point2Voxel(self, point):
-        return tuple(self.voxelSize * (v // self.voxelSize) for v in point)
+        return tuple(self.voxelSize * int(v / self.voxelSize + 0.5) for v in point)
 
     def getNeighbors(self, voxel):
         neighbors = []
@@ -110,7 +145,7 @@ class SparseVoxelOccupancyMap:
     
     def plotOccupancies(self):
         occupiedPoints = [Vector3r(float(v[0]), float(v[1]), float(v[2])) for v in self.occupiedVoxels]
-        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=PLOT_PERIOD-1.0) 
+        client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=PLOT_PERIOD-PLOT_DELAY) 
 
 def h(voxel, map, endpoint):
     return np.linalg.norm(endpoint - np.array(voxel))
@@ -134,7 +169,6 @@ def findPath(startpoint, endpoint, map):
     openSet = [(fScore[start], start)]
 
     while openSet:
-        # TODO(cvorbach) use a heap here for big performace gains
         current = heapq.heappop(openSet)[1]
 
         if current == end:
@@ -168,7 +202,11 @@ client.armDisarm(True)
 client.takeoffAsync().join()
 print("Taken off")
 
-map = SparseVoxelOccupancyMap(VOXEL_SIZE)
+try:
+    with open("occupancy_map.p", 'rb') as f:
+        map = pickle.load(f)
+except:
+    map = SparseVoxelOccupancyMap(VOXEL_SIZE)
 
 for i in range(100):
     controlThread = None
@@ -186,7 +224,8 @@ for i in range(100):
 
     lastPlotTime = 0
 
-    # client.startRecording()
+    if ENABLE_RECORDING:
+        client.startRecording()
     while np.linalg.norm(endpoint - position) > ENDPOINT_TOLERANCE:
         time = 1e-9 * client.getMultirotorState().timestamp
 
@@ -195,10 +234,11 @@ for i in range(100):
         displacement = endpoint - position
 
         if map.isOccupied(endpoint):
+            print("Endpoint is occupied")
             break
 
         if map.isOccupied(position):
-            raise ValueError("Drone in occupied position")
+            print("Drone in occupied position")
 
         endpointYaw = np.arctan2(displacement[0], displacement[1])
 
@@ -212,16 +252,28 @@ for i in range(100):
 
         print("Lidar data added")
 
+
         trajectory = findPath(position, endpoint, map)
+
+        # xSpline = UnivariateSpline(np.linspace(0, 1, num=len(trajectory)), [p[0] for p in trajectory])
+        # ySpline = UnivariateSpline(np.linspace(0, 1, num=len(trajectory)), [p[1] for p in trajectory])
+        # zSpline = UnivariateSpline(np.linspace(0, 1, num=len(trajectory)), [p[2] for p in trajectory])
+
+        # nextStep = np.array([xSpline(0.1), ySpline(0.1), zSpline(0.1)])
+
         trajectoryLine = [Vector3r(float(trajectory[i][0]), float(trajectory[i][1]), float(trajectory[i][2])) for i in range(len(trajectory))]
 
-        if time >= PLOT_PERIOD + lastPlotTime:
+        if ENABLE_PLOTTING and time >= PLOT_PERIOD + lastPlotTime:
             lastPlotTime = time
-            client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=PLOT_PERIOD-1.0) 
+            client.simPlotPoints(trajectoryLine, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=PLOT_PERIOD-PLOT_DELAY) 
             map.plotOccupancies()
             print("Replotted :)")
 
-        nextStep = trajectory[1] - position
+        for i in range(1, len(trajectory)):
+            lookAheadPoint = trajectory[i]
+            if np.linalg.norm(lookAheadPoint - position) > LOOK_AHEAD_DIST: # TODO(cvorbach) interpolate properly
+                break
+        nextStep = lookAheadPoint - position
         nextStep = SPEED / np.linalg.norm(nextStep) * nextStep
 
         if controlThread is not None:
@@ -229,13 +281,16 @@ for i in range(100):
 
         endpointYaw = np.arctan2(displacement[1], displacement[0]) * 180 / 3.14
         client.rotateToYawAsync(endpointYaw, timeout_sec = 0.1).join()
+        print("Turning")
 
         controlThread = client.moveByVelocityAsync(float(nextStep[0]), float(nextStep[1]), float(nextStep[2]), CONTROL_PERIOD)
         print("Moving")
 
-        print("Turning")
+    with open('occupancy_map.p', 'wb') as f:
+        pickle.dump(map, f)
 
-    # client.stopRecording()
+    if ENABLE_RECORDING:
+        client.stopRecording()
 
     if controlThread is not None:
         controlThread.join()
