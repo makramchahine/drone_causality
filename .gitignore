@@ -9,3 +9,7 @@ __pycache__
 
 # caches
 *.h5
+
+# Data
+training-data/*
+model-checkpoints/*
