@@ -13,3 +13,4 @@ __pycache__
 # Data
 training-data/*
 model-checkpoints/*
+processed-data/*
