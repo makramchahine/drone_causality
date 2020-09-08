@@ -15,24 +15,34 @@ dataRuns = []
 dataDirectory = os.getcwd() + '\\training-data'
 imageOdometryType = [('timestamp', np.uint64), ('x', np.float32), ('y', np.float32), ('z', np.float32), ('qw', np.float32), ('qx', np.float32), ('qy', np.float32), ('qz', np.float32), ('imagefile', 'U32')]
 
-for runDirectory in os.listdir(dataDirectory):
+# for runDirectory in os.listdir(dataDirectory):
+#     imageDirectory = dataDirectory + '\\' + runDirectory + '\\images'
+# 
+#     if len(os.listdir(imageDirectory)) <= 1:
+#         print(imageDirectory)
+
+
+for n, runDirectory in enumerate(os.listdir(dataDirectory)):
+    if n > 10:
+        break
     imageDirectory = dataDirectory + '\\' + runDirectory + '\\images'
     odometryFile   = dataDirectory + '\\' + runDirectory + '\\airsim_rec.txt'
 
-    odometry = np.genfromtxt(fname=odometryFile, dtype=imageOdometryType, skip_header=1)
-    valid_images = np.full((len(odometry),), fill_value=False)
+    odometry = np.array(np.genfromtxt(fname=odometryFile, dtype=imageOdometryType, skip_header=1))
+    validImages = np.full((len(odometry),), fill_value=False)
 
     imageMap = dict()
-    for i, imageFile in enumerate(os.listdir(imageDirectory)):
+    for i, record in enumerate(odometry):
+        imageFile = str(record["imagefile"])
         try:
-            imageMap[imageFile] = np.array(PIL.Image.open(imageDirectory + '\\' + imageFile).convert('RGB'))
-            valid_images[i]   = True
+            imageMap[imageFile] = np.array(PIL.Image.open(imageDirectory + '\\' + imageFile).convert('RGB')) 
+            validImages[i]     = True
         except PIL.UnidentifiedImageError:
             pass
 
-    odometry = odometry[valid_images]
+    odometry = odometry[validImages]
 
-    print(imageMap[imageFile].shape)
+    # print(imageMap[imageFile].shape)
 
     images = np.zeros((len(odometry), *(imageMap[imageFile].shape)))
 
@@ -72,8 +82,8 @@ model.compile(
     optimizer=keras.optimizers.Adam(0.01), loss="mean_squared_error",
 )
 
-print("Output: ", model.output)
-print("Input: ", model.input)
+# print("Output: ", model.output)
+# print("Input: ", model.input)
 
 # model.summary(line_length=100)
 
@@ -93,14 +103,14 @@ for i in range(10):
         xTrain = np.array([run[1][:-1]])
         yTrain = np.array([[[odometry['x'], odometry['y'], odometry['z']] for odometry in run[0][1:]]])
 
-        print("x: ", xTrain.shape)
-        print("y: ", yTrain.shape)
+        # print("x: ", xTrain.shape)
+        # print("y: ", yTrain.shape)
 
         model.fit(
             x=xTrain, y=yTrain, epochs=5
         )
 
-        model.save('model-checkpoints/' + datetime.datetime.now() + '-model.p')
+        model.save('model-checkpoints/' + datetime.now() + '-model.p')
 
 model.evaluate(xTrain, yTrain)
 
