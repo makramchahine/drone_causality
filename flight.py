@@ -1,6 +1,6 @@
 import setup_path
 import airsim
-from airsim import Vector3r, Pose, Quaternionr
+from airsim import Vector3r, Pose, Quaternionr, YawMode
 
 import sys 
 import time 
@@ -67,7 +67,7 @@ ENDPOINT_TOLERANCE    = 2.5       # m
 ENDPOINT_RADIUS       = 15        # m
 PLOT_PERIOD           = 10.0      # s
 PLOT_DELAY            = 3.0       # s
-CONTROL_PERIOD        = 0.75      # s
+CONTROL_PERIOD        = 0.25      # s
 SPEED                 = 0.5       # m/s
 YAW_TIMEOUT           = 0.1       # s
 VOXEL_SIZE            = 1.0       # m
@@ -75,7 +75,7 @@ LOOK_AHEAD_DIST       = 1.0       # m
 MAX_ENDPOINT_ATTEMPTS = 50
 N_RUNS                = 1000
 ENABLE_PLOTTING       = False
-ENABLE_RECORDING      = True
+ENABLE_RECORDING      = False
 
 CAMERA_FOV = np.pi / 6
 RADIANS_2_DEGREES = 180 / np.pi
@@ -357,9 +357,10 @@ def moveToEndpoint(endpoint):
         if controlThread is not None:
             controlThread.join()
 
-        turnTowardEndpoint(endpoint)
+        displacement = endpoint - position
+        endpointYaw = np.arctan2(displacement[1], displacement[0]) * RADIANS_2_DEGREES
 
-        controlThread = client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), CONTROL_PERIOD)
+        controlThread = client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), CONTROL_PERIOD, yaw_mode=YawMode(is_rate = False, yaw_or_rate = endpointYaw))
         print("Moving")
         
         reachedEndpoint = np.linalg.norm(endpoint - position) <= ENDPOINT_TOLERANCE
@@ -407,10 +408,11 @@ for i in range(N_RUNS):
     if ENABLE_RECORDING:
         client.stopRecording()
 
-    with open('occupancy_map.p', 'wb') as f:
-        pickle.dump(map, f)
-
     client.simFlushPersistentMarkers()
+
+# Dump saved map
+with open('occupancy_map.p', 'wb') as f:
+    pickle.dump(map, f)
 
 #     time.sleep(0.1)
 #   
