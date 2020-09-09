@@ -13,7 +13,7 @@ __pycache__
 *.h5
 
 # Data
-training-data/*
+data/*
 model-checkpoints/*
 processed-data/*
 
