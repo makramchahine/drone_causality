@@ -19,3 +19,10 @@ processed-data/*
 
 # pyenv
 .python-version
+
+# keras
+.cache/*
+.keras/*
+
+# vim
+*.swp
