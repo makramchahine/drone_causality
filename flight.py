@@ -1,3 +1,4 @@
+# drone-flight  Copyright (C) 2020  Charles Vorbach
 import setup_path
 import airsim
 from airsim import Vector3r, Pose, Quaternionr
