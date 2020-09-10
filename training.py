@@ -1,53 +1,88 @@
-import numpy as np
 import os
-# from tensorflow import keras
-# import kerasncp as kncp
-import matplotlib.pyplot as plt
-import seaborn as sns
-import csv
-import PIL.Image
+import pickle
+import random
+
+import numpy as np
+
 from tensorflow import keras
 import kerasncp as kncp
-from datetime import datetime
 
-TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data'
+TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints'
-TRAINING_MAX_SAMPLES       = 32
+BATCH_SIZE                 = 8
+EPOCHS                     = 100
 TRAINING_SEQUENCE_LENGTH   = 32
-IMAGE_WIDTH                = 256
-IMAGE_HEIGHT               = 256
-CHANNELS                   = 3
+IMAGE_SHAPE                = (256, 256, 3)
+POSITION_SHAPE             = (3,)
+VALIDATION_PROPORTION      = 0.1
 
+# Utilities
+
+class DataGenerator(keras.utils.Sequence):
+    def __init__(self, runDirectories, batch_size, xDims, yDims):
+        self.runDirectories = runDirectories
+        self.batch_size     = batch_size
+        self.xDims          = xDims
+        self.yDims          = yDims
+
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Number of batches per epoch'
+        return int(len(self.runDirectories) / self.batch_size)
+
+    def on_epoch_end(self):
+        pass
+        # 'Shuffle indexes to randomize batches each epoch'
+        # self.indexes = np.arange(len(self.runDirectories))
+        # np.random.shuffle(self.indexes)
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+
+        # data runs in this batch
+        directories = self.runDirectories[index*self.batch_size:(index+1)*self.batch_size]
+
+        # load data
+        X, Y = self.__load_data(directories)
+
+        return X, Y
+
+    def __load_data(self, directories):
+        X = np.empty((self.batch_size, TRAINING_SEQUENCE_LENGTH, *self.xDims))
+        Y = np.empty((self.batch_size, TRAINING_SEQUENCE_LENGTH, *self.yDims))
+
+        for i, directory in enumerate(directories):
+            X[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/images.npy')
+            Y[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/positions.npy')
+
+        return X, Y
+
+# Partition data into training and validation sets
+
+paritions = dict()
+
+sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))
+random.shuffle(sampleDirectories)
+
+k = int(VALIDATION_PROPORTION * len(sampleDirectories))
+paritions['valid'] = sampleDirectories[:k]
+paritions['train'] = sampleDirectories[k:]
+
+print('Train Set: ', paritions['train'])
+print('Valid Set: ', paritions['valid'])
+
+print('Train Length: ', len(paritions['train']))
+print('Valid Length: ', len(paritions['valid']))
+
+trainData = DataGenerator(paritions['train'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
+validData = DataGenerator(paritions['valid'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
+
+if len(sampleDirectories) == 0:
+    raise ValueError("No samples in " + TRAINING_DATA_DIRECTORY)
 
 # Load the data from file
-# TODO(cvorbach) do this data processing in other script
-# TODO(cvorbach) stream data from file with generator
 # TODO(cvorbach) validation set
-trainingSamples = min(len(os.listdir(TRAINING_DATA_DIRECTORY)), TRAINING_MAX_SAMPLES)
-print(f"{trainingSamples} Training Samples")
-
-xTrain = np.zeros((trainingSamples, TRAINING_SEQUENCE_LENGTH, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))
-yTrain = np.zeros((trainingSamples, TRAINING_SEQUENCE_LENGTH, 3))
-
-for i, runDirectory in enumerate(os.listdir(TRAINING_DATA_DIRECTORY)):
-    # stop loading data if we have enough samples
-    if i >= TRAINING_MAX_SAMPLES:
-        break
-
-    imageDirectory = TRAINING_DATA_DIRECTORY + '/' + runDirectory + '/images'
-    odometryFile   = TRAINING_DATA_DIRECTORY + '/' + runDirectory + '/airsim_rec.npy'
-
-    for j, imageFile in enumerate(os.listdir(imageDirectory)):
-        if j >= TRAINING_SEQUENCE_LENGTH:
-            break
-        xTrain[i][j] = np.load(imageDirectory + '/' + imageFile)
-
-    odometry = np.load(odometryFile)
-    for j, record in enumerate(odometry[1:]): # image[i] predicts position[i+1]
-        if j >= TRAINING_SEQUENCE_LENGTH:
-            break
-        yTrain[i][j-1] = np.array([record['x'], record['y'], record['z']])
-
 
 # Setup the network
 wiring = kncp.wirings.NCP(
@@ -64,7 +99,7 @@ wiring = kncp.wirings.NCP(
 rnnCell = kncp.LTCCell(wiring)
 
 model = keras.models.Sequential()
-model.add(keras.Input(shape=xTrain.shape[1:]))
+model.add(keras.Input(shape=(TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)))
 model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
 model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
 model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
@@ -92,15 +127,17 @@ checkpointCallback = keras.callbacks.ModelCheckpoint(
     save_freq=5
 )
 
-model.fit(
-    xTrain,
-    yTrain,
-    batch_size      = 8,
-    epochs          = 200,
-    # validation_data = (xValid, yValid),
-    callbacks       = [checkpointCallback]
+history = model.fit(
+    x                   = trainData,
+    epochs              = EPOCHS,
+    steps_per_epoch     = len(trainData),
+    use_multiprocessing = False,
+    workers             = 6,
+    verbose             = 2
+    #callbacks           = [checkpointCallback]
 )
 
-# # Offload 
+# Dump history
+with open('training-histories/history.p', 'wb') as fp:
+    pickle.dump(history, fp)
 
-# # Visualize?

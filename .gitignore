@@ -16,6 +16,8 @@ __pycache__
 data/*
 model-checkpoints/*
 processed-data/*
+training-histories/*
+console-log/*
 
 # pyenv
 .python-version
