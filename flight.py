@@ -1,6 +1,7 @@
+# drone-flight  Copyright (C) 2020  Charles Vorbach
 import setup_path
 import airsim
-from airsim import Vector3r, Pose, Quaternionr
+from airsim import Vector3r, Pose, Quaternionr, YawMode
 
 import sys 
 import time 
@@ -11,51 +12,6 @@ import heapq
 import pickle
 
 from scipy.spatial.transform import Rotation as R
-
-# Images to collect
-imagesRequests = [
-    airsim.ImageRequest("front_center", airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.DepthPlanner, pixels_as_float = False, compress = True), 
-
-    airsim.ImageRequest("front_center", airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.DepthPerspective, pixels_as_float = False, compress = True),
-
-    airsim.ImageRequest("front_center", airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.DepthVis, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.DepthVis, pixels_as_float = False, compress = True),
-
-    airsim.ImageRequest("front_center", airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.DisparityNormalized, pixels_as_float = False, compress = True),
-
-    airsim.ImageRequest("front_center", airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.Segmentation, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.Segmentation, pixels_as_float = False, compress = True),
-
-    airsim.ImageRequest("front_center", airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.SurfaceNormals, pixels_as_float = False, compress = True),
-
-    airsim.ImageRequest("front_center", airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_right",  airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("front_left",   airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("fpv",          airsim.ImageType.Infrared, pixels_as_float = False, compress = True), 
-    airsim.ImageRequest("back_center",  airsim.ImageType.Infrared, pixels_as_float = False, compress = True),  
-]
 
 # Start up
 client = airsim.MultirotorClient() 
@@ -354,12 +310,12 @@ def moveToEndpoint(endpoint):
         if ENABLE_PLOTTING:
             lastPlotTime = tryPlotting(lastPlotTime, trajectory, map)
 
+        displacement = endpoint - position
+        endpointYaw = np.arctan2(displacement[1], displacement[0]) * RADIANS_2_DEGREES
+
         if controlThread is not None:
             controlThread.join()
-
-        turnTowardEndpoint(endpoint)
-
-        controlThread = client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), CONTROL_PERIOD)
+        controlThread = client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), CONTROL_PERIOD, yaw_mode=YawMode(is_rate = False, yaw_or_rate = endpointYaw))
         print("Moving")
         
         reachedEndpoint = np.linalg.norm(endpoint - position) <= ENDPOINT_TOLERANCE
@@ -407,63 +363,8 @@ for i in range(N_RUNS):
     if ENABLE_RECORDING:
         client.stopRecording()
 
-    with open('occupancy_map.p', 'wb') as f:
-        pickle.dump(map, f)
-
     client.simFlushPersistentMarkers()
 
-#     time.sleep(0.1)
-#   
-# client. rmDisarm(False)
-# 
-# print(type(images[0]))
-
-# for i,  mg in enumerate(images):
-# 
-#     views = [
-#         '_front_center_Scene',
-#         '_front_right_Scene',
-#         '_front_left_Scene',
-#         '_fpv_Scene',
-#         '_back_center_Scene',
-#         '_front_center_DepthPlanner',
-#         '_front_right_DepthPlanner',
-#         '_front_left_DepthPlanner',
-#         '_fpv_DepthPlanner',
-#         '_back_center_DepthPlanner',
-#         '_front_center_DepthPerspective',
-#         '_front_right_DepthPerspective',
-#         '_front_left_DepthPerspective',
-#         '_fpv_DepthPerspective',
-#         '_back_center_DepthPerspective',
-#         '_front_center_DepthVis',
-#         '_front_right_DepthVis',
-#         '_front_left_DepthVis',
-#         '_fpv_DepthVis',
-#         '_back_center_DepthVis',
-#         '_front_center_DisparityNormalized',
-#         '_front_right_DisparityNormalized',
-#         '_front_left_DisparityNormalized',
-#         '_fpv_DisparityNormalized',
-#         '_back_center_DisparityNormalized',
-#         '_front_center_Segmentation',
-#         '_front_right_Segmentation',
-#         '_front_left_Segmentation',
-#         '_fpv_Segmentation',
-#         '_back_center_Segmentation',
-#         '_front_center_SurfaceNormals',
-#         '_front_right_SurfaceNormals',
-#         '_front_left_SurfaceNormals',
-#         '_fpv_SurfaceNormals',
-#         '_back_center_SurfaceNormals',
-#         '_front_center_Infrared',
-#         '_front_right_Infrared',
-#         '_front_left_Infrared',
-#         '_fpv_Infrared',
-#         '_back_center_Infrared',
-#     ] 
-# 
-#     for j, view in enumerate(views):
-#         with open('data/img_' + str(i) + view + '.png', 'wb') as f:
-#             f.write(img[j].image_data_uint8 )
-# # # # # # # # # # # # 
+# Dump saved map
+with open('occupancy_map.p', 'wb') as f:
+    pickle.dump(map, f)

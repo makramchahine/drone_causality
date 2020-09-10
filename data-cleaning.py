@@ -8,9 +8,9 @@ import random
 RECORDING_DIRECTORY      = 'C:\\Users\\MIT Driverless\\Documents\\AirSim\\'
 PROCESSED_DATA_DIRECTORY = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\processed-data'
 
-TRAINING_SEQUENCE_LENGTH = 101      # Remember to add +1 because image[i] is used to predict position[i+1]
+TRAINING_SEQUENCE_LENGTH = 32
 PLOT_STATISTICS          = False
-
+IMAGE_SHAPE              = (256, 256, 3)
 
 imageOdometryDataType = [('timestamp', np.uint64), ('x', np.float32), ('y', np.float32), ('z', np.float32), ('qw', np.float32), ('qx', np.float32), ('qy', np.float32), ('qz', np.float32), ('imagefile', 'U32')]
 
@@ -37,8 +37,22 @@ numCorruptedSequences = 0
 
 # Clean each run and save it to the processed data directory
 for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
+
+    # Skip folders that don't contain unprocessed recordings
+    if not re.match(r'^[\-0-9]+$', runDirectory):
+        print('Skipping ', runDirectory)
+        continue
+
     imageDirectory = RECORDING_DIRECTORY + '\\' + runDirectory + '\\images'
     odometryFile   = RECORDING_DIRECTORY + '\\' + runDirectory + '\\airsim_rec.txt'
+
+    print(f"Processing {n}/{sequenceCount} sequences")
+
+    # Make the processed data directories
+    try:
+        os.mkdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory)
+    except FileExistsError:
+        continue
 
     # Load the data, discard corrupt images
     odometry = np.array(np.genfromtxt(fname=odometryFile, dtype=imageOdometryDataType, skip_header=1))
@@ -48,7 +62,7 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
     for i, record in enumerate(odometry):
         imageFile = str(record['imagefile'])
         try:
-            imageMap[imageFile] = np.array(PIL.Image.open(imageDirectory + '\\' + imageFile).convert('RGB'))
+            imageMap[imageFile] = np.array(PIL.Image.open(imageDirectory + '\\' + imageFile).convert('RGB'), dtype=np.float32) / 255
             validImages[i]      = True
 
         except PIL.UnidentifiedImageError:
@@ -58,23 +72,30 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
 
     # Select a sequence of TRAINING_SEQUENCE_LENGTH from the run
     runLength = odometry.shape[0]
-    if runLength < TRAINING_SEQUENCE_LENGTH:
+    if runLength < TRAINING_SEQUENCE_LENGTH + 1: # +1 because image[i] is used to predict position[i+1]
+        os.rmdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory)
         continue # skip runs that aren't long enough
 
-    sequenceStart = random.randrange(runLength - TRAINING_SEQUENCE_LENGTH)
+    try:
+        sequenceStart = random.randrange(runLength - TRAINING_SEQUENCE_LENGTH)
+    except ValueError: 
+        sequenceStart = 0 # if runLength == TRAINING_SEQUENCE_LENGTH, randrange complains
 
-    # Make the processed data directories
-    os.mkdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory)
-    os.mkdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\images')
+    imageSequence     = np.empty((TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)) 
+    positionsSequence = np.empty((TRAINING_SEQUENCE_LENGTH, 3))
 
-    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\airsim_rec.npy', odometry)
-
-    for j in range(sequenceStart, runLength):
-        record = odometry[j]
+    for j in range(0, TRAINING_SEQUENCE_LENGTH):
+        record = odometry[sequenceStart + j]
         imageFile = str(record['imagefile'])
-        np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\images\\' + imageFile, imageMap[imageFile])    
+        imageSequence[j] = imageMap[imageFile]
 
-    print(f"Finished processing {n}/{sequenceCount} sequences")
+    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\images.npy', imageSequence)    
+
+    for j in range(0, TRAINING_SEQUENCE_LENGTH):
+        record = odometry[sequenceStart + j + 1] # +1 because image[i] is used to predict position[i+1]
+        positionsSequence[j] = np.array([record['x'], record['y'], record['z']])
+
+    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\positions.npy', positionsSequence)    
 
 print("Proportion of sequences with corrupted images: ", numCorruptedSequences / len(sequenceLengths))
 
