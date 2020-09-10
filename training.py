@@ -1,6 +1,7 @@
 import os
 import pickle
 import random
+from datetime import datetime
 
 import numpy as np
 
@@ -9,7 +10,7 @@ import kerasncp as kncp
 
 TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints'
-BATCH_SIZE                 = 4
+BATCH_SIZE                 = 16
 EPOCHS                     = 100
 TRAINING_SEQUENCE_LENGTH   = 32
 IMAGE_SHAPE                = (256, 256, 3)
@@ -32,10 +33,9 @@ class DataGenerator(keras.utils.Sequence):
         return int(len(self.runDirectories) / self.batch_size)
 
     def on_epoch_end(self):
-        pass
-        # 'Shuffle indexes to randomize batches each epoch'
-        # self.indexes = np.arange(len(self.runDirectories))
-        # np.random.shuffle(self.indexes)
+        'Shuffle indexes to randomize batches each epoch'
+        self.indexes = np.arange(len(self.runDirectories))
+        np.random.shuffle(self.indexes)
 
     def __getitem__(self, index):
         'Generate one batch of data'
@@ -124,7 +124,7 @@ model.summary(line_length=80)
 checkpointCallback = keras.callbacks.ModelCheckpoint(
     filepath=MODEL_CHECKPOINT_DIRECTORY,
     save_weights_only=True,
-    save_freq=5
+    save_freq='epoch'
 )
 
 history = model.fit(
@@ -132,7 +132,7 @@ history = model.fit(
     epochs              = EPOCHS,
     use_multiprocessing = False,
     workers             = 1,
-    verbose             = 2,
+    verbose             = 1,
     callbacks           = [checkpointCallback]
 )
 
@@ -140,6 +140,8 @@ print(history)
 print(history.history)
 
 # Dump history
-with open('training-histories/history.p', 'wb') as fp:
+with open(f'histories/{datetime.now()}-history.p', 'wb') as fp:
     pickle.dump(history.history, fp)
 
+# Dump model
+model.save(f'models/{datetime.now()}-model.p')

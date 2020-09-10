@@ -1,13 +1,14 @@
 import pickle
 import matplotlib.pyplot as plt
 
-with open('training-histories/history.p', 'rb') as fp:
+with open('histories/history.p', 'rb') as fp:
     history = pickle.load(fp)
 
 loss = history['loss']
 
 plt.plot(loss)
+plt.title("Mean Squared Training Loss")
+plt.xlabel("Epoch Number")
+plt.ylabel("Loss")
 plt.show()
-
-lossManual = [49.5115, 29.6346, 17.7142, 
 
