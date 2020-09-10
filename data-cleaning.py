@@ -8,7 +8,7 @@ import random
 RECORDING_DIRECTORY      = 'C:\\Users\\MIT Driverless\\Documents\\AirSim\\'
 PROCESSED_DATA_DIRECTORY = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\processed-data'
 
-TRAINING_SEQUENCE_LENGTH = 32
+TRAINING_SEQUENCE_LENGTH = 64
 PLOT_STATISTICS          = False
 IMAGE_SHAPE              = (256, 256, 3)
 
@@ -48,12 +48,6 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
 
     print(f"Processing {n}/{sequenceCount} sequences")
 
-    # Make the processed data directories
-    try:
-        os.mkdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory)
-    except FileExistsError:
-        continue
-
     # Load the data, discard corrupt images
     odometry = np.array(np.genfromtxt(fname=odometryFile, dtype=imageOdometryDataType, skip_header=1))
     validImages = np.full((len(odometry),), fill_value=False)
@@ -70,6 +64,12 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
 
     odometry = odometry[validImages]
 
+    # Make the processed data directories
+    try:
+        os.mkdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory)
+    except FileExistsError:
+        continue
+
     # Select a sequence of TRAINING_SEQUENCE_LENGTH from the run
     runLength = odometry.shape[0]
     if runLength < TRAINING_SEQUENCE_LENGTH + 1: # +1 because image[i] is used to predict position[i+1]
@@ -82,7 +82,7 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
         sequenceStart = 0 # if runLength == TRAINING_SEQUENCE_LENGTH, randrange complains
 
     imageSequence     = np.empty((TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)) 
-    positionsSequence = np.empty((TRAINING_SEQUENCE_LENGTH, 3))
+    directionsSequence = np.empty((TRAINING_SEQUENCE_LENGTH, 3))
 
     for j in range(0, TRAINING_SEQUENCE_LENGTH):
         record = odometry[sequenceStart + j]
@@ -92,12 +92,24 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
     np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\images.npy', imageSequence)    
 
     for j in range(0, TRAINING_SEQUENCE_LENGTH):
-        record = odometry[sequenceStart + j + 1] # +1 because image[i] is used to predict position[i+1]
-        positionsSequence[j] = np.array([record['x'], record['y'], record['z']])
+        record1 = odometry[sequenceStart + j]
+        record2 = odometry[sequenceStart + j + 1] # +1 because image[i] is used to predict position[i+1]
 
-    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\positions.npy', positionsSequence)    
+        # Train against normalized displacement vector
+        displacement = np.array([record2['x'] - record1['x'], record2['y'] - record1['y'], record2['z'] - record1['z']])
+        direction = displacement / np.linalg.norm(displacement)
+        directionsSequence[j] = np.array([record2['x'] - record1['x'], record2['y'] - record1['y'], record2['z'] - record1['z']])
+
+    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\positions.npy', directionsSequence)    
 
 print("Proportion of sequences with corrupted images: ", numCorruptedSequences / len(sequenceLengths))
+
+# Validate
+for runDirectory in os.listdir(PROCESSED_DATA_DIRECTORY):
+    files = set(os.listdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory))
+    if files != {'images.npy', 'positions.npy'}:
+        raise ValueError(runDirectory + ' doesn\'t have correct files.')
+
 
 
 
