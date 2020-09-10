@@ -9,7 +9,7 @@ import kerasncp as kncp
 
 TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints'
-BATCH_SIZE                 = 8
+BATCH_SIZE                 = 4
 EPOCHS                     = 100
 TRAINING_SEQUENCE_LENGTH   = 32
 IMAGE_SHAPE                = (256, 256, 3)
@@ -130,14 +130,16 @@ checkpointCallback = keras.callbacks.ModelCheckpoint(
 history = model.fit(
     x                   = trainData,
     epochs              = EPOCHS,
-    steps_per_epoch     = len(trainData),
     use_multiprocessing = False,
-    workers             = 6,
-    verbose             = 2
-    #callbacks           = [checkpointCallback]
+    workers             = 1,
+    verbose             = 2,
+    callbacks           = [checkpointCallback]
 )
+
+print(history)
+print(history.history)
 
 # Dump history
 with open('training-histories/history.p', 'wb') as fp:
-    pickle.dump(history, fp)
+    pickle.dump(history.history, fp)
 
