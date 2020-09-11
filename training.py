@@ -9,13 +9,14 @@ from tensorflow import keras
 import kerasncp as kncp
 
 TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
-MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints'
-BATCH_SIZE                 = 16
+MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
+SAMPLES                    = 10
+BATCH_SIZE                 = 1  # TODO(cvorbach) fix me
 EPOCHS                     = 100
-TRAINING_SEQUENCE_LENGTH   = 32
+TRAINING_SEQUENCE_LENGTH   = 64
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
-VALIDATION_PROPORTION      = 0.1
+VALIDATION_PROPORTION      = 0.2 # TODO(cvorbach) fix me
 
 # Utilities
 
@@ -53,8 +54,12 @@ class DataGenerator(keras.utils.Sequence):
         Y = np.empty((self.batch_size, TRAINING_SEQUENCE_LENGTH, *self.yDims))
 
         for i, directory in enumerate(directories):
-            X[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/images.npy')
-            Y[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/positions.npy')
+            try:
+                X[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/images.npy')
+                Y[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/positions.npy')
+            except Exception as e:
+                print("Failed on directory: ", directory)
+                raise e
 
         return X, Y
 
@@ -62,27 +67,18 @@ class DataGenerator(keras.utils.Sequence):
 
 paritions = dict()
 
-sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))
+sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))[:SAMPLES] # TODO(cvorbach) remove me
 random.shuffle(sampleDirectories)
 
 k = int(VALIDATION_PROPORTION * len(sampleDirectories))
 paritions['valid'] = sampleDirectories[:k]
 paritions['train'] = sampleDirectories[k:]
 
-print('Train Set: ', paritions['train'])
-print('Valid Set: ', paritions['valid'])
-
-print('Train Length: ', len(paritions['train']))
-print('Valid Length: ', len(paritions['valid']))
-
 trainData = DataGenerator(paritions['train'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
 validData = DataGenerator(paritions['valid'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
 
 if len(sampleDirectories) == 0:
     raise ValueError("No samples in " + TRAINING_DATA_DIRECTORY)
-
-# Load the data from file
-# TODO(cvorbach) validation set
 
 # Setup the network
 wiring = kncp.wirings.NCP(
@@ -115,20 +111,22 @@ model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation
 model.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 model.compile(
-    optimizer=keras.optimizers.Adam(0.01), loss="mean_squared_error",
+    optimizer=keras.optimizers.Adam(0.01), loss="cosine_similarity",
 )
 
 model.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=MODEL_CHECKPOINT_DIRECTORY,
+    filepath=MODEL_CHECKPOINT_DIRECTORY+'/weights.{epoch:02d}-{val_loss:.2f}.hdf5',
     save_weights_only=True,
+    save_best_only=True,
     save_freq='epoch'
 )
 
-history = model.fit(
+model.fit(
     x                   = trainData,
+    validation_data     = validData,
     epochs              = EPOCHS,
     use_multiprocessing = False,
     workers             = 1,
@@ -136,12 +134,9 @@ history = model.fit(
     callbacks           = [checkpointCallback]
 )
 
-print(history)
-print(history.history)
-
 # Dump history
 with open(f'histories/{datetime.now()}-history.p', 'wb') as fp:
-    pickle.dump(history.history, fp)
+    pickle.dump(model.history.history, fp)
 
 # Dump model
 model.save(f'models/{datetime.now()}-model.p')
