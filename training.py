@@ -11,8 +11,8 @@ import kerasncp as kncp
 TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
 SAMPLES                    = -1
-BATCH_SIZE                 = 16  
-EPOCHS                     = 9000
+BATCH_SIZE                 = 8  
+EPOCHS                     = 1000
 TRAINING_SEQUENCE_LENGTH   = 64
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
@@ -67,7 +67,7 @@ class DataGenerator(keras.utils.Sequence):
 
 paritions = dict()
 
-sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))[:SAMPLES]
+sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))[:SAMPLES] # TODO(cvorbach) remove me
 random.shuffle(sampleDirectories)
 
 k = int(VALIDATION_PROPORTION * len(sampleDirectories))
@@ -77,8 +77,8 @@ paritions['train'] = sampleDirectories[k:]
 print('Training:   ', paritions['train'])
 print('Validation: ', paritions['valid'])
 
-trainData = DataGenerator(paritions['train'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
-validData = DataGenerator(paritions['valid'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
+trainData = DataGenerator(paritions['train'], min(BATCH_SIZE, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
+validData = DataGenerator(paritions['valid'], min(BATCH_SIZE, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
 
 if len(sampleDirectories) == 0:
     raise ValueError("No samples in " + TRAINING_DATA_DIRECTORY)
@@ -114,7 +114,7 @@ model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation
 model.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 model.compile(
-    optimizer=keras.optimizers.Adam(0.01), loss="cosine_similarity",
+    optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
 )
 
 model.summary(line_length=80)
@@ -127,19 +127,21 @@ checkpointCallback = keras.callbacks.ModelCheckpoint(
     save_freq='epoch'
 )
 
-model.fit(
-    x                   = trainData,
-    validation_data     = validData,
-    epochs              = EPOCHS,
-    use_multiprocessing = False,
-    workers             = 1,
-    verbose             = 1,
-    callbacks           = [checkpointCallback]
-)
+try: 
+    model.fit(
+        x                   = trainData,
+        validation_data     = validData,
+        epochs              = EPOCHS,
+        use_multiprocessing = False,
+        workers             = 1,
+        max_queue_size      = 5,
+        verbose             = 1,
+        callbacks           = [checkpointCallback]
+    )
+finally:
+    # Dump history
+    with open(f'histories/{datetime.now()}-history.p', 'wb') as fp:
+        pickle.dump(model.history.history, fp)
 
-# Dump history
-with open(f'histories/{datetime.now()}-history.p', 'wb') as fp:
-    pickle.dump(model.history.history, fp)
-
-# Dump model
-model.save(f'models/{datetime.now()}-model.p')
+    # Dump model
+    model.save(f'models/{datetime.now()}-model.p')
