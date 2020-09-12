@@ -10,13 +10,13 @@ import kerasncp as kncp
 
 TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
-SAMPLES                    = 10
-BATCH_SIZE                 = 1  # TODO(cvorbach) fix me
-EPOCHS                     = 100
+SAMPLES                    = -1
+BATCH_SIZE                 = 16  
+EPOCHS                     = 9000
 TRAINING_SEQUENCE_LENGTH   = 64
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
-VALIDATION_PROPORTION      = 0.2 # TODO(cvorbach) fix me
+VALIDATION_PROPORTION      = 0.1 
 
 # Utilities
 
@@ -67,12 +67,15 @@ class DataGenerator(keras.utils.Sequence):
 
 paritions = dict()
 
-sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))[:SAMPLES] # TODO(cvorbach) remove me
+sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))[:SAMPLES]
 random.shuffle(sampleDirectories)
 
 k = int(VALIDATION_PROPORTION * len(sampleDirectories))
 paritions['valid'] = sampleDirectories[:k]
 paritions['train'] = sampleDirectories[k:]
+
+print('Training:   ', paritions['train'])
+print('Validation: ', paritions['valid'])
 
 trainData = DataGenerator(paritions['train'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
 validData = DataGenerator(paritions['valid'], BATCH_SIZE, IMAGE_SHAPE, POSITION_SHAPE)
