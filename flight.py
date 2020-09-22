@@ -10,8 +10,12 @@ import numpy as np
 import pprint
 import heapq
 import pickle
+import matplotlib.pyplot as plt
 
 from scipy.spatial.transform import Rotation as R
+
+from tensorflow import keras
+import kerasncp as kncp
 
 # Start up
 client = airsim.MultirotorClient() 
@@ -19,24 +23,68 @@ client.confirmConnection()
 client.enableApiControl(True) 
 
 # Constants
-ENDPOINT_TOLERANCE    = 3.0       # m
-ENDPOINT_RADIUS       = 15        # m
+ENDPOINT_TOLERANCE    = 1.5       # m
+ENDPOINT_RADIUS       = 10        # m
 PLOT_PERIOD           = 10.0      # s
 PLOT_DELAY            = 3.0       # s
-CONTROL_PERIOD        = 1.5      # s
+CONTROL_PERIOD        = 1.0       # s
 SPEED                 = 0.5       # m/s
 YAW_TIMEOUT           = 0.1       # s
 VOXEL_SIZE            = 1.0       # m
 LOOK_AHEAD_DIST       = 1.0       # m
 MAX_ENDPOINT_ATTEMPTS = 50
 N_RUNS                = 1000
-ENABLE_PLOTTING       = False
-ENABLE_RECORDING      = True
+ENABLE_PLOTTING       = True
+ENABLE_RECORDING      = False
+FLY_BY_MODEL          = False
 
 CAMERA_FOV = np.pi / 6
 RADIANS_2_DEGREES = 180 / np.pi
-CAMERA_VERTICAL_OFFSET = np.array([0, 0, -0.5])
+CAMERA_OFFSET = np.array([0.5, 0, -0.5])
+
+ENDPOINT_OFFSET = np.array([0, -0.5, 0.5])
 #TODO(cvorbach) CAMERA_HORIZONTAL_OFFSET
+
+# Setup the network
+TRAINING_SEQUENCE_LENGTH = 1
+IMAGE_SHAPE              = (256,256,3)
+
+wiring = kncp.wirings.NCP(
+    inter_neurons=12,   # Number of inter neurons
+    command_neurons=8,  # Number of command neurons
+    motor_neurons=3,    # Number of motor neurons
+    sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
+    inter_fanout=4,     # How many outgoing synapses has each inter neuron
+    recurrent_command_synapses=4,   # Now many recurrent synapses are in the
+                                    # command neuron layer
+    motor_fanin=6,      # How many incomming syanpses has each motor neuron
+)
+
+rnnCell = kncp.LTCCell(wiring)
+
+model = keras.models.Sequential()
+model.add(keras.Input(shape=(None, *IMAGE_SHAPE)))
+model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
+model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
+model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
+model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+model.add(keras.layers.RNN(rnnCell, return_sequences=True))
+
+model.compile(
+    optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
+)
+
+# Load weights
+if FLY_BY_MODEL:
+    model.load_weights('model-checkpoints/weights.132--0.91.hdf5')
 
 # Utilities
 class SparseVoxelOccupancyMap:
@@ -204,7 +252,7 @@ def getTime():
 
 def getPose():
     pose        = client.simGetVehiclePose()
-    position    = pose.position.to_numpy_array() - CAMERA_VERTICAL_OFFSET
+    position    = pose.position.to_numpy_array() - CAMERA_OFFSET
     orientation = pose.orientation.to_numpy_array()
     return position, orientation
 
@@ -226,8 +274,9 @@ def generateEndpoint(map):
     isValid = False
     attempts = 0
     while not isValid:
-        # TODO(cvorbach) generate points already in the camera frustrum
-        endpoint = map.point2Voxel(ENDPOINT_RADIUS * np.array([random.random(), random.random(), -random.random()]))
+        endpoint = np.array([1, random.random() * np.cos(CAMERA_FOV), random.random() * np.cos(CAMERA_FOV)])        # generate point in field of view
+        endpoint = ENDPOINT_RADIUS * random.random() * R.from_quat(getPose()[1]).apply(endpoint) - ENDPOINT_OFFSET  # place out in world NED coordinates
+        endpoint = map.point2Voxel(endpoint)
         isValid = isValidEndpoint(endpoint, map)
 
         attempts += 1
@@ -287,11 +336,14 @@ def pursuitVelocity(trajectory):
     return pursuitVector
 
 
-def moveToEndpoint(endpoint):
+def moveToEndpoint(endpoint, model = None):
     controlThread   = None
     reachedEndpoint = False
     lastPlotTime    = 0
 
+    images = np.zeros((1, TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE))
+
+    i = 0
     while not reachedEndpoint:
         position, _ = getPose()
 
@@ -304,8 +356,22 @@ def moveToEndpoint(endpoint):
 
         updateOccupancies(map)
 
-        trajectory = findPath(position, endpoint, map)
-        velocity   = pursuitVelocity(trajectory)
+        if model is None:
+            trajectory = findPath(position, endpoint, map)
+            velocity   = pursuitVelocity(trajectory)
+        else:
+            # get an image
+            image = client.simGetImages([airsim.ImageRequest('0', airsim.ImageType.Scene, False, False)])[0]
+            image = np.fromstring(image.image_data_uint8, dtype=np.uint8).astype(np.float32) / 255
+            image = np.reshape(image, IMAGE_SHAPE)
+            image = image[:, :, ::-1]                 # Required since order is BGR instead of RGB by default
+
+            images[0, i % TRAINING_SEQUENCE_LENGTH] = image
+
+            direction = model.predict(images)[0][0]
+            direction = direction / np.linalg.norm(direction)
+            print(direction)
+            velocity = SPEED * direction
 
         if ENABLE_PLOTTING:
             lastPlotTime = tryPlotting(lastPlotTime, trajectory, map)
@@ -320,9 +386,12 @@ def moveToEndpoint(endpoint):
         
         reachedEndpoint = np.linalg.norm(endpoint - position) <= ENDPOINT_TOLERANCE
 
+        i += 1
+
     # Finish moving
     if controlThread is not None:
         controlThread.join()
+
 
 # -----------------------------
 # MAIN
@@ -330,6 +399,7 @@ def moveToEndpoint(endpoint):
 
 # Takeoff
 client.armDisarm(True)
+client.takeoffAsync().join()
 client.takeoffAsync().join()
 print("Taken off")
 
@@ -358,7 +428,10 @@ for i in range(N_RUNS):
 
     # Control loop
     try:
-        moveToEndpoint(endpoint)
+        if FLY_BY_MODEL:
+            moveToEndpoint(endpoint, model=model)
+        else:
+            moveToEndpoint(endpoint)
 
     # Clean up
     finally:
