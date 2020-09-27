@@ -29,7 +29,7 @@ wiring = kncp.wirings.NCP(
 rnnCell = kncp.LTCCell(wiring)
 
 model = keras.models.Sequential()
-model.add(keras.Input(shape=(TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)))
+model.add(keras.Input(shape=(None, *IMAGE_SHAPE)))
 model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
 model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
 model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))

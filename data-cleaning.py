@@ -8,7 +8,7 @@ import random
 RECORDING_DIRECTORY      = 'C:\\Users\\MIT Driverless\\Documents\\AirSim\\'
 PROCESSED_DATA_DIRECTORY = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\processed-data'
 
-TRAINING_SEQUENCE_LENGTH = 64
+TRAINING_SEQUENCE_LENGTH = 32
 PLOT_STATISTICS          = False
 IMAGE_SHAPE              = (256, 256, 3)
 
