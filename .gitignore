@@ -17,6 +17,7 @@ data/*
 model-checkpoints/*
 processed-data/*
 training-histories/*
+model-piloted-runs/*
 console-log/*
 
 # pyenv

@@ -50,7 +50,12 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
 
     # Load the data, discard corrupt images
     odometry = np.array(np.genfromtxt(fname=odometryFile, dtype=imageOdometryDataType, skip_header=1))
-    validImages = np.full((len(odometry),), fill_value=False)
+    try:
+        validImages = np.full((len(odometry),), fill_value=False)
+    except Exception as e:
+        print("Bad Run: ", runDirectory)
+        #os.remove(RECORDING_DIRECTORY + '\\' + runDirectory)
+        continue
 
     imageMap = dict()
     for i, record in enumerate(odometry):
@@ -61,6 +66,10 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
 
         except PIL.UnidentifiedImageError:
             numCorruptedSequences += 1 # skip images which are corrupted
+        
+        except FileNotFoundError:
+            print('Error image: ' + imageDirectory + '\\' + imageFile + ' doesn\'t exist.')
+            continue
 
     odometry = odometry[validImages]
 
@@ -74,6 +83,7 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
     runLength = odometry.shape[0]
     if runLength < TRAINING_SEQUENCE_LENGTH + 1: # +1 because image[i] is used to predict position[i+1]
         os.rmdir(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory)
+        print("Skipping short sequence")
         continue # skip runs that aren't long enough
 
     try:
@@ -90,6 +100,7 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
         imageSequence[j] = imageMap[imageFile]
 
     np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\images.npy', imageSequence)    
+    print("Saved images to: ", PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\images.npy')
 
     for j in range(0, TRAINING_SEQUENCE_LENGTH):
         record1 = odometry[sequenceStart + j]
@@ -100,7 +111,8 @@ for n, runDirectory in enumerate(os.listdir(RECORDING_DIRECTORY)):
         direction = displacement / np.linalg.norm(displacement)
         directionsSequence[j] = np.array([record2['x'] - record1['x'], record2['y'] - record1['y'], record2['z'] - record1['z']])
 
-    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\positions.npy', directionsSequence)    
+    np.save(PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\vectors.npy', directionsSequence)    
+    print("Saved vectors to: " + PROCESSED_DATA_DIRECTORY + '\\' + runDirectory + '\\vectors.npy')
 
 print("Proportion of sequences with corrupted images: ", numCorruptedSequences / len(sequenceLengths))
 
