@@ -8,7 +8,13 @@ import numpy as np
 from tensorflow import keras
 import kerasncp as kncp
 
+TRAIN_LSTM                 = True
 TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
+
+if TRAIN_LSTM:
+    MODEL_NAME             = 'lstm'
+else:
+    MODEL_NAME             = 'ncp'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
 SAMPLES                    = -1
 BATCH_SIZE                 = 8  
@@ -97,38 +103,49 @@ wiring = kncp.wirings.NCP(
 
 rnnCell = kncp.LTCCell(wiring)
 
-model = keras.models.Sequential()
-model.add(keras.Input(shape=(TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)))
-model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
-model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
-model.add(keras.layers.RNN(rnnCell, return_sequences=True))
+ncpModel = keras.models.Sequential()
+ncpModel.add(keras.Input(shape=(TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
-model.compile(
+# LSTM network
+penultimateOutput = ncpModel.layers[-1].output
+lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
+lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
+
+# Configure the model we will train
+if TRAIN_LSTM:
+    trainingModel = lstmModel
+else:
+    trainingModel = ncpModel
+
+trainingModel.compile(
     optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
 )
 
-model.summary(line_length=80)
+trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=MODEL_CHECKPOINT_DIRECTORY+'/weights.{epoch:02d}-{val_loss:.2f}.hdf5',
+    filepath=MODEL_CHECKPOINT_DIRECTORY + '/' + MODEL_NAME + '-weights.{epoch:02d}-{val_loss:.2f}.hdf5',
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
 )
 
 try: 
-    model.fit(
+    trainingModel.fit(
         x                   = trainData,
         validation_data     = validData,
         epochs              = EPOCHS,
@@ -140,8 +157,8 @@ try:
     )
 finally:
     # Dump history
-    with open(f'histories/{datetime.now()}-history.p', 'wb') as fp:
-        pickle.dump(model.history.history, fp)
+    with open(f'histories/{MODEL_NAME}-{datetime.now()}-history.p', 'wb') as fp:
+        pickle.dump(trainingModel.history.history, fp)
 
     # Dump model
-    model.save(f'models/{datetime.now()}-model.p')
+    trainingModel.save(f'models/{MODEL_NAME}-{datetime.now()}-model.p')
