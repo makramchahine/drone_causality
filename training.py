@@ -12,11 +12,13 @@ TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
 SAMPLES                    = -1
 BATCH_SIZE                 = 8  
-EPOCHS                     = 1000
-TRAINING_SEQUENCE_LENGTH   = 64
+EPOCHS                     = 50
+TRAINING_SEQUENCE_LENGTH   = 32
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
 VALIDATION_PROPORTION      = 0.1 
+
+STARTING_WEIGHTS           = 'model-checkpoints/weights.003--0.9121.hdf5'
 
 # Utilities
 
@@ -56,7 +58,7 @@ class DataGenerator(keras.utils.Sequence):
         for i, directory in enumerate(directories):
             try:
                 X[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/images.npy')
-                Y[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/positions.npy')
+                Y[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/vectors.npy')
             except Exception as e:
                 print("Failed on directory: ", directory)
                 raise e
@@ -117,11 +119,15 @@ model.compile(
     optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
 )
 
+# Load weights
+if STARTING_WEIGHTS is not None:
+    model.load_weights('model-checkpoints/weights.132--0.91.hdf5')
+
 model.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=MODEL_CHECKPOINT_DIRECTORY+'/weights.{epoch:02d}-{val_loss:.2f}.hdf5',
+    filepath=MODEL_CHECKPOINT_DIRECTORY+'/weights.{epoch:03d}-{val_loss:.4f}.hdf5',
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
