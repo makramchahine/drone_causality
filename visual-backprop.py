@@ -4,13 +4,15 @@ import kerasncp as kncp
 
 import matplotlib.pyplot as plt
 import PIL.Image
-# import numpy as np
+import numpy as np
 import os
-from mxnet.gluon import nn
-from mxnet import np, npx, init
+import datetime
+# from mxnet.gluon import nn
+# from mxnet import np, npx, init
 
 
 MODEL_RECORDING_DIRECTORY = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-piloted-runs\\2020-09-27-21-17-03\\images"
+IMAGE_OUTPUT_DIRECTORY    = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\image_output"
 
 # Setup the network
 SEQUENCE_LENGTH = 32
@@ -118,27 +120,47 @@ for i, imageFile in enumerate(os.listdir(MODEL_RECORDING_DIRECTORY)):
     print("Done Predicting")
     average_layer_maps = []
     for layer_activation in activations: # Only the convolutional layers
-        print("Averaging Layer")
         feature_maps = layer_activation[0, min(i, SEQUENCE_LENGTH-1)]
         n_features   = feature_maps.shape[-1]
-
         average_feature_map = np.sum(feature_maps, axis=-1) / n_features
         average_layer_maps.append(average_feature_map)
+        print(average_feature_map.shape)
 
-    saliency = average_layer_maps[-1]
+    average_layer_maps = [fm[np.newaxis, :, :, np.newaxis] for fm in average_layer_maps]
+    saliency = tf.constant(average_layer_maps[-1])
     for l in reversed(range(1, len(average_layer_maps))):
-        print("Started")
+        print(l)
+        kernel = np.ones((*kernels[l], 1,1))
+        output_shape = average_layer_maps[l-1].shape
+
+        print('---')
         print(saliency.shape)
-        kernel = np.ones(kernels[l])
+        print(average_layer_maps[l].shape)
+        print(average_layer_maps[l-1].shape)
         print(kernel.shape)
-        tconv = nn.Conv2DTranspose(1, kernel_size=kernel.shape, strides=strides[l])
-        tconv.initialize(init.Constant(kernel))
-        saliency = tconv(saliency)
-        saliency = saliency * average_layer_maps[i-1]
-        print("Done")
+        print(output_shape)
 
-    os.exit()
+        saliency = tf.nn.conv2d_transpose(saliency, kernel, output_shape, strides[l], padding='VALID')
+        saliency = saliency * average_layer_maps[l-1]
 
+        print('Saliency: ', saliency.shape)
+
+    # scale to image mask
+    kernel = np.ones((*kernels[0], 1,1))
+    output_shape = (1, *(IMAGE_SHAPE[:2]), 1)
+    saliency_mask  = tf.nn.conv2d_transpose(saliency, kernel, output_shape, strides[0], padding='VALID')
+    saliency_mask /= np.max(saliency_mask)
+    saliency_mask  = np.reshape(saliency_mask, (*IMAGE_SHAPE[:2], 1))
+
+    plt.imshow(saliency_mask)
+    plt.savefig(IMAGE_OUTPUT_DIRECTORY + f'//saliency_mask_{i:05}.png')
+    
+
+        # tconv = nn.Conv2DTranspose(1, kernel_size=kernel.shape, strides=strides[l])
+        # tconv.initialize(init.Constant(kernel))
+        # saliency = tconv(saliency)
+        # saliency = saliency * average_layer_maps[i-1]
+        # print("Done")
         # tf.nn.conv2d_transpose(input=tf.convert_to_tensor(saliency), filters=np.ones((*kernels[l], 1, 1)), output_shape=average_layer_maps[l-1], strides=strides[l], padding='SAME', name=None)
 
     
