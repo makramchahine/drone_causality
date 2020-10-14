@@ -1,7 +1,7 @@
 import pickle
 import matplotlib.pyplot as plt
 
-with open('histories/2020-09-30 14:27:00.788546-history.p', 'rb') as fp:
+with open('histories/lstm-2020-10-08 18:46:10.953200-history.p', 'rb') as fp:
     history = pickle.load(fp)
 
 print(history)
