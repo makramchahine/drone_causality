@@ -571,7 +571,6 @@ for i in range(N_RUNS):
             moveToEndpoint(endpoint, model=model)
         else:
             moveToEndpoint(endpoint)
-
     # Clean up
     finally:
         if ENABLE_RECORDING:
