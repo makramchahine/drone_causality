@@ -10,9 +10,10 @@ import datetime
 # from mxnet.gluon import nn
 # from mxnet import np, npx, init
 
-
-MODEL_RECORDING_DIRECTORY = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-piloted-runs\\2020-09-27-21-17-03\\images"
+TRAIN_LSTM = False
+MODEL_RECORDING_DIRECTORY = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-piloted-runs\\2020-10-27-21-42-48\\images"
 IMAGE_OUTPUT_DIRECTORY    = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\image_output"
+WEIGHTS_PATH              = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-checkpoints\\weights.004--0.9377.hdf5'
 
 # Setup the network
 SEQUENCE_LENGTH = 32
@@ -67,8 +68,19 @@ fullModel.compile(
     optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
 )
 
+# LSTM network
+penultimateOutput = fullModel.layers[-2].output
+lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
+lstmModel = keras.models.Model(fullModel.input, lstmOutput)
+
+# Configure the model we will train
+if TRAIN_LSTM:
+    visualizeModel = lstmModel
+else:
+    visualizeModel = fullModel
+
 # Load weights
-fullModel.load_weights('model-checkpoints/weights.132--0.91.hdf5')
+visualizeModel.load_weights(WEIGHTS_PATH)
 
 convolutionalLayers = fullModel.layers[:5]
 
@@ -102,6 +114,7 @@ for layer in fullModel.layers:
 
 images = np.zeros((1, SEQUENCE_LENGTH, *IMAGE_SHAPE))
 for i, imageFile in enumerate(os.listdir(MODEL_RECORDING_DIRECTORY)):
+    print("Creating Image: ", i)
     try:
         image = np.array(PIL.Image.open(MODEL_RECORDING_DIRECTORY + '\\' + imageFile).convert('RGB'), dtype=np.float32) / 255
     except PIL.UnidentifiedImageError:
@@ -115,42 +128,42 @@ for i, imageFile in enumerate(os.listdir(MODEL_RECORDING_DIRECTORY)):
         images[0, -1] = image
 
     # Visualization
-    print("Predicting")
+    #print("Predicting")
     activations = activationModel.predict(images)
-    print("Done Predicting")
+    #print("Done Predicting")
     average_layer_maps = []
-    for layer_activation in activations: # Only the convolutional layers
+    for layer_activation in activations: # Only the convolutional layers 
         feature_maps = layer_activation[0, min(i, SEQUENCE_LENGTH-1)]
         n_features   = feature_maps.shape[-1]
         average_feature_map = np.sum(feature_maps, axis=-1) / n_features
         average_layer_maps.append(average_feature_map)
-        print(average_feature_map.shape)
+        #print(average_feature_map.shape)
 
     average_layer_maps = [fm[np.newaxis, :, :, np.newaxis] for fm in average_layer_maps]
-    saliency = tf.constant(average_layer_maps[-1])
-    for l in reversed(range(1, len(average_layer_maps))):
-        print(l)
+    saliency_mask = tf.constant(average_layer_maps[-1])
+    for l in reversed(range(0, len(average_layer_maps))):
         kernel = np.ones((*kernels[l], 1,1))
-        output_shape = average_layer_maps[l-1].shape
 
-        print('---')
-        print(saliency.shape)
-        print(average_layer_maps[l].shape)
-        print(average_layer_maps[l-1].shape)
-        print(kernel.shape)
-        print(output_shape)
+        if l > 0:
+            output_shape = average_layer_maps[l-1].shape
+        else:
+            output_shape = (1, *(IMAGE_SHAPE[:2]), 1)
 
-        saliency = tf.nn.conv2d_transpose(saliency, kernel, output_shape, strides[l], padding='VALID')
-        saliency = saliency * average_layer_maps[l-1]
+        #print('---')
+        #print(saliency_mask.shape)
+        #print(average_layer_maps[l].shape)
+        #print(average_layer_maps[l-1].shape)
+        #print(kernel.shape)
+        #print(output_shape)
 
-        print('Saliency: ', saliency.shape)
+        saliency_mask = tf.nn.conv2d_transpose(saliency_mask, kernel, output_shape, strides[l], padding='VALID')
+        if l > 0:
+            saliency_mask = saliency_mask * average_layer_maps[l-1]
 
-    # scale to image mask
-    kernel = np.ones((*kernels[0], 1,1))
-    output_shape = (1, *(IMAGE_SHAPE[:2]), 1)
-    saliency_mask  = tf.nn.conv2d_transpose(saliency, kernel, output_shape, strides[0], padding='VALID')
-    saliency_mask /= np.max(saliency_mask)
-    saliency_mask  = np.reshape(saliency_mask, (*IMAGE_SHAPE[:2], 1))
+        saliency_mask      /= np.max(saliency_mask)
+
+        #print('Saliency: ', saliency.shape)
+    saliency_mask = saliency_mask[0]
 
     plt.imshow(saliency_mask)
     plt.savefig(IMAGE_OUTPUT_DIRECTORY + f'//saliency_mask_{i:05}.png')
