@@ -33,12 +33,12 @@ YAW_TIMEOUT           = 0.1       # s
 VOXEL_SIZE            = 1.0       # m
 LOOK_AHEAD_DIST       = 1.0       # m
 MAX_ENDPOINT_ATTEMPTS = 50
-N_RUNS                = 5000
+N_RUNS                = 10
 ENABLE_PLOTTING       = False
 ENABLE_RECORDING      = True
 FLY_BY_MODEL          = False
 LSTM_MODEL            = False
-STARTING_WEIGHTS      = 'C:/Users/MIT Driverless/Documents/deepdrone/model-checkpoints/ncp-2020 10 14 01 54 13-weights.006--0.8170.hdf5'
+STARTING_WEIGHTS      = 'C:/Users/MIT Driverless/Documents/deepdrone/model-checkpoints/new-ncp-2020_10_30_10_30_10-weights.012--0.8735.hdf5'
 
 CAMERA_FOV = np.pi / 8
 RADIANS_2_DEGREES = 180 / np.pi
@@ -51,7 +51,7 @@ WORLD_2_UNREAL_SCALE = 100
 #TODO(cvorbach) CAMERA_HORIZONTAL_OFFSET
 
 # Setup the network
-SEQUENCE_LENGTH = 16
+SEQUENCE_LENGTH = 32
 IMAGE_SHAPE     = (256,256,3)
 
 model = None
@@ -82,11 +82,11 @@ if FLY_BY_MODEL:
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24, activation='linear')))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
     ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
     ncpModel.compile(
@@ -112,6 +112,7 @@ class SparseVoxelOccupancyMap:
     def __init__(self, voxelSize):
         self.voxelSize = voxelSize
         self.occupiedVoxels = set()
+        self.endpoint = None
 
 
     def removeEndpoint(self, point):
@@ -160,7 +161,7 @@ class SparseVoxelOccupancyMap:
     def addPoint(self, point):
         voxel = self.point2Voxel(point)
 
-        if voxel == self.endpoint:
+        if self.endpoint is not None and voxel == self.endpoint:
             return
 
         self.occupiedVoxels.add(voxel)
@@ -211,7 +212,7 @@ class SparseVoxelOccupancyMap:
         return tuple(self.voxelSize * int(round(v / self.voxelSize)) for v in point)
 
 
-    def getNeighbors(self, voxel, endpoint):
+    def getNeighbors(self, voxel):
         neighbors = []
         for i in (-1, 0, 1):
             for j in (-1, 0, 1):
@@ -279,6 +280,7 @@ def d(voxel1, voxel2, map):
 
 # A* Path finding 
 def findPath(startpoint, endpoint, map):
+    print('Searching Path')
     start = map.point2Voxel(startpoint)
     end   = map.point2Voxel(endpoint)
 
@@ -288,7 +290,7 @@ def findPath(startpoint, endpoint, map):
     gScore[start] = 0
 
     fScore = dict()
-    fScore[start] = h(start, map, endpoint)
+    fScore[start] = 10 * h(start, map, endpoint)
 
     openSet = [(fScore[start], start)]
 
@@ -303,7 +305,7 @@ def findPath(startpoint, endpoint, map):
             
             return list(reversed(path))
 
-        for neighbor in map.getNeighbors(current, end):
+        for neighbor in map.getNeighbors(current):
             # skip neighbors from which the endpoint isn't visible
             neighborOrientation = orientationAt(endpoint, neighbor)
             if not isVisible(np.array(end), np.array(neighbor), neighborOrientation):
@@ -320,7 +322,7 @@ def findPath(startpoint, endpoint, map):
                         openSet.remove((fScore[neighbor], neighbor))
                     except:
                         pass
-                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + h(neighbor, map, endpoint)
+                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + 10 * h(neighbor, map, endpoint)
 
                 heapq.heappush(openSet, (fScore[neighbor], neighbor))
         
@@ -401,7 +403,7 @@ def updateOccupancies(map):
         for p in lidarPoints:
             map.addPoint(p)
 
-    print("Lidar data added")
+    #print("Lidar data added")
 
 
 def getNearestPoint(trajectory, position):
@@ -494,15 +496,18 @@ def moveToEndpoint(endpoint, model = None):
     currentTrajectory  = []
     updatingTrajectory = []
 
-    # def planningWrapper(nextTrajectory):
-    #     print("Start Planning")
-    #     nextTrajectory.clear()
-    #     for voxel in findPath(position, endpoint, map):
-    #         nextTrajectory.append(voxel)
-    #     print("Finish Planning")
+    def planningWrapper(nextTrajectory):
+        print("Start Planning")
+        nextTrajectory.clear()
+        for voxel in findPath(position, endpoint, map):
+            nextTrajectory.append(voxel)
+        print("Finish Planning")
 
     position, _ = getPose()
-    currentTrajectory = [np.array(waypoint) for waypoint in findPath(position, endpoint, map)]
+
+    if model is None:
+        currentTrajectory = [np.array(waypoint) for waypoint in findPath(position, endpoint, map)]
+        print('Found first path')
 
     images = np.zeros((1, SEQUENCE_LENGTH, *IMAGE_SHAPE))
 
@@ -522,12 +527,13 @@ def moveToEndpoint(endpoint, model = None):
             #     print("Drone in occupied position")
 
             updateOccupancies(map)
-            # if planningThread is None or not planningThread.is_alive():
-            #     currentTrajectory = [np.array(waypoint) for waypoint in updatingTrajectory]
-            #     planningThread = threading.Thread(target=planningWrapper, args = (updatingTrajectory,))
-            #     planningThread.start()
+            if planningThread is None or not planningThread.is_alive():
+                currentTrajectory = [np.array(waypoint) for waypoint in updatingTrajectory]
+                planningThread = threading.Thread(target=planningWrapper, args = (updatingTrajectory,))
+                planningThread.start()
+                print('Replanning')
 
-            # planningThread.join(timeout=CONTROL_PERIOD)
+            planningThread.join(timeout=CONTROL_PERIOD)
 
             # Wait for first trajectory to complete
             if len(currentTrajectory) == 0:
@@ -546,6 +552,7 @@ def moveToEndpoint(endpoint, model = None):
             # add the image to the sliding window
             if i < SEQUENCE_LENGTH:
                 images[0, i] = image
+
             else:
                 images[0] = np.roll(images[0], -1, axis=0)
                 images[0][-1] = image
@@ -571,8 +578,9 @@ def moveToEndpoint(endpoint, model = None):
         print("Moving")
         
         reachedEndpoint = np.linalg.norm(endpoint - position) <= ENDPOINT_TOLERANCE
-
         i += 1
+
+    print('Reached Endpoint')
 
     # Finish moving
     if controlThread is not None:
@@ -597,17 +605,21 @@ except:
  
 # Collect data runs
 for i in range(N_RUNS):
+
     # Random rotation
     client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
 
     # Set up
+    print("generating endpoint")
     endpoint = generateEndpoint(map)
     if endpoint is None:
         continue
 
+    # client.simPlotPoints([Vector3r(*(endpoint - ENDPOINT_OFFSET))], color_rgba = [1.0, 0.0, 0.0, 1.0], size=100, is_persistent = True) 
+
+    print("endpoint: ", endpoint)
     map.removeEndpoint(endpoint)
 
-    # client.simPlotPoints([Vector3r(*(endpoint - ENDPOINT_OFFSET))], color_rgba = [0.0, 0.0, 1.0, 1.0], size=10, is_persistent = True) 
     endpointMarker = client.simListSceneObjects('Red_Cube.*') 
     if len(endpointMarker) != 1:
         raise Exception('Didn\'t find unique endpoint marker. Check a single Red_Cube is in the scene')
@@ -618,6 +630,7 @@ for i in range(N_RUNS):
     endpointPose.position = Vector3r(endpoint[0], endpoint[1], endpoint[2])
     client.simSetObjectPose(endpointMarker, endpointPose)
 
+    print("Turning to endpoint")
     turnTowardEndpoint(endpoint, timeout=10.0)
 
     # Control loop
@@ -626,6 +639,11 @@ for i in range(N_RUNS):
             moveToEndpoint(endpoint, model=flightModel)
         else:
             moveToEndpoint(endpoint)
+
+    # Catch path-finding failure (cube is embedded in tree)
+    except ValueError as e:
+        print(e)
+        continue
 
     # Clean up
     finally:
