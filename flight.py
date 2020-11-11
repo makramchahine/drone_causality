@@ -38,7 +38,7 @@ ENABLE_PLOTTING       = False
 ENABLE_RECORDING      = True
 FLY_BY_MODEL          = False
 LSTM_MODEL            = False
-STARTING_WEIGHTS      = 'C:/Users/MIT Driverless/Documents/deepdrone/model-checkpoints/ncp-2020 10 14 01 54 13-weights.006--0.8170.hdf5'
+STARTING_WEIGHTS      = 'C:/Users/MIT Driverless/Documents/deepdrone/model-checkpoints/new-ncp-2020_11_11_00_02_42-weights.013--0.8556.hdf5'
 
 CAMERA_FOV = np.pi / 8
 RADIANS_2_DEGREES = 180 / np.pi
@@ -82,11 +82,11 @@ if FLY_BY_MODEL:
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
-    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+    ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24, activation='linear')))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
+    # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
     ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
     ncpModel.compile(
