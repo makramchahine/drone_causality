@@ -14,6 +14,8 @@ import pickle
 import matplotlib.pyplot as plt
 import cv2
 import os
+from collections import OrderedDict
+from enum import Enum
 
 from scipy.spatial.transform import Rotation as R
 
@@ -22,23 +24,35 @@ client = airsim.MultirotorClient()
 client.confirmConnection() 
 client.enableApiControl(True) 
 
+# Operating Modes
+class Task(Enum):
+    TARGET = 1
+    FOLLOWING = 2
+    MAZE = 3
+    HIKING = 4
+
+TASK                  = Task.HIKING
+
 # Constants
-ENDPOINT_TOLERANCE    = 3.0       # m
-ENDPOINT_RADIUS       = 15        # m
-PLOT_PERIOD           = 15.0      # s
-PLOT_DELAY            = 5.0       # s
-CONTROL_PERIOD        = 0.25      # s
-SPEED                 = 0.5       # m/s
-YAW_TIMEOUT           = 0.1       # s
-VOXEL_SIZE            = 1.0       # m
-LOOK_AHEAD_DIST       = 1.0       # m
-MAX_ENDPOINT_ATTEMPTS = 50
-N_RUNS                = 10
-ENABLE_PLOTTING       = False
-ENABLE_RECORDING      = True
-FLY_BY_MODEL          = False
-LSTM_MODEL            = False
-STARTING_WEIGHTS      = 'C:/Users/MIT Driverless/Documents/deepdrone/model-checkpoints/new-ncp-2020_10_30_10_30_10-weights.012--0.8735.hdf5'
+ENDPOINT_TOLERANCE     = 3.0       # m
+TARGET_RADIUS          = 15        # m
+MAZE_RADIUS            = 100       # m
+MIN_BLAZE_STANCE       = 10        # m
+PLOT_PERIOD            = 2.0       # s
+PLOT_DELAY             = 1.0       # s
+CONTROL_PERIOD         = 0.1       # s
+SPEED                  = 0.5       # m/s
+YAW_TIMEOUT            = 0.1       # s
+VOXEL_SIZE             = 1.0       # m
+CACHE_SIZE             = 100000    # number of entries
+LOOK_AHEAD_DIST        = 1.0       # m
+MAX_ENDPOINT_ATTEMPTS  = 5000
+N_RUNS                 = 5000
+ENABLE_PLOTTING        = False
+ENABLE_RECORDING       = False
+FLY_BY_MODEL           = False
+LSTM_MODEL             = False
+STARTING_WEIGHTS       = 'C:/Users/MIT Driverless/Documents/deepdrone/model-checkpoints/ncp-2020_11_15_21_42_12-weights.026--0.8673.hdf5'
 
 CAMERA_FOV = np.pi / 8
 RADIANS_2_DEGREES = 180 / np.pi
@@ -95,8 +109,9 @@ if FLY_BY_MODEL:
 
     # LSTM network
     penultimateOutput = ncpModel.layers[-2].output
-    lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
-    lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
+    lstmLayer1        = keras.layers.SimpleRNN(units=64, return_sequences=True, activation='relu')(penultimateOutput)
+    lstmLayer2        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(lstmLayer1)
+    lstmModel = keras.models.Model(ncpModel.input, lstmLayer2)
 
     # Configure the model we will train
     if LSTM_MODEL:
@@ -107,128 +122,255 @@ if FLY_BY_MODEL:
     # Load weights
     flightModel.load_weights(STARTING_WEIGHTS)
 
+def normalize(vector):
+    if np.linalg.norm(vector) == 0:
+        raise ZeroDivisionError()
+    return vector / np.linalg.norm(vector)
+
+
+class CubicSpline:
+    def __init__(self, x, y, tol=1e-10):
+        self.x = x
+        self.y = y
+        self.coeff = self.fit(x, y, tol)
+
+    def fit(self, x, y, tol=1e-10):
+        """
+        Interpolate using natural cubic splines.
+    
+        Generates a strictly diagonal dominant matrix then solves.
+    
+        Returns coefficients:
+        b, coefficient of x of degree 1
+        c, coefficient of x of degree 2
+        d, coefficient of x of degree 3
+        """ 
+    
+        x = np.array(x)
+        y = np.array(y)
+    
+        # check if sorted
+        if np.any(np.diff(x) < 0):
+            idx = np.argsort(x)
+            x = x[idx]
+            y = y[idx]
+
+        size = len(x)
+        delta_x = np.diff(x)
+        delta_y = np.diff(y)
+    
+        # Initialize to solve Ac = k
+        A = np.zeros(shape = (size,size))
+        k = np.zeros(shape=(size,1))
+        A[0,0] = 1
+        A[-1,-1] = 1
+    
+        for i in range(1,size-1):
+            A[i, i-1] = delta_x[i-1]
+            A[i, i+1] = delta_x[i]
+            A[i,i] = 2*(delta_x[i-1]+delta_x[i])
+
+            k[i,0] = 3*(delta_y[i]/delta_x[i] - delta_y[i-1]/delta_x[i-1])
+    
+        # Solves for c in Ac = k
+        c = np.linalg.solve(A, k)
+    
+        # Solves for d and b
+        d = np.zeros(shape = (size-1,1))
+        b = np.zeros(shape = (size-1,1))
+        for i in range(0,len(d)):
+            d[i] = (c[i+1] - c[i]) / (3*delta_x[i])
+            b[i] = (delta_y[i]/delta_x[i]) - (delta_x[i]/3)*(2*c[i] + c[i+1])    
+    
+        return b.squeeze(), c.squeeze(), d.squeeze()
+
+    def __call__(self, t):
+        '''
+        Returns the value of the spline at t in [x[0], x[-1]]
+        '''
+
+        x = self.x
+        y = self.y
+        b, c, d = self.coeff
+
+        if t < x[0] or t > x[-1]:
+            raise Exception("Can't extrapolate")
+
+        # Index of segment to use
+        idx = np.argmax(x > t) - 1
+                
+        dx = t - x[idx]
+        value = y[idx] + b[idx]*dx + c[idx]*dx**2 + d[idx]*dx**3
+        return value
+
+class Path:
+    def __init__(self, knotPoints):
+        self.knotPoints = knotPoints
+        self.fit(knotPoints)
+
+    def fit(self, knotPoints):
+        knots = np.array(knotPoints)
+        t = np.linspace(0, 1, knots.shape[0])
+        self.xSpline = CubicSpline(t, knots[:, 0])
+        self.ySpline = CubicSpline(t, knots[:, 1])
+        self.zSpline = CubicSpline(t, knots[:, 2])
+
+    def __call__(self, t):
+        return np.array([
+            self.xSpline(t),
+            self.ySpline(t),
+            self.zSpline(t)
+        ])
+
+    def project(self, point):
+        position, _ = getPose()
+        tSamples = np.linspace(0, 1, num=1000)
+        nearstT  = tSamples[np.argmin([np.linalg.norm(position - self(t)) for t in tSamples])]
+        return nearstT
+    
+    def end(self):
+        return self.knotPoints[-1]
+
+
+def randomWalk(start, momentum=0.75, stepSize=0.75, gradientLimit=np.pi/9, zLimit=(-20, 0), pathLength=30, occupancyMap=None, retryLimit = 10):
+    normalDistribution = np.random.default_rng().normal 
+    stepDirection = normalize(np.array([normalDistribution(), normalDistribution(), normalDistribution()]))
+    path = [start]
+
+    for i in range(retryLimit):
+        for _ in range(pathLength):
+
+            # Generate an unoccupied next step in the random walk
+            isUnoccupiedNextStep = False
+            stuckSteps = 0
+            while not isUnoccupiedNextStep:
+                rotation = R.from_matrix([[stepDirection[0], 0, 0], [0, stepDirection[1], 0], [0, 0, stepDirection[2]]])
+                perturbance = rotation.apply(normalize(np.array((0, normalDistribution(), normalDistribution()))))
+
+                # the continue in previous direction with a random perturbance left/right and up/down
+                stepDirection = normalize(momentum * stepDirection + (1 - momentum) * perturbance)
+
+                # # apply gradient limit
+                stepDirection = np.array([min(max((u, -gradientLimit)), gradientLimit) for u in stepDirection])
+
+                nextStep = path[-1] + stepSize * stepDirection
+
+                # # apply altitude limits
+                nextStep[2] = min(max(nextStep[2], zLimit[0]), zLimit[1])
+
+                isUnoccupiedNextStep = occupancyMap is None or nextStep not in occupancyMap 
+
+                stuckSteps += int(not isUnoccupiedNextStep)
+                if stuckSteps > retryLimit:
+                    break 
+
+            path.append(nextStep)
+
+        if stuckSteps < retryLimit:
+            break
+
+    if i > retryLimit:
+        raise Exception('Couldn\'t find free random walk')
+
+    return path
+
 # Utilities
-class SparseVoxelOccupancyMap:
-    def __init__(self, voxelSize):
-        self.voxelSize = voxelSize
-        self.occupiedVoxels = set()
-        self.endpoint = None
+class LRUCache:
+    def __init__(self, capacity: int):
+        self.cache = OrderedDict()
+        self.capacity = capacity
 
+    def __contains__(self, key):
+        if key in self.cache:
+            self.cache.move_to_end(key) # Move to front of LRU cache
+            return True
+        return False
 
-    def removeEndpoint(self, point):
-        voxel = self.point2Voxel(point)
+    def add(self, key):
+        self.cache[key] = None          # Don't care about the dict's value, just its set of keys
+        self.cache.move_to_end(key)
+        if len(self.cache) > self.capacity:
+            self.cache.popitem(last=False)
 
-        self.endpoint = voxel
-        self.occupiedVoxels.discard(voxel)
+    def discard(self, key):
+        self.cache.pop(key, None)
 
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1] - 1, voxel[2] - 1))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1] - 1, voxel[2] - 1))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1] - 1, voxel[2] - 1))
+    def keys(self):
+        return self.cache.keys()
 
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1], voxel[2] - 1))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1], voxel[2] - 1))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1], voxel[2] - 1))
+class VoxelOccupancyCache:
 
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1] + 1, voxel[2] - 1))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1] + 1, voxel[2] - 1))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1] + 1, voxel[2] - 1))
-
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1] - 1, voxel[2]))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1] - 1, voxel[2]))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1] - 1, voxel[2]))
-
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1], voxel[2]))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1], voxel[2]))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1], voxel[2]))
-
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1] + 1, voxel[2]))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1] + 1, voxel[2]))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1] + 1, voxel[2]))
-
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1] - 1, voxel[2] + 1))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1] - 1, voxel[2] + 1))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1] - 1, voxel[2] + 1))
-
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1], voxel[2] + 1))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1], voxel[2] + 1))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1], voxel[2] + 1))
-
-        self.occupiedVoxels.discard((voxel[0] - 1, voxel[1] + 1, voxel[2] + 1))
-        self.occupiedVoxels.discard((voxel[0],     voxel[1] + 1, voxel[2] + 1))
-        self.occupiedVoxels.discard((voxel[0] + 1, voxel[1] + 1, voxel[2] + 1))
-
-
+    def __init__(self, voxelSize: float, capacity: int):
+        self.voxelSize  = voxelSize
+        self.cache      = LRUCache(capacity)
+    
     def addPoint(self, point):
         voxel = self.point2Voxel(point)
 
-        if self.endpoint is not None and voxel == self.endpoint:
-            return
+        self.cache.add(voxel)
+        for v in self.getAdjacentVoxels(voxel):
+            self.cache.add(v)
 
-        self.occupiedVoxels.add(voxel)
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] - 1, voxel[2] - 1))
-        self.occupiedVoxels.add((voxel[0],     voxel[1] - 1, voxel[2] - 1))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] - 1, voxel[2] - 1))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1], voxel[2] - 1))
-        self.occupiedVoxels.add((voxel[0],     voxel[1], voxel[2] - 1))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1], voxel[2] - 1))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] + 1, voxel[2] - 1))
-        self.occupiedVoxels.add((voxel[0],     voxel[1] + 1, voxel[2] - 1))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] + 1, voxel[2] - 1))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] - 1, voxel[2]))
-        self.occupiedVoxels.add((voxel[0],     voxel[1] - 1, voxel[2]))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] - 1, voxel[2]))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1], voxel[2]))
-        self.occupiedVoxels.add((voxel[0],     voxel[1], voxel[2]))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1], voxel[2]))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] + 1, voxel[2]))
-        self.occupiedVoxels.add((voxel[0],     voxel[1] + 1, voxel[2]))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] + 1, voxel[2]))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] - 1, voxel[2] + 1))
-        self.occupiedVoxels.add((voxel[0],     voxel[1] - 1, voxel[2] + 1))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] - 1, voxel[2] + 1))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1], voxel[2] + 1))
-        self.occupiedVoxels.add((voxel[0],     voxel[1], voxel[2] + 1))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1], voxel[2] + 1))
-
-        self.occupiedVoxels.add((voxel[0] - 1, voxel[1] + 1, voxel[2] + 1))
-        self.occupiedVoxels.add((voxel[0],     voxel[1] + 1, voxel[2] + 1))
-        self.occupiedVoxels.add((voxel[0] + 1, voxel[1] + 1, voxel[2] + 1))
-
-        
-    def isOccupied(self, point):
+    def __contains__(self, point):
         voxel = self.point2Voxel(point)
-        return voxel in self.occupiedVoxels
+        return voxel in self.cache
 
-    
     def point2Voxel(self, point):
         return tuple(self.voxelSize * int(round(v / self.voxelSize)) for v in point)
 
+    def getAdjacentVoxels(self, voxel):
+        adjacentVoxels = [
+            (voxel[0] - 1, voxel[1] - 1, voxel[2] - 1),
+            (voxel[0],     voxel[1] - 1, voxel[2] - 1),
+            (voxel[0] + 1, voxel[1] - 1, voxel[2] - 1),
 
-    def getNeighbors(self, voxel):
+            (voxel[0] - 1, voxel[1], voxel[2] - 1),
+            (voxel[0],     voxel[1], voxel[2] - 1),
+            (voxel[0] + 1, voxel[1], voxel[2] - 1),
+
+            (voxel[0] - 1, voxel[1] + 1, voxel[2] - 1),
+            (voxel[0],     voxel[1] + 1, voxel[2] - 1),
+            (voxel[0] + 1, voxel[1] + 1, voxel[2] - 1),
+
+            (voxel[0] - 1, voxel[1] - 1, voxel[2]),
+            (voxel[0],     voxel[1] - 1, voxel[2]),
+            (voxel[0] + 1, voxel[1] - 1, voxel[2]),
+
+            (voxel[0] - 1, voxel[1], voxel[2]),
+            (voxel[0],     voxel[1], voxel[2]),
+            (voxel[0] + 1, voxel[1], voxel[2]),
+
+            (voxel[0] - 1, voxel[1] + 1, voxel[2]),
+            (voxel[0],     voxel[1] + 1, voxel[2]),
+            (voxel[0] + 1, voxel[1] + 1, voxel[2]),
+
+            (voxel[0] - 1, voxel[1] - 1, voxel[2] + 1),
+            (voxel[0],     voxel[1] - 1, voxel[2] + 1),
+            (voxel[0] + 1, voxel[1] - 1, voxel[2] + 1),
+
+            (voxel[0] - 1, voxel[1], voxel[2] + 1),
+            (voxel[0],     voxel[1], voxel[2] + 1),
+            (voxel[0] + 1, voxel[1], voxel[2] + 1),
+
+            (voxel[0] - 1, voxel[1] + 1, voxel[2] + 1),
+            (voxel[0],     voxel[1] + 1, voxel[2] + 1),
+            (voxel[0] + 1, voxel[1] + 1, voxel[2] + 1),
+        ]
+
+        return adjacentVoxels
+
+    def getEmptyNeighbors(self, voxel):
         neighbors = []
-        for i in (-1, 0, 1):
-            for j in (-1, 0, 1):
-                for k in (-1, 0, 1):
-                    if i == 0 and j == 0 and k == 0:
-                        continue
+        possibleNeighbors = self.getAdjacentVoxels(voxel)
 
-                    neighboringVoxel = tuple(self.voxelSize * np.array([i, j, k])  + voxel)
-                    if neighboringVoxel not in self.occupiedVoxels:
-                        neighbors.append(neighboringVoxel)
+        for v in possibleNeighbors:
+            if v not in self.cache:
+                neighbors.append(v) 
 
         return neighbors
 
-    
     def plotOccupancies(self):
-        occupiedPoints = [Vector3r(float(v[0]), float(v[1]), float(v[2])) for v in self.occupiedVoxels]
+        occupiedPoints = [Vector3r(float(v[0]), float(v[1]), float(v[2])) for v in self.cache.keys()]
         client.simPlotPoints(occupiedPoints, color_rgba = [0.0, 0.0, 1.0, 1.0], duration=PLOT_PERIOD-PLOT_DELAY) 
 
 
@@ -265,22 +407,20 @@ def isVisible(point, position, orientation):
 
 def orientationAt(endpoint, position):
     # Get the drone orientation that faces towards the endpoint at position
-    displacement = endpoint - position
+    displacement = np.array(endpoint) - np.array(position)
     endpointYaw = np.arctan2(displacement[1], displacement[0])
     orientation = R.from_euler('xyz', [0, 0, endpointYaw]).as_quat()
 
     return orientation
 
+def euclidean(voxel1, voxel2):
+    return np.linalg.norm(np.array(voxel1) - np.array(voxel2))
 
-def h(voxel, map, endpoint):
-    return np.linalg.norm(endpoint - np.array(voxel))
-
-def d(voxel1, voxel2, map):
-    return np.linalg.norm(np.array(voxel2) - np.array(voxel1))
+def greedy(voxel1, voxel2):
+    return 100*euclidean(voxel1, voxel2)
 
 # A* Path finding 
-def findPath(startpoint, endpoint, map):
-    print('Searching Path')
+def findPath(startpoint, endpoint, map, h=greedy, d=euclidean):
     start = map.point2Voxel(startpoint)
     end   = map.point2Voxel(endpoint)
 
@@ -290,7 +430,7 @@ def findPath(startpoint, endpoint, map):
     gScore[start] = 0
 
     fScore = dict()
-    fScore[start] = 10 * h(start, map, endpoint)
+    fScore[start] = h(start, endpoint)
 
     openSet = [(fScore[start], start)]
 
@@ -305,13 +445,13 @@ def findPath(startpoint, endpoint, map):
             
             return list(reversed(path))
 
-        for neighbor in map.getNeighbors(current):
+        for neighbor in map.getEmptyNeighbors(current):
             # skip neighbors from which the endpoint isn't visible
             neighborOrientation = orientationAt(endpoint, neighbor)
             if not isVisible(np.array(end), np.array(neighbor), neighborOrientation):
                 continue
 
-            tentativeGScore = gScore.get(current, float("inf")) + d(current, neighbor, map)
+            tentativeGScore = gScore.get(current, float("inf")) + d(current, neighbor)
 
             if tentativeGScore < gScore.get(neighbor, float('inf')):
                 cameFrom[neighbor] = current
@@ -322,7 +462,7 @@ def findPath(startpoint, endpoint, map):
                         openSet.remove((fScore[neighbor], neighbor))
                     except:
                         pass
-                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + 10 * h(neighbor, map, endpoint)
+                fScore[neighbor]   = gScore.get(neighbor, float('inf')) + h(neighbor, endpoint)
 
                 heapq.heappush(openSet, (fScore[neighbor], neighbor))
         
@@ -341,7 +481,7 @@ def getPose():
 
 
 def isValidEndpoint(endpoint, map):
-    if map.isOccupied(endpoint):
+    if endpoint in map:
         return False
 
     position, orientation = getPose()
@@ -353,17 +493,17 @@ def isValidEndpoint(endpoint, map):
     return True
 
 
-def generateEndpoint(map):
+def generateTarget(occupancyMap, radius=10):
     isValid = False
     attempts = 0
     while not isValid:
         # TODO(cvorbach) smarter generation without creating points under terrain
-        _, orientation = getPose()
+        position, orientation = getPose()
         yawRotation = R.from_euler('xyz', [0, 0, R.from_quat(orientation).as_euler('xyz')[2]])
 
-        endpoint = yawRotation.apply(map.point2Voxel(ENDPOINT_RADIUS * np.array([random.random(), 0.1*random.random(), -random.random()])))
-        endpoint = map.point2Voxel(endpoint)
-        isValid = isValidEndpoint(endpoint, map)
+        endpoint = position + yawRotation.apply(occupancyMap.point2Voxel(radius * np.array([random.random(), 0.1*random.random(), -random.random()])))
+        endpoint = occupancyMap.point2Voxel(endpoint)
+        isValid = isValidEndpoint(endpoint, occupancyMap)
 
         attempts += 1
         if attempts > MAX_ENDPOINT_ATTEMPTS:
@@ -381,14 +521,11 @@ def turnTowardEndpoint(endpoint, timeout=0.01):
     print("Turned toward endpoint")
 
 
-def tryPlotting(lastPlotTime, trajectory, map):
+def tryPlotting(lastPlotTime, occupancyMap):
     if getTime() < PLOT_PERIOD + lastPlotTime:
         return lastPlotTime
 
-    plottableTrajectory = [Vector3r(float(trajectory[i][0]), float(trajectory[i][1]), float(trajectory[i][2])) for i in range(len(trajectory))]
-    client.simPlotPoints(plottableTrajectory, color_rgba = [0.0, 1.0, 0.0, 1.0], duration=PLOT_PERIOD-PLOT_DELAY) 
-
-    map.plotOccupancies()
+    # occupancyMap.plotOccupancies()
 
     print("Replotted :)")
     return getTime()
@@ -403,7 +540,7 @@ def updateOccupancies(map):
         for p in lidarPoints:
             map.addPoint(p)
 
-    #print("Lidar data added")
+    # print("Lidar data added")
 
 
 def getNearestPoint(trajectory, position):
@@ -476,115 +613,178 @@ def pursuitVelocity(trajectory):
 
         lookAheadPoint = aheadWeight * pointAhead + behindWeight * pointBehind
 
-    # Plot the interpolation
-    # client.simPlotPoints([Vector3r(*pointAhead)], duration=0.9 * CONTROL_PERIOD) 
-    # client.simPlotPoints([Vector3r(*lookAheadPoint)], color_rgba=[0.0, 1.0, 0.0, 1.0], duration=0.9 * CONTROL_PERIOD) 
-    # client.simPlotPoints([Vector3r(*pointBehind)], color_rgba=[0.0, 0.0, 1.0, 1.0], duration=0.9 * CONTROL_PERIOD) 
-
     # Compute velocity to pursue lookahead point
     pursuitVector = lookAheadPoint - position
     pursuitVector = SPEED * pursuitVector / np.linalg.norm(pursuitVector)
 
     return pursuitVector
 
+def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=None, planningWrapper=None, planningKnots=None):
+    t = 0
+    lookAheadPoint  = path(0)
+    reachedEnd      = False
 
-def moveToEndpoint(endpoint, model = None):
-    controlThread      = None
-    planningThread     = None
-    reachedEndpoint    = False
-    lastPlotTime       = 0
-    currentTrajectory  = []
-    updatingTrajectory = []
+    lastPlotTime    = getTime()
+    markerPose      = airsim.Pose()
 
-    def planningWrapper(nextTrajectory):
-        print("Start Planning")
-        nextTrajectory.clear()
-        for voxel in findPath(position, endpoint, map):
-            nextTrajectory.append(voxel)
-        print("Finish Planning")
+    planningThread  = None
+    controlThread   = None
 
-    position, _ = getPose()
+    print('started following path')
 
-    if model is None:
-        currentTrajectory = [np.array(waypoint) for waypoint in findPath(position, endpoint, map)]
-        print('Found first path')
+    if ENABLE_PLOTTING:
+        client.simPlotPoints([Vector3r(*path(t)) for t in np.linspace(0, 1, 1000)], duration = 60)
 
-    images = np.zeros((1, SEQUENCE_LENGTH, *IMAGE_SHAPE))
+    if ENABLE_RECORDING:
+        client.startRecording()
 
-    i = 0
-    recordingOn = False
-    while not reachedEndpoint:
+    # control loop
+    while not reachedEnd:
         position, _ = getPose()
+        displacement = lookAheadPoint - position
+        updateOccupancies(occupancyMap)
 
-        if model is None:
+        # handle planning thread if needed
+        if planningWrapper is not None:
 
-            # Using a real cube breaks this
-            # if map.isOccupied(endpoint):
-            #     print("Endpoint is occupied")
-            #     break
-
-            # if map.isOccupied(position):
-            #     print("Drone in occupied position")
-
-            updateOccupancies(map)
+            # if we have finished planning
             if planningThread is None or not planningThread.is_alive():
-                currentTrajectory = [np.array(waypoint) for waypoint in updatingTrajectory]
-                planningThread = threading.Thread(target=planningWrapper, args = (updatingTrajectory,))
+
+                # update the spline path
+                if np.any(planningKnots != path.knotPoints):
+                    path.fit(planningKnots.copy())
+                    t = path.project(position) # find the new nearest path(t)
+
+                # restart planning
+                planningThread = threading.Thread(target=planningWrapper, args=(planningKnots,))
                 planningThread.start()
-                print('Replanning')
 
             planningThread.join(timeout=CONTROL_PERIOD)
 
-            # Wait for first trajectory to complete
-            if len(currentTrajectory) == 0:
-                continue
-
-            velocity = pursuitVelocity(currentTrajectory)
-        else:
-            # get and format an image
-            image = None
-            while image is None or len(image) == 1:
-                image = client.simGetImages([airsim.ImageRequest('0', airsim.ImageType.Scene, False, False)])[0]
-                image = np.fromstring(image.image_data_uint8, dtype=np.uint8).astype(np.float32) / 255
-            image = np.reshape(image, IMAGE_SHAPE)
-            image = image[:, :, ::-1]                 # Required since order is BGR instead of RGB by default
-
-            # add the image to the sliding window
-            if i < SEQUENCE_LENGTH:
-                images[0, i] = image
-
+        # advance the pursuit point if needed
+        while np.linalg.norm(displacement) < lookAhead:
+            t += dt
+            if t < 1: 
+                lookAheadPoint = path(t)
+                displacement = lookAheadPoint - position
             else:
-                images[0] = np.roll(images[0], -1, axis=0)
-                images[0][-1] = image
+                reachedEnd = True
+                break
 
-            # compute a velocity vector from the model
-            direction = model.predict(images)[0][min(i, SEQUENCE_LENGTH-1)]
-            direction = direction / np.linalg.norm(direction)
-            velocity = SPEED * direction
+        # optionally stop within distance of path end
+        if earlyStopDistance is not None:
+            if np.linalg.norm(path(1.0) - position) < earlyStopDistance:
+                reachedEnd = True
 
-        if ENABLE_RECORDING and not recordingOn:
-            client.startRecording()
-            recordingOn = True
+        if reachedEnd:
+            break
 
+        # place marker if passed
+        if marker is not None:
+            markerPose.position = Vector3r(*lookAheadPoint)
+            client.simSetObjectPose(marker, markerPose)
+
+        # get yaw angle and pursuit velocity to the lookAheadPoint
+        yawAngle = np.arctan2(displacement[1], displacement[0]) * RADIANS_2_DEGREES
+        velocity = SPEED * normalize(displacement)
+
+        # plot
         if ENABLE_PLOTTING:
-            lastPlotTime = tryPlotting(lastPlotTime, currentTrajectory, map)
+            lastPlotTime = tryPlotting(lastPlotTime, occupancyMap)
 
-        displacement = endpoint - position
-        endpointYaw = np.arctan2(displacement[1], displacement[0]) * RADIANS_2_DEGREES
-
+        # start control thread
         if controlThread is not None:
             controlThread.join()
-        controlThread = client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), CONTROL_PERIOD, yaw_mode=YawMode(is_rate = False, yaw_or_rate = endpointYaw))
-        print("Moving")
-        
-        reachedEndpoint = np.linalg.norm(endpoint - position) <= ENDPOINT_TOLERANCE
-        i += 1
+        controlThread = client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), CONTROL_PERIOD, yaw_mode=YawMode(is_rate = False, yaw_or_rate = yawAngle))
 
+    # hide the marker
+    if marker is not None:
+        markerPose.position = Vector3r(0,0,0)
+        client.simSetObjectPose(marker, markerPose)
+
+    if ENABLE_RECORDING:
+        client.startRecording()
+
+
+def moveToEndpoint(endpoint, occupancyMap, model = None):
+    updateOccupancies(occupancyMap)
+
+    position, _  = getPose()
+    pathKnots    = findPath(position, endpoint, occupancyMap)
+    pathToEndpoint = Path(pathKnots.copy())
+
+    def planningWrapper(knots):
+        # run planning
+        newKnots = findPath(position, endpoint, occupancyMap)
+
+        # replace the old knots
+        knots.clear()
+        for k in newKnots:
+            knots.append(k)
+            
+        # print('Finished Planning')
+
+    followPath(pathToEndpoint, earlyStopDistance=ENDPOINT_TOLERANCE, planningWrapper=planningWrapper, planningKnots=pathKnots)
     print('Reached Endpoint')
 
-    # Finish moving
-    if controlThread is not None:
-        controlThread.join()
+
+def checkBand(k, blazes, blazeStart, zLimit):
+
+    band = []
+
+    # check sides of each square of radius k between zLimits
+    for z in reversed(range(zLimit[0], zLimit[1])):
+        corners = np.array([
+            (blazeStart[0] - k, blazeStart[1] - k, z),
+            (blazeStart[0] + k, blazeStart[1] - k, z),
+            (blazeStart[0] + k, blazeStart[1] + k, z),
+            (blazeStart[0] - k, blazeStart[1] + k, z)
+        ])
+
+        tangentVectors = np.array([
+            (1, 0, 0),
+            (0, 1, 0),
+            (-1, 0, 0),
+            (0, -1, 0)
+        ])
+
+        sideLength = 2*k-1
+
+        # check each side
+        for corner, tangent in zip(corners, tangentVectors):
+            for i in range(sideLength):
+                voxel = occupancyMap.point2Voxel(corner + i * tangent)
+                band.append(voxel)
+
+                if voxel in occupancyMap and not np.any([np.linalg.norm(np.array(b) - voxel) < MIN_BLAZE_DISTANCE for b in blazes]):
+                    return voxel
+
+    # client.simPlotPoints([Vector3r(*v) for v in band])
+    return None
+
+
+def generateHikingBlazes(start, occupancyMap, numBlazes = 2, zLimit=(-10, -5), maxSearchDepth=1000):
+    blazes = []
+    blazeStart = occupancyMap.point2Voxel(start)
+
+    # lastPlotTime = tryPlotting(-float('inf'), occupancyMap)
+
+    for _ in range(numBlazes):
+        nextBlaze   = None
+        
+        k = 5
+        while nextBlaze is None and k < maxSearchDepth: 
+            nextBlaze = checkBand(k, blazes, blazeStart, zLimit)
+            k += 1
+
+        if k == maxSearchDepth:
+            raise Exception('Could not find a tree to blaze')
+
+        blazes.append(nextBlaze)
+        blazeStart = blazes[-1]
+
+    return blazes
+
 
 
 # -----------------------------
@@ -593,66 +793,103 @@ def moveToEndpoint(endpoint, model = None):
 
 # Takeoff
 client.armDisarm(True)
-client.takeoffAsync().join()
-print("Taken off")
+# client.takeoffAsync().join()
+# print("Taken off")
 
-# Try to load saved occupancy map
-try:
-    with open("occupancy_map.p", 'rb') as f:
-        map = pickle.load(f)
-except:
-    map = SparseVoxelOccupancyMap(VOXEL_SIZE)
+occupancyMap = VoxelOccupancyCache(VOXEL_SIZE, CACHE_SIZE)
+
+# get the markers
+markers = client.simListSceneObjects('Red_Cube.*') 
+
+if len(markers) < 1:
+    raise Exception('Didn\'t find any endpoint markers. Check there is a Red_Cube is in the scene')
+
+# start the markers out of the way
+markerPose = airsim.Pose()
+markerPose.position = Vector3r(0, 0, 100)
+for marker in markers:
+    client.simSetObjectPose(marker, markerPose)
  
 # Collect data runs
 for i in range(N_RUNS):
+    position, orientation = getPose()
 
-    # Random rotation
-    client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
+    if TASK == Task.TARGET:
+        marker = markers[0]
 
-    # Set up
-    print("generating endpoint")
-    endpoint = generateEndpoint(map)
-    if endpoint is None:
-        continue
+        # Random rotation
+        client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
 
-    # client.simPlotPoints([Vector3r(*(endpoint - ENDPOINT_OFFSET))], color_rgba = [1.0, 0.0, 0.0, 1.0], size=100, is_persistent = True) 
+        # Set up
+        endpoint = generateTarget(occupancyMap, radius=TARGET_RADIUS)
+        if endpoint is None:
+            continue
+            
+        # place endpoint marker
+        endpointPose = airsim.Pose()
+        endpointPose.position = Vector3r(*endpoint)
+        client.simSetObjectPose(marker, endpointPose)
 
-    print("endpoint: ", endpoint)
-    map.removeEndpoint(endpoint)
+        turnTowardEndpoint(endpoint, timeout=10)
 
-    endpointMarker = client.simListSceneObjects('Red_Cube.*') 
-    if len(endpointMarker) != 1:
-        raise Exception('Didn\'t find unique endpoint marker. Check a single Red_Cube is in the scene')
-    else:
-        endpointMarker = endpointMarker[0]
+        moveToEndpoint(endpoint, occupancyMap)
 
-    endpointPose = airsim.Pose()
-    endpointPose.position = Vector3r(endpoint[0], endpoint[1], endpoint[2])
-    client.simSetObjectPose(endpointMarker, endpointPose)
+    if TASK == Task.FOLLOWING:
 
-    print("Turning to endpoint")
-    turnTowardEndpoint(endpoint, timeout=10.0)
+        marker = markers[0]
 
-    # Control loop
-    try:
-        if FLY_BY_MODEL:
-            moveToEndpoint(endpoint, model=flightModel)
-        else:
-            moveToEndpoint(endpoint)
+        updateOccupancies(occupancyMap)
+        print('updated occupancies')
 
-    # Catch path-finding failure (cube is embedded in tree)
-    except ValueError as e:
-        print(e)
-        continue
+        path = Path(randomWalk(position, stepSize=0.5, occupancyMap=occupancyMap))
+        print('got path')
 
-    # Clean up
-    finally:
-        if ENABLE_RECORDING:
-            client.stopRecording()
-            time.sleep(0.2) # wait a short period for the camera to really turn off
+        followPath(path, marker=marker)
+        print('reached path end')
 
-        client.simFlushPersistentMarkers()
+    if TASK == Task.HIKING:
+        print('move to z-level')
+        zLimit = (-5, 0)
+        client.moveToZAsync((zLimit[0] + zLimit[1])/2, 1).join()
+        print('reached z-level')
 
-# Dump saved map
-with open('occupancy_map.p', 'wb') as f:
-    pickle.dump(map, f)
+        updateOccupancies(occupancyMap)
+        print('updated occupancies')
+
+        print('getting blazes')
+        hikingBlazes = generateHikingBlazes(position, occupancyMap, zLimit=zLimit)
+        print('Got blazes')
+
+        if len(hikingBlazes) > len(markers):
+            raise Exception('Not enough markers for each blaze to get one')
+
+        # place makers
+        markerPose = airsim.Pose()
+        for i, blaze in enumerate(hikingBlazes):
+            markerPose.position = Vector3r(*blaze)
+            client.simSetObjectPose(markers[i], markerPose)
+
+        for blaze in hikingBlazes:
+            moveToEndpoint(blaze, occupancyMap)
+
+    if TASK == Task.MAZE:
+        # TODO(cvorbach) reimplement me
+        # record the direction vector
+        marker = markers[0]
+
+        # Set up
+        endpoint = generateTarget(occupancyMap, radius=MAZE_RADIUS)
+        if endpoint is None:
+            continue
+            
+        # place endpoint marker
+        endpointPose = airsim.Pose()
+        endpointPose.position = Vector3r(*endpoint)
+        client.simSetObjectPose(marker, endpointPose)
+
+        turnTowardEndpoint(endpoint, timeout=10)
+
+        moveToEndpoint(endpoint, occupancyMap)
+
+
+print('Finished Data Runs')
