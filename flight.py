@@ -37,7 +37,7 @@ TASK                  = Task.HIKING
 ENDPOINT_TOLERANCE     = 3.0       # m
 TARGET_RADIUS          = 15        # m
 MAZE_RADIUS            = 100       # m
-MIN_BLAZE_STANCE       = 10        # m
+MIN_BLAZE_DISTANCE     = 10        # m
 PLOT_PERIOD            = 2.0       # s
 PLOT_DELAY             = 1.0       # s
 CONTROL_PERIOD         = 0.1       # s
@@ -48,7 +48,7 @@ CACHE_SIZE             = 100000    # number of entries
 LOOK_AHEAD_DIST        = 1.0       # m
 MAX_ENDPOINT_ATTEMPTS  = 5000
 N_RUNS                 = 5000
-ENABLE_PLOTTING        = False
+ENABLE_PLOTTING        = True
 ENABLE_RECORDING       = False
 FLY_BY_MODEL           = False
 LSTM_MODEL             = False
@@ -359,12 +359,12 @@ class VoxelOccupancyCache:
 
         return adjacentVoxels
 
-    def getEmptyNeighbors(self, voxel):
+    def getNextSteps(self, voxel, endpoint):
         neighbors = []
         possibleNeighbors = self.getAdjacentVoxels(voxel)
 
         for v in possibleNeighbors:
-            if v not in self.cache:
+            if v not in self.cache or v == endpoint:
                 neighbors.append(v) 
 
         return neighbors
@@ -445,7 +445,8 @@ def findPath(startpoint, endpoint, map, h=greedy, d=euclidean):
             
             return list(reversed(path))
 
-        for neighbor in map.getEmptyNeighbors(current):
+        for neighbor in map.getNextSteps(current, end):
+
             # skip neighbors from which the endpoint isn't visible
             neighborOrientation = orientationAt(endpoint, neighbor)
             if not isVisible(np.array(end), np.array(neighbor), neighborOrientation):
@@ -525,7 +526,7 @@ def tryPlotting(lastPlotTime, occupancyMap):
     if getTime() < PLOT_PERIOD + lastPlotTime:
         return lastPlotTime
 
-    # occupancyMap.plotOccupancies()
+    occupancyMap.plotOccupancies()
 
     print("Replotted :)")
     return getTime()
@@ -709,8 +710,12 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
 def moveToEndpoint(endpoint, occupancyMap, model = None):
     updateOccupancies(occupancyMap)
 
+    tryPlotting(-float('inf'), occupancyMap)
+
     position, _  = getPose()
+    print('first planning')
     pathKnots    = findPath(position, endpoint, occupancyMap)
+    print('finshed first planning')
     pathToEndpoint = Path(pathKnots.copy())
 
     def planningWrapper(knots):
@@ -849,7 +854,7 @@ for i in range(N_RUNS):
 
     if TASK == Task.HIKING:
         print('move to z-level')
-        zLimit = (-5, 0)
+        zLimit = (-10, -5)
         client.moveToZAsync((zLimit[0] + zLimit[1])/2, 1).join()
         print('reached z-level')
 
@@ -858,6 +863,7 @@ for i in range(N_RUNS):
 
         print('getting blazes')
         hikingBlazes = generateHikingBlazes(position, occupancyMap, zLimit=zLimit)
+        turnTowardEndpoint(hikingBlazes[0], timeout=10)
         print('Got blazes')
 
         if len(hikingBlazes) > len(markers):
@@ -870,7 +876,9 @@ for i in range(N_RUNS):
             client.simSetObjectPose(markers[i], markerPose)
 
         for blaze in hikingBlazes:
+            print('moving to blaze')
             moveToEndpoint(blaze, occupancyMap)
+            print('moved to blaze')
 
     if TASK == Task.MAZE:
         # TODO(cvorbach) reimplement me
