@@ -1,3 +1,4 @@
+import argparse
 import os
 import pickle
 import random
@@ -8,23 +9,23 @@ import numpy as np
 from tensorflow import keras
 import kerasncp as kncp
 
-TRAIN_LSTM                 = False
-TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
 
-if TRAIN_LSTM:
-    MODEL_NAME             = 'lstm'
-else:
-    MODEL_NAME             = 'ncp'
-MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
-SAMPLES                    = -1
-BATCH_SIZE                 = 8  
-EPOCHS                     = 50
-TRAINING_SEQUENCE_LENGTH   = 32
+parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
+parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm)')
+parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
+parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
+parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
+parser.add_argument('--samples', type=int, default=None)
+parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--seq_len', type=int, default=32)
+parser.add_argument('--epochs', type=int, default=50)
+parser.add_argument('--val_split', type=float, default=0.1)
+parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
+args = parser.parse_args()
+
+
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
-VALIDATION_PROPORTION      = 0.1 
-
-STARTING_WEIGHTS           = 'model-checkpoints/weights.007--0.9380.hdf5'
 
 # Utilities
 
@@ -58,13 +59,13 @@ class DataGenerator(keras.utils.Sequence):
         return X, Y
 
     def __load_data(self, directories):
-        X = np.empty((self.batch_size, TRAINING_SEQUENCE_LENGTH, *self.xDims))
-        Y = np.empty((self.batch_size, TRAINING_SEQUENCE_LENGTH, *self.yDims))
+        X = np.empty((self.batch_size, args.seq_len, *self.xDims))
+        Y = np.empty((self.batch_size, args.seq_len, *self.yDims))
 
         for i, directory in enumerate(directories):
             try:
-                X[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/images.npy')
-                Y[i,] = np.load(TRAINING_DATA_DIRECTORY + directory + '/vectors.npy')
+                X[i,] = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
+                Y[i,] = np.load(os.path.join(args.data_dir, directory, 'vectors.npy'))
             except Exception as e:
                 print("Failed on directory: ", directory)
                 raise e
@@ -75,21 +76,22 @@ class DataGenerator(keras.utils.Sequence):
 
 paritions = dict()
 
-sampleDirectories = list(os.listdir(TRAINING_DATA_DIRECTORY))[:SAMPLES] # TODO(cvorbach) remove me
+sampleDirectories = list(os.listdir(args.data_dir))[:args.samples] # TODO(cvorbach) remove me
+sampleDirectories = [d for d in sampleDirectories if os.path.isfile(os.path.join(args.data_dir, d, "vectors.npy"))]
 random.shuffle(sampleDirectories)
 
-k = int(VALIDATION_PROPORTION * len(sampleDirectories))
+k = int(args.val_split * len(sampleDirectories))
 paritions['valid'] = sampleDirectories[:k]
 paritions['train'] = sampleDirectories[k:]
 
 print('Training:   ', paritions['train'])
 print('Validation: ', paritions['valid'])
 
-trainData = DataGenerator(paritions['train'], min(BATCH_SIZE, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
-validData = DataGenerator(paritions['valid'], min(BATCH_SIZE, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
+trainData = DataGenerator(paritions['train'], min(args.batch_size, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
+validData = DataGenerator(paritions['valid'], min(args.batch_size, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
 
 if len(sampleDirectories) == 0:
-    raise ValueError("No samples in " + TRAINING_DATA_DIRECTORY)
+    raise ValueError("No samples in " + args.data_dir)
 
 # Setup the network
 wiring = kncp.wirings.NCP(
@@ -106,7 +108,7 @@ wiring = kncp.wirings.NCP(
 rnnCell = kncp.LTCCell(wiring)
 
 ncpModel = keras.models.Sequential()
-ncpModel.add(keras.Input(shape=(TRAINING_SEQUENCE_LENGTH, *IMAGE_SHAPE)))
+ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
@@ -127,34 +129,37 @@ lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activ
 lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
 # Configure the model we will train
-if TRAIN_LSTM:
+if args.model == "lstm":
     trainingModel = lstmModel
-else:
+elif args.model == "ncp":
     trainingModel = ncpModel
+else:
+    raise ValueError(f"Unsupported model type: {args.model}")
+
 
 trainingModel.compile(
     optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
 )
 
 # Load weights
-if STARTING_WEIGHTS is not None:
-    trainingModel.load_weights(STARTING_WEIGHTS)
+if args.hotstart is not None:
+    trainingModel.load_weights(args.hotstart)
 
 trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=MODEL_CHECKPOINT_DIRECTORY + '/' + MODEL_NAME + f'-{time.strftime("%Y:%m:%d:%H:%M:%S")}' + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5',
+    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
 )
 
-try: 
+try:
     h = trainingModel.fit(
         x                   = trainData,
         validation_data     = validData,
-        epochs              = EPOCHS,
+        epochs              = args.epochs,
         use_multiprocessing = False,
         workers             = 1,
         max_queue_size      = 5,
@@ -163,5 +168,5 @@ try:
     )
 finally:
     # Dump history
-    with open(f'histories/{MODEL_NAME}-' + time.strftime("%Y:%m:%d:%H:%M:%S") + '-history.p', 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + '-history.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
