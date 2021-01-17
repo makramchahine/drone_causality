@@ -3,6 +3,7 @@ import os
 import pickle
 import random
 import time
+import pathlib
 
 import numpy as np
 
@@ -27,8 +28,11 @@ args = parser.parse_args()
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
 
-# Utilities
+print("Creating logging directories, if they dont exist")
+for dir in [args.data_dir, args.save_dir, args.history_dir]:
+    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
 
+# Utilities
 class DataGenerator(keras.utils.Sequence):
     def __init__(self, runDirectories, batch_size, xDims, yDims):
         self.runDirectories = runDirectories
