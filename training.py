@@ -9,10 +9,11 @@ import numpy as np
 
 from tensorflow import keras
 import kerasncp as kncp
-
+from node_cell import *
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
-parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn)')
+parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
+parser.add_argument('--rnn_size', type=int, default=64, help='Select the size of RNN network you would like to train')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
 parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
@@ -129,10 +130,35 @@ ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 # LSTM network
 penultimateOutput = ncpModel.layers[-2].output
-lstmOutput        = keras.layers.LSTM(units=64, return_sequences=True)(penultimateOutput)
+lstmOutput        = keras.layers.LSTM(units=args.rnn_size, return_sequences=True)(penultimateOutput)
 lstmOutput        = keras.layers.Dense(units=3, activation='linear')(lstmOutput)
 lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
+
+# Vanilla RNN network
+penultimateOutput = ncpModel.layers[-2].output
+rnnOutput        = keras.layers.SimpleRNN(units=args.rnn_size, return_sequences=True)(penultimateOutput)
+rnnOutput        = keras.layers.Dense(units=3, activation='linear')(rnnOutput)
+rnnModel = keras.models.Model(ncpModel.input, rnnOutput)
+
+# GRU network
+penultimateOutput = ncpModel.layers[-2].output
+gruOutput        = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(penultimateOutput)
+gruOutput        = keras.layers.Dense(units=3, activation='linear')(gruOutput)
+gruModel = keras.models.Model(ncpModel.input, gruOutput)
+
+# # CT-GRU network
+# penultimateOutput = ncpModel.layers[-2].output
+# ctgruOutput        = CTGRU(units=64)(penultimateOutput)
+# ctgruOutput        = keras.layers.Dense(units=3, activation='linear')(ctgruOutput)
+# ctgruModel = keras.models.Model(ncpModel.input, ctgruOutput)
+#
+#
+# # ODE-RNN network
+# penultimateOutput = ncpModel.layers[-2].output
+# odernnOutput        = CTRNNCell(units=64, method='dopri5')(penultimateOutput)
+# odernnOutput        = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
+# odernnModel = keras.models.Model(ncpModel.input, odernnOutput)
 
 # CNN network
 remove_ncp_layer = ncpModel.layers[-3].output
@@ -150,6 +176,14 @@ elif args.model == "ncp":
     trainingModel = ncpModel
 elif args.model == "cnn":
     trainingModel = cnnModel
+elif args.model == "odernn":
+    trainingModel = odernnModel
+elif args.model == "gru":
+    trainingModel = gruModel
+elif args.model == "rnn":
+    trainingModel = rnnModel
+elif args.model == "ctgru":
+    trainingModel = ctgruModel
 else:
     raise ValueError(f"Unsupported model type: {args.model}")
 
