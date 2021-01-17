@@ -12,7 +12,7 @@ import kerasncp as kncp
 
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
-parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm)')
+parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn)')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
 parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
@@ -119,12 +119,12 @@ ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
 # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
 # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
 # ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+#ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='linear')))
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 # LSTM network
@@ -133,17 +133,29 @@ lstmOutput        = keras.layers.LSTM(units=64, return_sequences=True)(penultima
 lstmOutput        = keras.layers.Dense(units=3, activation='linear')(lstmOutput)
 lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
+
+# CNN network
+remove_ncp_layer = ncpModel.layers[-3].output
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu'))(remove_ncp_layer)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5))(cnnOutput)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=100, activation='relu'))(cnnOutput)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3))(cnnOutput)
+cnnOutput = keras.layers.Dense(units=3, activation='linear')(cnnOutput)
+cnnModel = keras.models.Model(ncpModel.input, cnnOutput)
+
 # Configure the model we will train
 if args.model == "lstm":
     trainingModel = lstmModel
 elif args.model == "ncp":
     trainingModel = ncpModel
+elif args.model == "cnn":
+    trainingModel = cnnModel
 else:
     raise ValueError(f"Unsupported model type: {args.model}")
 
 
 trainingModel.compile(
-    optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
+    optimizer=keras.optimizers.Adam(0.0005), loss="cosine_similarity",
 )
 
 # Load weights

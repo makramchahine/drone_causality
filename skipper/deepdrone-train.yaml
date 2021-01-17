@@ -11,6 +11,7 @@ spec:
         - "-c" # run with bash and pass in the args below
       args:
         - "python training.py \
+        --model=lstm \
         --data_dir=/data/deepdrone/data \
         --save_dir=/data/deepdrone/logs \
         --history_dir=/data/deepdrone/history"
