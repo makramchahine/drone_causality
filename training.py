@@ -115,17 +115,18 @@ ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
+# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
+# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 # LSTM network
 penultimateOutput = ncpModel.layers[-2].output
-lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
+lstmOutput        = keras.layers.LSTM(units=64, return_sequences=True)(penultimateOutput)
+lstmOutput        = keras.layers.Dense(units=3, activation='linear')(lstmOutput)
 lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
 # Configure the model we will train
