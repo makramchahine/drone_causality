@@ -4,6 +4,9 @@ import pickle
 import random
 import time
 import pathlib
+from operator import mul
+from functools import reduce
+import sys
 
 import numpy as np
 
@@ -23,6 +26,8 @@ parser.add_argument('--seq_len', type=int, default=32)
 parser.add_argument('--epochs', type=int, default=50)
 parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
+parser.add_argument("--gps_signal", dest="gps_signal", action="store_true")
+parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
 
@@ -35,7 +40,7 @@ for dir in [args.data_dir, args.save_dir, args.history_dir]:
 
 # Utilities
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, runDirectories, batch_size, xDims, yDims):
+    def __init__(self, runDirectories, batch_size, xDims, yDims, ):
         self.runDirectories = runDirectories
         self.batch_size     = batch_size
         self.xDims          = xDims
@@ -77,6 +82,56 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, Y
 
+class GPSDataGenerator(keras.utils.Sequence):
+    def __init__(self, runDirectories, batch_size, xDims, yDims, ):
+        self.runDirectories = runDirectories
+        self.batch_size     = batch_size
+        self.xDims          = xDims
+        self.yDims          = yDims
+        self.gpsVectorShape = 3
+
+        self.on_epoch_end()
+
+    def __len__(self):
+        'Number of batches per epoch'
+        return int(len(self.runDirectories) / self.batch_size)
+
+    def on_epoch_end(self):
+        'Shuffle indexes to randomize batches each epoch'
+        self.indexes = np.arange(len(self.runDirectories))
+        np.random.shuffle(self.indexes)
+
+    def __getitem__(self, index):
+        'Generate one batch of data'
+
+        # data runs in this batch
+        directories = self.runDirectories[index*self.batch_size:(index+1)*self.batch_size]
+
+        # load data
+        X1, X2, Y = self.__load_data(directories)
+
+        return [X1, X2], Y
+
+    def __load_data(self, directories):
+        X1 = np.empty((self.batch_size, args.seq_len, *self.xDims))
+        X2 = np.empty((self.batch_size, args.seq_len, self.gpsVectorShape))
+        Y = np.empty((self.batch_size, args.seq_len, *self.yDims))
+
+        for i, directory in enumerate(directories):
+            try:
+                X1[i,] = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
+                X2[i,] = np.load(os.path.join(args.data_dir, directory, 'gps.npy'))
+                Y[i,] = np.load(os.path.join(args.data_dir, directory, 'vectors.npy'))
+            except Exception as e:
+                print("Failed on directory: ", directory)
+                raise e
+
+        # Correction for functional API
+        if args.model == "ncp":
+            Y = Y[:,-1,:]
+
+        return X1, X2, Y
+
 # Partition data into training and validation sets
 
 paritions = dict()
@@ -92,8 +147,12 @@ paritions['train'] = sampleDirectories[k:]
 print('Training:   ', paritions['train'])
 print('Validation: ', paritions['valid'])
 
-trainData = DataGenerator(paritions['train'], min(args.batch_size, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
-validData = DataGenerator(paritions['valid'], min(args.batch_size, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
+if not args.gps_signal:
+    trainData = DataGenerator(paritions['train'], min(args.batch_size, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
+    validData = DataGenerator(paritions['valid'], min(args.batch_size, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
+else:
+    trainData = GPSDataGenerator(paritions['train'], min(args.batch_size, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
+    validData = GPSDataGenerator(paritions['valid'], min(args.batch_size, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
 
 if len(sampleDirectories) == 0:
     raise ValueError("No samples in " + args.data_dir)
@@ -121,12 +180,27 @@ ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-# ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-#ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='linear')))
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
+
+# NCP network with multiple input (Requires the Functional API)
+imageInput = keras.Input(batch_size = min(args.batch_size, len(paritions["train"])), shape = (args.seq_len, *IMAGE_SHAPE))
+c1 = keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')(imageInput)
+c2 = keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')(c1)
+c3 = keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')(c2)
+c4 = keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')(c3)
+c5 = keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')(c4)
+f1 = keras.layers.Reshape((args.seq_len, reduce(mul, c5.shape[2:])))(c5)
+d1 = keras.layers.Dropout(rate=0.5)(f1)
+den1 = keras.layers.Dense(units=12, activation='linear')(d1)
+
+gpsInput = keras.Input(batch_size = min(args.batch_size, len(paritions["train"])), shape = (args.seq_len, 3))
+den2 = keras.layers.Dense(units=12, activation='linear')(d1)
+
+multiFeatures = keras.layers.concatenate([den1, den2])
+
+rnn, state = keras.layers.RNN(rnnCell, return_state=True)(multiFeatures)
+npcMultiModel = keras.models.Model(inputs=[imageInput, gpsInput], outputs = [rnn])
 
 # LSTM network
 penultimateOutput = ncpModel.layers[-2].output
@@ -134,12 +208,30 @@ lstmOutput        = keras.layers.LSTM(units=args.rnn_size, return_sequences=True
 lstmOutput        = keras.layers.Dense(units=3, activation='linear')(lstmOutput)
 lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
+# LSTM multiple input network
+lstmMultiOutput        = keras.layers.LSTM(units=args.rnn_size, return_sequences=True)(multiFeatures)
+lstmMultiOutput        = keras.layers.Dense(units=3, activation='linear')(lstmMultiOutput)
+lstmMultiModel = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[lstmMultiOutput])
+
+# for x in trainData:
+#     (x1, x2), y = x
+#     print(x1.shape)
+#     print(x2.shape)
+#     print(y.shape)
+#     print(lstmMultiOutput.shape)
+#     sys.exit()
+    
 
 # Vanilla RNN network
 penultimateOutput = ncpModel.layers[-2].output
-rnnOutput        = keras.layers.SimpleRNN(units=args.rnn_size, return_sequences=True)(penultimateOutput)
-rnnOutput        = keras.layers.Dense(units=3, activation='linear')(rnnOutput)
-rnnModel = keras.models.Model(ncpModel.input, rnnOutput)
+rnnOutput         = keras.layers.SimpleRNN(units=args.rnn_size, return_sequences=True)(penultimateOutput)
+rnnOutput         = keras.layers.Dense(units=3, activation='linear')(rnnOutput)
+rnnModel          = keras.models.Model(ncpModel.input, rnnOutput)
+
+# Vanilla RNN multiple input network
+rnnMultiOutput = keras.layers.SimpleRNN(units=args.rnn_size, return_sequences=True)(multiFeatures)
+rnnMultiOutput = keras.layers.Dense(units=3, activation='linear')(rnnMultiOutput)
+rnnMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[rnnMultiOutput])
 
 # GRU network
 penultimateOutput = ncpModel.layers[-2].output
@@ -147,18 +239,26 @@ gruOutput        = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(
 gruOutput        = keras.layers.Dense(units=3, activation='linear')(gruOutput)
 gruModel = keras.models.Model(ncpModel.input, gruOutput)
 
+# GRU multiple input network
+gruMultiOutput = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(multiFeatures)
+gruMultiOutput = keras.layers.Dense(units=3, activation='linear')(gruMultiOutput)
+gruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[gruMultiOutput])
+
 # # CT-GRU network
 # penultimateOutput = ncpModel.layers[-2].output
 # ctgruOutput        = CTGRU(units=64)(penultimateOutput)
 # ctgruOutput        = keras.layers.Dense(units=3, activation='linear')(ctgruOutput)
 # ctgruModel = keras.models.Model(ncpModel.input, ctgruOutput)
-#
-#
+
+# CT-GRU multiple input network
+
 # # ODE-RNN network
 # penultimateOutput = ncpModel.layers[-2].output
 # odernnOutput        = CTRNNCell(units=64, method='dopri5')(penultimateOutput)
 # odernnOutput        = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
 # odernnModel = keras.models.Model(ncpModel.input, odernnOutput)
+
+# ODE-RNN multiple input network
 
 # CNN network
 remove_ncp_layer = ncpModel.layers[-3].output
@@ -167,26 +267,48 @@ cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5))(cnnOutp
 cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=100, activation='relu'))(cnnOutput)
 cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3))(cnnOutput)
 cnnOutput = keras.layers.Dense(units=3, activation='linear')(cnnOutput)
-cnnModel = keras.models.Model(ncpModel.input, cnnOutput)
+cnnModel  = keras.models.Model(ncpModel.input, cnnOutput)
+
+# CNN multiple input network
+
+# TODO(cvorbach) Not sure if this makes sense for a cnn?
+
 
 # Configure the model we will train
-if args.model == "lstm":
-    trainingModel = lstmModel
-elif args.model == "ncp":
-    trainingModel = ncpModel
-elif args.model == "cnn":
-    trainingModel = cnnModel
-elif args.model == "odernn":
-    trainingModel = odernnModel
-elif args.model == "gru":
-    trainingModel = gruModel
-elif args.model == "rnn":
-    trainingModel = rnnModel
-elif args.model == "ctgru":
-    trainingModel = ctgruModel
+if not args.gps_signal:
+    if args.model == "lstm":
+        trainingModel = lstmModel
+    elif args.model == "ncp":
+        trainingModel = ncpModel
+    elif args.model == "cnn":
+        trainingModel = cnnModel
+    elif args.model == "odernn":
+        trainingModel = odernnModel
+    elif args.model == "gru":
+        trainingModel = gruModel
+    elif args.model == "rnn":
+        trainingModel = rnnModel
+    elif args.model == "ctgru":
+        trainingModel = ctgruModel
+    else:
+        raise ValueError(f"Unsupported model type: {args.model}")
 else:
-    raise ValueError(f"Unsupported model type: {args.model}")
-
+    if args.model == "lstm":
+        trainingModel = lstmMultiModel
+    elif args.model == "ncp":
+        trainingModel = npcMultiModel
+    elif args.model == "cnn":
+        trainingModel = cnnMultiModel
+    elif args.model == "odernn":
+        trainingModel = odernnMultiModel
+    elif args.model == "gru":
+        trainingModel = gruMultiModel
+    elif args.model == "rnn":
+        trainingModel = rnnMultiModel
+    elif args.model == "ctgru":
+        trainingModel = ctgruMultiModel
+    else:
+        raise ValueError(f"Unsupported model type: {args.model}")
 
 trainingModel.compile(
     optimizer=keras.optimizers.Adam(0.0005), loss="cosine_similarity",
