@@ -184,20 +184,14 @@ ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activat
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 # NCP network with multiple input (Requires the Functional API)
-imageInput = keras.Input(batch_size = min(args.batch_size, len(paritions["train"])), shape = (args.seq_len, *IMAGE_SHAPE))
-c1 = keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')(imageInput)
-c2 = keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')(c1)
-c3 = keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')(c2)
-c4 = keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')(c3)
-c5 = keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')(c4)
-f1 = keras.layers.Reshape((args.seq_len, reduce(mul, c5.shape[2:])))(c5)
-d1 = keras.layers.Dropout(rate=0.5)(f1)
-den1 = keras.layers.Dense(units=12, activation='linear')(d1)
+imageInput        = ncpModel.layers[0].input
+penultimateOutput = ncpModel.layers[-2].output
+imageFeatures     = keras.layers.Dense(units=12, activation="linear")(penultimateOutput)
 
-gpsInput = keras.Input(batch_size = min(args.batch_size, len(paritions["train"])), shape = (args.seq_len, 3))
-den2 = keras.layers.Dense(units=12, activation='linear')(d1)
+gpsInput    = keras.Input(batch_size = min(args.batch_size, len(paritions["train"])), shape = (args.seq_len, 3))
+gpsFeatures = keras.layers.Dense(units=12, activation='linear')(gpsInput)
 
-multiFeatures = keras.layers.concatenate([den1, den2])
+multiFeatures = keras.layers.concatenate([imageFeatures, gpsFeatures])
 
 rnn, state = keras.layers.RNN(rnnCell, return_state=True)(multiFeatures)
 npcMultiModel = keras.models.Model(inputs=[imageInput, gpsInput], outputs = [rnn])
