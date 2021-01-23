@@ -16,7 +16,8 @@ from node_cell import *
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
-parser.add_argument('--rnn_size', type=int, default=64, help='Select the size of RNN network you would like to train')
+# Revisiont 4: rnn_size from 64 to 32
+parser.add_argument('--rnn_size', type=int, default=32, help='Select the size of RNN network you would like to train')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
 parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
@@ -260,9 +261,9 @@ gruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[gruM
 # CNN network
 # Revision 2: 1000 and 100 units to 500 and 50 units
 remove_ncp_layer = ncpModel.layers[-3].output
-cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=500, activation='relu'))(remove_ncp_layer)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=250, activation='relu'))(remove_ncp_layer)
 cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5))(cnnOutput)
-cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=50, activation='relu'))(cnnOutput)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=25, activation='relu'))(cnnOutput)
 cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3))(cnnOutput)
 cnnOutput = keras.layers.Dense(units=3, activation='linear')(cnnOutput)
 cnnModel  = keras.models.Model(ncpModel.input, cnnOutput)
@@ -339,5 +340,5 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{3.0}.p'), 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{4.0}.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
