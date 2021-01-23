@@ -27,6 +27,7 @@ parser.add_argument('--epochs', type=int, default=50)
 parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
 parser.add_argument("--gps_signal", dest="gps_signal", action="store_true")
+parser.add_argument('--cnn_units', type=int, default=1000)
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
@@ -158,9 +159,10 @@ if len(sampleDirectories) == 0:
     raise ValueError("No samples in " + args.data_dir)
 
 # Setup the network
+# Revision 2: 8 to 16 command neurons
 wiring = kncp.wirings.NCP(
     inter_neurons=12,   # Number of inter neurons
-    command_neurons=8,  # Number of command neurons
+    command_neurons=16,  # Number of command neurons
     motor_neurons=3,    # Number of motor neurons
     sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
@@ -255,10 +257,11 @@ gruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[gruM
 # ODE-RNN multiple input network
 
 # CNN network
+# Revision 2: 1000 and 100 units to 500 and 50 units
 remove_ncp_layer = ncpModel.layers[-3].output
-cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu'))(remove_ncp_layer)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=500, activation='relu'))(remove_ncp_layer)
 cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5))(cnnOutput)
-cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=100, activation='relu'))(cnnOutput)
+cnnOutput = keras.layers.TimeDistributed(keras.layers.Dense(units=50, activation='relu'))(cnnOutput)
 cnnOutput = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3))(cnnOutput)
 cnnOutput = keras.layers.Dense(units=3, activation='linear')(cnnOutput)
 cnnModel  = keras.models.Model(ncpModel.input, cnnOutput)
@@ -335,5 +338,5 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + '-history.p'), 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{2.0}.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)

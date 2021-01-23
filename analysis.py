@@ -40,26 +40,41 @@ for domain in os.listdir(args.history_dir):
         with open(args.history_dir + '/' + domain + '/' + historyFile, 'rb') as fp:
             histories[enviroment][task][model].append(pickle.load(fp))
 
-        print(enviroment, task)
+enviromentNames = list(enviromentNames)
+taskNames       = list(taskNames)
+modelNames      = list(modelNames)
 
-for enviroment in histories:
-    print(len(taskNames), len(modelNames))
+for enviroment in enviromentNames:
     fig, axes = plt.subplots(len(taskNames), len(modelNames))
     axes = np.reshape(axes, (len(taskNames), len(modelNames)))
-    for i, task in enumerate(histories[enviroment]):
-        for j, model in enumerate(histories[enviroment][task]):
-            print(i, j)
-            loss = [h["loss"] for h in histories[enviroment][task][model]]
-            valdationLoss = [h["val_loss"] for h in histories[enviroment][task][model]]
+    for i, task in enumerate(taskNames):
+        for j, model in enumerate(modelNames):
+            
+            if j == 0:
+                axes[i, 0].set_ylabel(task)
+
+            if i == 0:
+                axes[0, j].set_title(model)
+
+
+            try:
+                loss = [h["loss"] for h in histories[enviroment][task][model]]
+                validationLoss = [h["val_loss"] for h in histories[enviroment][task][model]]
+            except KeyError:
+                continue
 
             losses = np.array(loss)
-            valdations = np.array(valdationLoss)
+            validations = np.array(validationLoss)
 
             lossStdDev = np.std(losses, axis=0)
-            validationStdDev = np.std(valdations, axis=0)
+            validationStdDev = np.std(validations, axis=0)
 
             lossMean = np.mean(losses, axis=0)
-            valdationMean = np.mean(valdations, axis=0)
+            validationMean = np.mean(validations, axis=0)
+
+            print(enviroment, task, model)
+            minIdx = np.argmin(validationMean)
+            print(f"{validationMean[minIdx]:.3} +/- {validationStdDev[minIdx]:.3}")
 
             # for l in losses:
             #     axes[i, j].plot(range(len(l)), l, "r", label="losses")
@@ -68,14 +83,8 @@ for enviroment in histories:
             #     axes[i, j].plot(range(len(v)), v, "b", label="validations")
 
             axes[i, j].errorbar(range(len(lossMean)), lossMean, yerr=lossStdDev, label="Training Loss")
-            axes[i, j].errorbar(range(len(valdationMean)), valdationMean, yerr=validationStdDev, label="Validation Loss")
+            axes[i, j].errorbar(range(len(validationMean)), validationMean, yerr=validationStdDev, label="Validation Loss")
             axes[i, j].legend()
-            
-            if j == 0:
-                axes[i, j].set_ylabel(task)
-
-            if i == 1:
-                axes[0, j].set_title(model)
 
             # print(enviroment, task, model)
             # print(loss.shape)
@@ -85,6 +94,8 @@ for enviroment in histories:
             # print(lossStdDev)
 
             # sys.exit()
+
+        print("")
 
     fig.suptitle(f"{enviroment} enviroment learning curves")
     plt.show()
