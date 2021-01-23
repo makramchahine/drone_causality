@@ -8,23 +8,23 @@ import numpy as np
 from tensorflow import keras
 import kerasncp as kncp
 
-TRAIN_LSTM                 = False
-TRAINING_DATA_DIRECTORY    = os.getcwd() + '/data/'
+TRAIN_LSTM                 = True
+TRAINING_DATA_DIRECTORY    = 'C:\\Users\MIT Driverless\\Documents\\AirSim\\target-redwood-parsed\\'
 
 if TRAIN_LSTM:
     MODEL_NAME             = 'lstm'
 else:
-    MODEL_NAME             = 'ncp'
+    MODEL_NAME             = 'new-ncp'
 MODEL_CHECKPOINT_DIRECTORY = os.getcwd() + '/model-checkpoints/'
 SAMPLES                    = -1
 BATCH_SIZE                 = 8  
-EPOCHS                     = 50
+EPOCHS                     = 10
 TRAINING_SEQUENCE_LENGTH   = 32
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
 VALIDATION_PROPORTION      = 0.1 
 
-STARTING_WEIGHTS           = 'model-checkpoints/weights.007--0.9380.hdf5'
+STARTING_WEIGHTS           = 'model-checkpoints/new-ncp-2020_11_12_23_55_01-weights.010--0.8645.hdf5'
 
 # Utilities
 
@@ -114,17 +114,17 @@ ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24, activation='linear')))
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
+
+ncpModel.load_weights(STARTING_WEIGHTS)
 
 # LSTM network
 penultimateOutput = ncpModel.layers[-2].output
-lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
-lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
+lstmLayer1        = keras.layers.LSTM(units=64, return_sequences=True, activation='relu')(penultimateOutput)
+lstmLayer2        = keras.layers.Dense(units=3, activation='linear')(lstmLayer1)
+lstmModel = keras.models.Model(ncpModel.input, lstmLayer2)
+
 
 # Configure the model we will train
 if TRAIN_LSTM:
@@ -132,19 +132,19 @@ if TRAIN_LSTM:
 else:
     trainingModel = ncpModel
 
+# Load weights
+# if STARTING_WEIGHTS is not None:
+#     trainingModel.load_weights(STARTING_WEIGHTS)
+
 trainingModel.compile(
     optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
 )
-
-# Load weights
-if STARTING_WEIGHTS is not None:
-    trainingModel.load_weights(STARTING_WEIGHTS)
 
 trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=MODEL_CHECKPOINT_DIRECTORY + '/' + MODEL_NAME + f'-{time.strftime("%Y:%m:%d:%H:%M:%S")}' + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5',
+    filepath=MODEL_CHECKPOINT_DIRECTORY + '/' + MODEL_NAME + f'-{time.strftime("%Y_%m_%d_%H_%M_%S")}' + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5',
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
@@ -163,5 +163,5 @@ try:
     )
 finally:
     # Dump history
-    with open(f'histories/{MODEL_NAME}-' + time.strftime("%Y:%m:%d:%H:%M:%S") + '-history.p', 'wb') as fp:
+    with open(f'histories/{MODEL_NAME}-' + time.strftime("%Y_%m_%d_%H_%M_%S") + '-history.p', 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
