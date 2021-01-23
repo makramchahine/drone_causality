@@ -160,9 +160,10 @@ if len(sampleDirectories) == 0:
 
 # Setup the network
 # Revision 2: 8 to 16 command neurons
+# Revision 3: 16 to 32 command neurons
 wiring = kncp.wirings.NCP(
     inter_neurons=12,   # Number of inter neurons
-    command_neurons=16,  # Number of command neurons
+    command_neurons=32,  # Number of command neurons
     motor_neurons=3,    # Number of motor neurons
     sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
@@ -338,5 +339,5 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{2.0}.p'), 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{3.0}.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
