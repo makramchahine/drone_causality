@@ -163,10 +163,10 @@ if len(sampleDirectories) == 0:
 # Revision 2: 8 to 16 command neurons
 # Revision 3: 16 to 32 command neurons
 wiring = kncp.wirings.NCP(
-    inter_neurons=12,   # Number of inter neurons
-    command_neurons=32,  # Number of command neurons
+    inter_neurons=16,   # Number of inter neurons
+    command_neurons=8,  # Number of command neurons
     motor_neurons=3,    # Number of motor neurons
-    sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
+    sensory_fanout=8,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
     recurrent_command_synapses=4,   # Now many recurrent synapses are in the
                                     # command neuron layer
@@ -175,13 +175,11 @@ wiring = kncp.wirings.NCP(
 
 rnnCell = kncp.LTCCell(wiring)
 
+# Revision 5: quarter the number of cnn parameters
 ncpModel = keras.models.Sequential()
 ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(2,2), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='linear')))
@@ -297,7 +295,7 @@ else:
     elif args.model == "ncp":
         trainingModel = npcMultiModel
     elif args.model == "cnn":
-        trainingModel = cnnMultiModel
+        raise ValueError(f"Unsupported model type: {args.model}")
     elif args.model == "odernn":
         trainingModel = odernnMultiModel
     elif args.model == "gru":
@@ -340,5 +338,5 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{4.0}.p'), 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{5.0}.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
