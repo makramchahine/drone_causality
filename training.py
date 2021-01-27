@@ -61,7 +61,6 @@ class DataGenerator(keras.utils.Sequence):
 
     def __getitem__(self, index):
         'Generate one batch of data'
-        print("1", index)
 
         # data runs in this batch
         directories = self.runDirectories[index*self.batch_size:(index+1)*self.batch_size]
@@ -106,7 +105,6 @@ class GPSDataGenerator(keras.utils.Sequence):
 
     def __getitem__(self, index):
         'Generate one batch of data'
-        print("2", index)
 
         # data runs in this batch
         directories = self.runDirectories[index*self.batch_size:(index+1)*self.batch_size]
