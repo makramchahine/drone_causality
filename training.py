@@ -14,7 +14,7 @@ from tensorflow import keras
 import kerasncp as kncp
 from node_cell import *
 
-MODEL_REVISION_LABEL = 8.0
+MODEL_REVISION_LABEL = 10.0
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
