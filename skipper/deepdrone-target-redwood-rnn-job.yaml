@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: deepdrone-target-redwood-rnn-0
+  name: deepdrone-target-redwood-rnn-rev-0
 spec:
   parallelism: 5
   completions: 5

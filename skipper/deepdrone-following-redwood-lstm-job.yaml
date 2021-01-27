@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: deepdrone-following-redwood-lstm-0
+  name: deepdrone-following-redwood-lstm-rev-0
 spec:
   parallelism: 5
   completions: 5
