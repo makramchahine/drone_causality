@@ -14,7 +14,7 @@ from tensorflow import keras
 import kerasncp as kncp
 from node_cell import *
 
-MODEL_REVISION_LABEL = 7.0
+MODEL_REVISION_LABEL = 8.0
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
@@ -164,14 +164,14 @@ if len(sampleDirectories) == 0:
 # Revision 2: 8 to 16 command neurons
 # Revision 3: 16 to 32 command neurons
 wiring = kncp.wirings.NCP(
-    inter_neurons=16,   # Number of inter neurons
-    command_neurons=8,  # Number of command neurons
+    inter_neurons=12,   # Number of inter neurons
+    command_neurons=32,  # Number of command neurons
     motor_neurons=3,    # Number of motor neurons
-    sensory_fanout=8,   # How many outgoing synapses has each sensory neuron
+    sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
     recurrent_command_synapses=4,   # Now many recurrent synapses are in the
                                     # command neuron layer
-    motor_fanin=6,      # How many incomming syanpses has each motor neuron
+    motor_fanin=6,      # How many incoming syanpses has each motor neuron
 )
 
 rnnCell = kncp.LTCCell(wiring)
@@ -180,19 +180,21 @@ rnnCell = kncp.LTCCell(wiring)
 ncpModel = keras.models.Sequential()
 ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(3,3))))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2,2))))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='linear')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='linear')))
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
 # NCP network with multiple input (Requires the Functional API)
 imageInput        = ncpModel.layers[0].input
 penultimateOutput = ncpModel.layers[-2].output
-imageFeatures     = keras.layers.Dense(units=12, activation="linear")(penultimateOutput)
+imageFeatures     = keras.layers.Dense(units=48, activation="linear")(penultimateOutput)
 
 gpsInput    = keras.Input(batch_size = min(args.batch_size, len(paritions["train"])), shape = (args.seq_len, 3))
-gpsFeatures = keras.layers.Dense(units=12, activation='linear')(gpsInput)
+gpsFeatures = keras.layers.Dense(units=16, activation='linear')(gpsInput)
 
 multiFeatures = keras.layers.concatenate([imageFeatures, gpsFeatures])
 
@@ -251,7 +253,7 @@ ctgruModel         = keras.models.Model(ncpModel.input, ctgruOutput)
 ctgruMultiCell   = CTGRU(units=args.rnn_size)
 ctgruMultiOutput = keras.layers.RNN(ctgruMultiCell, return_sequences=True)(multiFeatures)
 ctgruMultiOutput = keras.layers.Dense(units=3, activation="linear")(ctgruMultiOutput)
-ctgruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[ctgruMultiOutput]
+ctgruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[ctgruMultiOutput])
 
 # ODE-RNN network
 penultimateOutput = ncpModel.layers[-2].output
