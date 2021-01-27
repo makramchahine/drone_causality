@@ -319,7 +319,7 @@ trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
+    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + "rev-6.0" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
