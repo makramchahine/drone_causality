@@ -118,6 +118,7 @@ class GPSDataGenerator(keras.utils.Sequence):
         X1 = np.empty((self.batch_size, args.seq_len, *self.xDims))
         X2 = np.empty((self.batch_size, args.seq_len, self.gpsVectorShape))
         Y = np.empty((self.batch_size, args.seq_len, *self.yDims))
+
         for i, directory in enumerate(directories):
             try:
                 X1[i,] = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
@@ -216,7 +217,6 @@ lstmMultiModel = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[lstm
 #     print(lstmMultiOutput.shape)
 #     sys.exit()
 
-
 # Vanilla RNN network
 penultimateOutput = ncpModel.layers[-2].output
 rnnOutput         = keras.layers.SimpleRNN(units=args.rnn_size, return_sequences=True)(penultimateOutput)
@@ -230,9 +230,9 @@ rnnMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[rnnM
 
 # GRU network
 penultimateOutput = ncpModel.layers[-2].output
-gruOutput        = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(penultimateOutput)
-gruOutput        = keras.layers.Dense(units=3, activation='linear')(gruOutput)
-gruModel = keras.models.Model(ncpModel.input, gruOutput)
+gruOutput         = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(penultimateOutput)
+gruOutput         = keras.layers.Dense(units=3, activation='linear')(gruOutput)
+gruModel          = keras.models.Model(ncpModel.input, gruOutput)
 
 # GRU multiple input network
 gruMultiOutput = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(multiFeatures)
@@ -244,17 +244,26 @@ penultimateOutput  = ncpModel.layers[-2].output
 ctgruCell          = CTGRU(units=args.rnn_size)
 ctgruOutput        = keras.layers.RNN(ctgruCell, return_sequences=True)(penultimateOutput)
 ctgruOutput        = keras.layers.Dense(units=3, activation='linear')(ctgruOutput)
-ctgruModel = keras.models.Model(ncpModel.input, ctgruOutput)
+ctgruModel         = keras.models.Model(ncpModel.input, ctgruOutput)
+
 # CT-GRU multiple input network
+ctgruMultiCell   = CTGRU(units=args.rnn_size)
+ctgruMultiOutput = keras.layers.RNN(ctgruMultiCell, return_sequences=True)(multiFeatures)
+ctgruMultiOutput = keras.layers.Dense(units=3, activation="linear")(ctgruMultiOutput)
+ctgruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[ctgruMultiOutput]
 
 # ODE-RNN network
-penultimateOutput   = ncpModel.layers[-2].output
-odernnCell          = CTRNNCell(units=args.rnn_size, method='dopri5')
-odernnOutput         = keras.layers.RNN(odernnCell, return_sequences=True)(penultimateOutput)
-odernnOutput        = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
-odernnModel = keras.models.Model(ncpModel.input, odernnOutput)
+penultimateOutput = ncpModel.layers[-2].output
+odernnCell        = CTRNNCell(units=args.rnn_size, method='dopri5')
+odernnOutput      = keras.layers.RNN(odernnCell, return_sequences=True)(penultimateOutput)
+odernnOutput      = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
+odernnModel       = keras.models.Model(ncpModel.input, odernnOutput)
 
 # ODE-RNN multiple input network
+odernnMultiCell   = CTRNNCell(units=args.rnn_size, method='dopri5')
+odernnMultiOutput = keras.layers.RNN(odernnMultiCell, return_sequences=True)(multiFeatures)
+odernnMultiOutput = keras.layers.Dense(units=3, activation='linear')(odernnMultiOutput)
+odernnMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[odernnMultiOutput])
 
 # CNN network
 # Revision 2: 1000 and 100 units to 500 and 50 units
@@ -267,9 +276,7 @@ cnnOutput = keras.layers.Dense(units=3, activation='linear')(cnnOutput)
 cnnModel  = keras.models.Model(ncpModel.input, cnnOutput)
 
 # CNN multiple input network
-
 # TODO(cvorbach) Not sure if this makes sense for a cnn?
-
 
 # Configure the model we will train
 if not args.gps_signal:
