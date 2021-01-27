@@ -61,6 +61,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __getitem__(self, index):
         'Generate one batch of data'
+        print("1", index)
 
         # data runs in this batch
         directories = self.runDirectories[index*self.batch_size:(index+1)*self.batch_size]
@@ -105,6 +106,7 @@ class GPSDataGenerator(keras.utils.Sequence):
 
     def __getitem__(self, index):
         'Generate one batch of data'
+        print("2", index)
 
         # data runs in this batch
         directories = self.runDirectories[index*self.batch_size:(index+1)*self.batch_size]
@@ -118,7 +120,6 @@ class GPSDataGenerator(keras.utils.Sequence):
         X1 = np.empty((self.batch_size, args.seq_len, *self.xDims))
         X2 = np.empty((self.batch_size, args.seq_len, self.gpsVectorShape))
         Y = np.empty((self.batch_size, args.seq_len, *self.yDims))
-
         for i, directory in enumerate(directories):
             try:
                 X1[i,] = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
@@ -216,7 +217,7 @@ lstmMultiModel = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[lstm
 #     print(y.shape)
 #     print(lstmMultiOutput.shape)
 #     sys.exit()
-    
+
 
 # Vanilla RNN network
 penultimateOutput = ncpModel.layers[-2].output
@@ -240,19 +241,20 @@ gruMultiOutput = keras.layers.GRU(units=args.rnn_size, return_sequences=True)(mu
 gruMultiOutput = keras.layers.Dense(units=3, activation='linear')(gruMultiOutput)
 gruMultiModel  = keras.models.Model(inputs=[imageInput, gpsInput], outputs=[gruMultiOutput])
 
-# # CT-GRU network
-# penultimateOutput = ncpModel.layers[-2].output
-# ctgruOutput        = CTGRU(units=64)(penultimateOutput)
-# ctgruOutput        = keras.layers.Dense(units=3, activation='linear')(ctgruOutput)
-# ctgruModel = keras.models.Model(ncpModel.input, ctgruOutput)
-
+# CT-GRU network
+penultimateOutput  = ncpModel.layers[-2].output
+ctgruCell          = CTGRU(units=args.rnn_size)
+ctgruOutput        = keras.layers.RNN(ctgruCell, return_sequences=True)(penultimateOutput)
+ctgruOutput        = keras.layers.Dense(units=3, activation='linear')(ctgruOutput)
+ctgruModel = keras.models.Model(ncpModel.input, ctgruOutput)
 # CT-GRU multiple input network
 
-# # ODE-RNN network
-# penultimateOutput = ncpModel.layers[-2].output
-# odernnOutput        = CTRNNCell(units=64, method='dopri5')(penultimateOutput)
-# odernnOutput        = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
-# odernnModel = keras.models.Model(ncpModel.input, odernnOutput)
+# ODE-RNN network
+penultimateOutput   = ncpModel.layers[-2].output
+odernnCell          = CTRNNCell(units=args.rnn_size, method='dopri5')
+odernnOutput         = keras.layers.RNN(odernnCell, return_sequences=True)(penultimateOutput)
+odernnOutput        = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
+odernnModel = keras.models.Model(ncpModel.input, odernnOutput)
 
 # ODE-RNN multiple input network
 

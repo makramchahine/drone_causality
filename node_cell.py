@@ -85,7 +85,7 @@ class CTRNNCell(tf.keras.layers.Layer):
                 idx = tf.argsort(elapsed)
                 solution_times = tf.gather(elapsed, idx)
             else:
-                solution_times = elapsed
+                solution_times = [elapsed]
             hidden_state = states[0]
             res = self.solver.solve(
                 ode_fn=self.dfdt_wrapped,
@@ -274,8 +274,8 @@ class CTGRU(tf.keras.layers.Layer):
         self.state_size = units * self.M
 
         # Pre-computed tau table (as recommended in paper)
-        self.ln_tau_table = np.empty(self.M)
-        self.tau_table = np.empty(self.M)
+        self.ln_tau_table = np.empty(self.M, dtype=np.float32)
+        self.tau_table = np.empty(self.M, dtype=np.float32)
         tau = 1.0
         for i in range(self.M):
             self.ln_tau_table[i] = np.log(tau)
@@ -330,7 +330,7 @@ class CTGRU(tf.keras.layers.Layer):
         # Now the elapsed time enters the state update
         base_term = (1 - ski) * h_hat + ski * qk
         exp_term = tf.exp(-elapsed / self.tau_table)
-        exp_term = tf.reshape(exp_term, [batch_dim, 1, self.M])
+        exp_term = tf.reshape(exp_term, [1, 1, self.M])
         h_hat_next = base_term * exp_term
 
         # Compute new state
@@ -685,4 +685,3 @@ class HawkLSTMCell(tf.keras.layers.Layer):
         output_state = tf.nn.tanh(c_t) * output_gate
 
         return output_state, [new_c, new_c_bar, output_state]
-
