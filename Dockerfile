@@ -8,8 +8,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Install dependencies
 RUN apt-get install -y libsndfile1
-RUN conda install python=3.6 tensorflow-gpu=2 tqdm
-RUN pip install keras-ncp
+RUN conda install python=3.6 tensorflow-gpu tqdm
+RUN pip install keras-ncp tensorflow-gpu==2.3.0 tensorflow-probability=0.11.0
 
 # Update something to the bashrc (/etc/bashrc_skipper) to customize your shell
 RUN pip install pyfiglet
