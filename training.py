@@ -14,6 +14,8 @@ from tensorflow import keras
 import kerasncp as kncp
 from node_cell import *
 
+MODEL_REVISION_LABEL = 7.0
+
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
 # Revisiont 4: rnn_size from 64 to 32
@@ -31,7 +33,6 @@ parser.add_argument("--gps_signal", dest="gps_signal", action="store_true")
 parser.add_argument('--cnn_units', type=int, default=1000)
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
-
 
 IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (3,)
@@ -326,7 +327,7 @@ trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + "rev-6.0" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
+    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + "-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
@@ -345,5 +346,5 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev-{6.0}.p'), 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
