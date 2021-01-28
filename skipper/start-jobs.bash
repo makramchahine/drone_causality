@@ -19,7 +19,7 @@ kubectl apply -f deepdrone-maze-redwood-odernn-job.yaml
 kubectl apply -f deepdrone-maze-redwood-gru-job.yaml
 kubectl apply -f deepdrone-maze-redwood-ncp-job.yaml
 kubectl apply -f deepdrone-maze-redwood-lstm-job.yaml
-kubectl apply -f deepdrone-maze-redwood-cnn-job.yaml
+# kubectl apply -f deepdrone-maze-redwood-cnn-job.yaml       # No model
 kubectl apply -f deepdrone-maze-redwood-ctgru-job.yaml
 
 kubectl apply -f deepdrone-maze-neighborhood-rnn-job.yaml
@@ -28,7 +28,7 @@ kubectl apply -f deepdrone-maze-neighborhood-odernn-job.yaml
 kubectl apply -f deepdrone-maze-neighborhood-ctgru-job.yaml
 kubectl apply -f deepdrone-maze-neighborhood-lstm-job.yaml
 kubectl apply -f deepdrone-maze-neighborhood-gru-job.yaml
-kubectl apply -f deepdrone-maze-neighborhood-cnn-job.yaml
+# kubectl apply -f deepdrone-maze-neighborhood-cnn-job.yaml  # No model
 
 kubectl apply -f deepdrone-hiking-redwood-ncp-job.yaml
 kubectl apply -f deepdrone-hiking-redwood-rnn-job.yaml
