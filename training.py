@@ -14,7 +14,7 @@ from tensorflow import keras
 import kerasncp as kncp
 from node_cell import *
 
-MODEL_REVISION_LABEL = 10.0
+MODEL_REVISION_LABEL = 11.0
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
@@ -26,7 +26,7 @@ parser.add_argument('--history_dir', type=str, default="./histories", help='Path
 parser.add_argument('--samples', type=int, default=None)
 parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--seq_len', type=int, default=32)
-parser.add_argument('--epochs', type=int, default=50)
+parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
 parser.add_argument("--gps_signal", dest="gps_signal", action="store_true")
@@ -161,8 +161,6 @@ if len(sampleDirectories) == 0:
     raise ValueError("No samples in " + args.data_dir)
 
 # Setup the network
-# Revision 2: 8 to 16 command neurons
-# Revision 3: 16 to 32 command neurons
 wiring = kncp.wirings.NCP(
     inter_neurons=12,   # Number of inter neurons
     command_neurons=32,  # Number of command neurons
@@ -176,13 +174,12 @@ wiring = kncp.wirings.NCP(
 
 rnnCell = kncp.LTCCell(wiring)
 
-# Revision 5: quarter the number of cnn parameters
 ncpModel = keras.models.Sequential()
 ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(2,2), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(3,3))))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(2,2), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.MaxPooling2D(pool_size=(2,2))))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8, kernel_size=(2,2), strides=(2,2), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='linear')))
@@ -329,7 +326,7 @@ trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + "-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
+    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
