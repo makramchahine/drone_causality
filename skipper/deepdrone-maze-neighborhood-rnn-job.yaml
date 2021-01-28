@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: deepdrone-maze-neighborhood-rnn-rev-0
+  name: deepdrone-maze-neighborhood-rnn-0
 spec:
-  parallelism: 5
-  completions: 5
+  parallelism: 2
+  completions: 2
   template:
     spec:
       affinity:

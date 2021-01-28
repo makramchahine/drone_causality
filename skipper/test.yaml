@@ -1,10 +1,8 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: deepdrone-hiking-redwood-lstm-cpu-0
+  name: cpu-test-0
 spec:
-  parallelism: 5
-  completions: 5
   template:
     spec:
       affinity:
@@ -18,7 +16,7 @@ spec:
                 operator: Exists
       containers:
       - args:
-        - python training.py --model=lstm --data_dir=/data/deepdrone/data/hiking-redwood-parsed
+        - python training.py --model=gru --data_dir=/data/deepdrone/data/hiking-redwood-parsed
           --save_dir=/data/deepdrone/logs/hiking-redwood --history_dir=/data/deepdrone/history/hiking-redwood
         command:
         - /bin/bash

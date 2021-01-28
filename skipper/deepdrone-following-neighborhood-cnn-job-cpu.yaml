@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: deepdrone-following-neighborhood-ncp-0
+  name: deepdrone-following-neighborhood-cnn-cpu-0
 spec:
   parallelism: 5
   completions: 5
@@ -18,7 +18,7 @@ spec:
                 operator: Exists
       containers:
       - args:
-        - python training.py --model=ncp --data_dir=/data/deepdrone/data/following-neighborhood-parsed
+        - python training.py --model=cnn --data_dir=/data/deepdrone/data/following-neighborhood-parsed
           --save_dir=/data/deepdrone/logs/following-neighborhood --history_dir=/data/deepdrone/history/following-neighborhood
         command:
         - /bin/bash

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: deepdrone-hiking-neighborhood-cnn-rev-0
+  name: deepdrone-hiking-neighborhood-cnn-cpu-0
 spec:
   parallelism: 5
   completions: 5
