@@ -14,7 +14,7 @@ from tensorflow import keras
 import kerasncp as kncp
 from node_cell import *
 
-MODEL_REVISION_LABEL = 11.0
+MODEL_REVISION_LABEL = 12.0
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
@@ -25,7 +25,7 @@ parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help=
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
 parser.add_argument('--samples', type=int, default=None)
 parser.add_argument('--batch_size', type=int, default=8)
-parser.add_argument('--seq_len', type=int, default=32)
+parser.add_argument('--seq_len', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
