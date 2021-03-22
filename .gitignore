@@ -1,0 +1,31 @@
+*.pyc
+
+save/
+log/
+
+tags
+
+# Ignore PyCharm idea files
+.idea
+__pycache__
+
+# caches
+*.h5
+
+# Data
+data/*
+model-checkpoints/*
+processed-data/*
+training-histories/*
+model-piloted-runs/*
+console-log/*
+
+# pyenv
+.python-version
+
+# keras
+.cache/*
+.keras/*
+
+# vim
+*.swp

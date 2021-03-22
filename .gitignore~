@@ -1,0 +1,15 @@
+*.pyc
+
+save/
+log/
+
+# Ignore PyCharm idea files
+.idea
+__pycache__
+
+# caches
+*.h5
+
+# Data
+training-data/*
+model-checkpoints/*
