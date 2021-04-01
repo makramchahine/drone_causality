@@ -42,7 +42,7 @@ class Task:
 # Parameters
 parser = argparse.ArgumentParser(description='Fly the deepdrone agent in the Airsim simulator')
 parser.add_argument('--task',               type=str,   default='target', help='Task to attempt')
-parser.add_argument('--endpoint_tolerance', type=float, default=5.0,      help='The distance tolerance on reaching the endpoint marker')
+parser.add_argument('--endpoint_tolerance', type=float, default=10.0,      help='The distance tolerance on reaching the endpoint marker')
 parser.add_argument('--near_task_radius',   type=float, default=15.0,     help='The max distance of endpoints in the near planning task')
 parser.add_argument('--far_task_radius',    type=float, default=50.0,     help='The max distance of endpoints in the far planning task')
 parser.add_argument('--min_blaze_gap',      type=float, default=10.0,     help='The minimum distance between hiking task blazes')
@@ -51,7 +51,7 @@ parser.add_argument('--control_period',     type=float, default=0.7,      help='
 parser.add_argument('--speed',              type=float, default=0.5,      help='Drone flying speed')
 parser.add_argument('--voxel_size',         type=float, default=1.0,      help='The size of voxels in the occupancy map cache')
 parser.add_argument('--cache_size',         type=float, default=100000,   help='The number of entries in the local occupancy cache')
-parser.add_argument('--lookahead_distance', type=float, default=3.0,      help='Pure pursuit lookahead distance')
+parser.add_argument('--lookahead_distance', type=float, default=0.75,      help='Pure pursuit lookahead distance')
 parser.add_argument('--bogo_attempts',      type=int,   default=5000,     help='Number of attempts to make in generate and test algorithms')
 parser.add_argument('--n_runs',             type=int,   default=50,       help='Number of repetitions of the task to attempt')
 parser.add_argument("--plot_debug", dest="plot_debug", action="store_true")
@@ -89,7 +89,7 @@ if args.model_weights is not None:
     # Parse out the model info from file path
     weightsFile = args.model_weights.split('/')[-1]
     modelName   = weightsFile[:weightsFile.index('-')]
-    modelName   = 'ncp'
+    # modelName   = 'ncp'
 
     # Setup the network
     wiring = kncp.wirings.NCP(
@@ -210,6 +210,7 @@ if args.model_weights is not None:
     # TODO(cvorbach) Not sure if this makes sense for a cnn?
 
     # Configure the model we will train
+    print(modelName)
     if not args.task == Task.MAZE:
         if modelName == "lstm":
             flightModel = lstmModel
@@ -595,46 +596,46 @@ class Path:
     def end(self):
         return self.knotPoints[-1]
 
-class InfinitePath:
-    def __init__(self, start, occupancyMap, momentumWeight=0.9, stepSize=10, inclinationLimit=0.1, zLimit=(-20, -10)):
-        self.occupancyMap     = occupancyMap
-        self.momentumWeight   = momentumWeight
-        self.stepSize         = stepSize
-        self.inclinationLimit = inclinationLimit
+# claInfinitePath:
+#     def __init__(self, start, occupancyMap, momentumWeight=0.9, stepSize=10, inclinationLimit=0.1, zLimit=(-20, -10)):
+#         self.occupancyMap     = occupancyMap
+#         self.momentumWeight   = momentumWeight
+#         self.stepSize         = stepSize
+#         self.inclinationLimit = inclinationLimit
+# 
+#         self.x                = start
+#         self.momentum         = normalize(np.array([random.random(), random.random(), 0]))
+# 
+#         self.generateInitialPath()
+# 
+#     def getStep(self):
+#         perturbance   = normalize(np.random.random_sample(3))
+#         stepDirection = self.momentumWeight*self.momentum + (1-self.momentumWeight)*perturbance
+#         stepDirection = normalize(stepDirection)
+# 
+#         self.momentum = stepDirection
+#         step = self.stepSize * stepDirection
+# 
+#         return self.x + step
+# 
+#     def generateInitialPath(self, start):
+#         isCollisionFree = False
+#         while not isCollisionFree:
+# 
+# 
+#         initialSteps = [self.getStep()]
+# 
+#     def ignite(self):
+#         p = []
+#         for i in range(4):
+#             x, 
+#             p.append() 
+# 
+#     # def update(self, nextX, nextMomentum):
+#     #     self.x        = nextX
+#     #     self.momentum = nextMomentum
 
-        self.x                = start
-        self.momentum         = normalize(np.array([random.random(), random.random(), 0]))
-
-        self.generateInitialPath()
-
-    def getStep(self):
-        perturbance   = normalize(np.random.random_sample(3))
-        stepDirection = self.momentumWeight*self.momentum + (1-self.momentumWeight)*perturbance
-        stepDirection = normalize(stepDirection)
-
-        self.momentum = stepDirection
-        step = self.stepSize * stepDirection
-
-        return self.x + step
-
-    def generateInitialPath(self, start):
-        isCollisionFree = False
-        while not isCollisionFree:
-
-
-        initialSteps = [self.getStep()]
-
-    def ignite(self):
-        p = []
-        for i in range(4):
-            x, 
-            p.append() 
-
-    # def update(self, nextX, nextMomentum):
-    #     self.x        = nextX
-    #     self.momentum = nextMomentum
-
-def randomWalk(start, momentumWeight=0.5, stepSize=4, gradientLimit=np.pi/12, zLimit=(-20, -10), pathLength=30, occupancyMap=None, retryLimit = 10):
+def randomWalk(start, momentumWeight=0.5, stepSize=3, gradientLimit=np.pi/12, zLimit=(-20, -10), pathLength=5, occupancyMap=None, retryLimit = 10):
     normalDistribution = np.random.default_rng().normal 
     momentum = normalize(np.array([normalDistribution(), normalDistribution(), normalDistribution()]))
     path = [start]
@@ -1126,20 +1127,20 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
 
         # place marker if passed
         if marker is not None:
-            markerT, markerPosition = getLookAhead(path, t, position, 5)
+            markerT, markerPosition = getLookAhead(path, t, position, lookAhead)
 
-            tangent  = normalize(path.tangent(markerT))
-            normal   = normalize(np.cross(tangent, (0, 0, 1)))
+           #  tangent  = normalize(path.tangent(markerT))
+           #  normal   = normalize(np.cross(tangent, (0, 0, 1)))
 
-            inclinationAngle = np.pi + MAX_INCLINATION * (1 - np.abs(tangent[2])) # pi is b/c the drone is upside down at 0 inclination
-            inclination = R.from_rotvec(inclinationAngle*normal)
-            tangent     = inclination.apply([tangent[0], tangent[1], 0])
+           #  inclinationAngle = np.pi + MAX_INCLINATION * (1 - np.abs(tangent[2])) # pi is b/c the drone is upside down at 0 inclination
+           #  inclination = R.from_rotvec(inclinationAngle*normal)
+           #  tangent     = inclination.apply([tangent[0], tangent[1], 0])
 
-            binormal = normalize(np.cross(tangent, normal))
+           #  binormal = normalize(np.cross(tangent, normal))
 
-            markerOrientation = R.from_matrix(np.array([tangent, normal, binormal]).T)
+           #  markerOrientation = R.from_matrix(np.array([tangent, normal, binormal]).T)
 
-            markerPose.orientation = Quaternionr(*markerOrientation.as_quat())
+           #  markerPose.orientation = Quaternionr(*markerOrientation.as_quat())
             markerPose.position    = Vector3r(*markerPosition)
             client.simSetObjectPose(marker, markerPose)
 
@@ -1233,7 +1234,7 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
             yawAngle = np.arctan2(lookAheadDisplacement[1], lookAheadDisplacement[0]) * RADIANS_2_DEGREES
 
             endpointDisplacement = path(1.0) - position
-            yawAngle = np.arctan2(endpointDisplacement[1], endpointDisplacement[0]) * RADIANS_2_DEGREES
+            # yawAngle = np.arctan2(endpointDisplacement[1], endpointDisplacement[0]) * RADIANS_2_DEGREES
 
             # check if we've reached the endpoint
             if np.linalg.norm(endpointDisplacement) < args.endpoint_tolerance:
@@ -1424,16 +1425,16 @@ for i in range(args.n_runs):
 
         # TODO(cvorbach) Online path construction with collision checking along each spline length
         walk = randomWalk(position, stepSize=5, occupancyMap=occupancyMap)
-        # path = Path(walk)
-        path = ExtendablePath(walk)
+        path = Path(walk)
+        # path = ExtendablePath(walk)
 
-        t = np.linspace(0, 1, 1000) 
-        client.simPlotPoints([Vector3r(*path(t_i)) for t_i in t], color_rgba = [0.0, 0.0, 1.0, 1.0], duration = 60)
-        sys.exit()
+        # t = np.linspace(0, 1, 1000) 
+        # client.simPlotPoints([Vector3r(*path(t_i)) for t_i in t], color_rgba = [0.0, 0.0, 1.0, 1.0], duration = 60)
+        # sys.exit()
 
         print('got path')
 
-        followPath(path, marker=quadcopterLeader, model=flightModel, earlyStopDistance=args.endpoint_tolerance)
+        followPath(path, marker=marker, model=flightModel, earlyStopDistance=args.endpoint_tolerance)
         print('reached path end')
 
     if args.task == Task.HIKING:
