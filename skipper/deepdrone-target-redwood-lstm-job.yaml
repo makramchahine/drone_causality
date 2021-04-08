@@ -1,0 +1,70 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: deepdrone-target-redwood-lstm-0
+spec:
+  parallelism: 2
+  completions: 2
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: accelerator
+                operator: Exists
+              - key: kubernetes.io/hostname
+                operator: Exists
+      containers:
+      - args:
+        - python training.py --model=lstm --data_dir=/data/deepdrone/data/target-redwood-parsed
+          --save_dir=/data/deepdrone/logs/target-redwood --history_dir=/data/deepdrone/history/target-redwood
+        command:
+        - /bin/bash
+        - -c
+        env:
+        - name: DRL_GPU_WORKER_ID
+          value: '0'
+        - name: DRL_GPU_NUM_WORKERS
+          value: '1'
+        image: raminmh/deepdrone:latest
+        imagePullPolicy: Always
+        name: skipper-pod
+        resources:
+          limits:
+            cpu: '20'
+            nvidia.com/gpu: 1
+          requests:
+            cpu: '8'
+            nvidia.com/gpu: 1
+        securityContext:
+          allowPrivilegeEscalation: false
+          privileged: false
+        volumeMounts:
+        - mountPath: /data
+          name: persistent-nfs-data
+        - mountPath: /local
+          name: local
+      hostIPC: true
+      hostPID: false
+      imagePullSecrets:
+      - name: rhasani-regcred
+      priorityClassName: low
+      restartPolicy: Never
+      securityContext:
+        runAsGroup: 22927
+        runAsUser: 25647
+      tolerations:
+      - effect: NoSchedule
+        key: rhasani-personal-gpus
+        operator: Exists
+      volumes:
+      - name: persistent-nfs-data
+        persistentVolumeClaim:
+          claimName: rhasani-nfs-claim
+      - name: local
+        persistentVolumeClaim:
+          claimName: rhasani-local-claim
+  ttlSecondsAfterFinished: 100
+
