@@ -19,6 +19,7 @@ processed-data/*
 training-histories/*
 model-piloted-runs/*
 console-log/*
+junk/*
 
 # pyenv
 .python-version
