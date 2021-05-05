@@ -29,8 +29,8 @@ client.enableApiControl(True)
 
 # Weather
 client.simEnableWeather(True)
-client.simSetWeatherParameter(airsim.WeatherParameter.Fog, 0.0)
-client.simSetWeatherParameter(airsim.WeatherParameter.Rain, 0)
+client.simSetWeatherParameter(airsim.WeatherParameter.Fog, 0)
+client.simSetWeatherParameter(airsim.WeatherParameter.Rain, 0.25)
 
 # Operating Modes
 class Task: 
@@ -38,26 +38,29 @@ class Task:
     FOLLOWING = 'following'
     MAZE = 'maze'
     HIKING = 'hiking'
+    DEMO = 'demo'
 
 # Parameters
 parser = argparse.ArgumentParser(description='Fly the deepdrone agent in the Airsim simulator')
 parser.add_argument('--task',               type=str,   default='target', help='Task to attempt')
-parser.add_argument('--endpoint_tolerance', type=float, default=5.0,      help='The distance tolerance on reaching the endpoint marker')
-parser.add_argument('--near_task_radius',   type=float, default=15.0,     help='The max distance of endpoints in the near planning task')
+parser.add_argument('--endpoint_tolerance', type=float, default=2.0,      help='The distance tolerance on reaching the endpoint marker')
+parser.add_argument('--near_task_radius',   type=float, default=2.0,     help='The max distance of endpoints in the near planning task')
 parser.add_argument('--far_task_radius',    type=float, default=50.0,     help='The max distance of endpoints in the far planning task')
 parser.add_argument('--min_blaze_gap',      type=float, default=10.0,     help='The minimum distance between hiking task blazes')
 parser.add_argument('--plot_period',        type=float, default=0.5,      help='The time between updates of debug plotting information')
-parser.add_argument('--control_period',     type=float, default=0.7,      help='Update frequency of the pure pursuit controller')
+parser.add_argument('--control_period',     type=float, default=1.5,      help='Update frequency of the pure pursuit controller')
 parser.add_argument('--speed',              type=float, default=0.5,      help='Drone flying speed')
 parser.add_argument('--voxel_size',         type=float, default=1.0,      help='The size of voxels in the occupancy map cache')
 parser.add_argument('--cache_size',         type=float, default=100000,   help='The number of entries in the local occupancy cache')
 parser.add_argument('--lookahead_distance', type=float, default=0.75,      help='Pure pursuit lookahead distance')
 parser.add_argument('--bogo_attempts',      type=int,   default=5000,     help='Number of attempts to make in generate and test algorithms')
-parser.add_argument('--n_runs',             type=int,   default=30,       help='Number of repetitions of the task to attempt')
+parser.add_argument('--n_runs',             type=int,   default=1000,       help='Number of repetitions of the task to attempt')
 parser.add_argument("--plot_debug", dest="plot_debug", action="store_true")
 parser.set_defaults(gps_signal=False)
 parser.add_argument('--record', dest='record', action='store_true')
 parser.set_defaults(record=False)
+parser.add_argument('--autoKill', dest='record', action='store_true')
+parser.set_defaults(autoKill=False)
 parser.add_argument('--model_weights', type=str, default=None, help='Model weights to load and fly with')
 parser.add_argument('--seq_len', type=int, default=64)
 parser.add_argument('--batch_size', type=int, default=8)
@@ -312,7 +315,7 @@ class CatmullRomSegment:
         m1 = (t2-t1) * ( (p1-p0)/(t1-t0) - (p2-p0)/(t2-t0) + (p2-p1)/(t2-t1) )
         m2 = (t2-t1) * ( (p2-p1)/(t2-t1) - (p3-p1)/(t3-t1) + (p3-p2)/(t3-t2) )
 
-        print('t', self.t)
+        # print('t', self.t)
 
         a =  2*self.p[1] - 2*self.p[2] +  m1  + m2
         b = -3*self.p[1] + 3*self.p[2] - 2*m1 - m2
@@ -442,9 +445,19 @@ class ExtendablePath:
 
 class CubicSpline:
     def __init__(self, x, y, tol=1e-10):
+        if len(x) != len(y):
+            raise ValueError(f'Lengths of spline interpolation x:{len(x)} and y:{len(y)} points don\'t match')
+
+        if len(x) < 3:
+            raise ValueError('Need at least three points to construct a spline')
+
         self.x = x
         self.y = y
         self.coeff = self.fit(x, y, tol)
+
+        print(self.x.shape)
+        print(self.y.shape)
+        print([c.shape for c in self.coeff])
 
     def fit(self, x, y, tol=1e-10):
         """
@@ -554,6 +567,53 @@ class CubicSpline:
         secondDerivative = 2*c[idx] + 6*d[idx]*dx
         return secondDerivative
 
+class Loop:
+    def __init__(self, radialKnots, center=np.array([0,0,0]), orientation=R.from_euler('xyz',(0,0,0)), clockwise=True):
+        '''
+        Produces a closed polar loop with
+        @param radialKnots knot values for radial spline interpolation
+        @param center      3D origin point for the loop's radius
+        @param orientation a rotation of the loop around the center relative to Airsim world axis
+        '''
+        self.radialKnots = radialKnots
+        self.center      = center
+        self.orientation = orientation
+        self.clockwise   = clockwise
+        self.fit(radialKnots)
+
+    def fit(self, radialKnots):
+        knots = np.array(radialKnots)
+        t     = np.linspace(0, 1, knots.shape[0])
+        self.radialSpline = CubicSpline(t, knots)
+
+    def __call__(self, t):
+        radius = self.radialSpline(t)
+        if self.clockwise:
+            angle  = 3/2*np.pi*t
+        else:
+            angle  = 3/2*np.pi*(1-t)
+
+
+        loopPoint = radius * R.from_rotvec(angle*np.array([0,1,0])).apply(np.array([1,0,0]))
+        loopPoint = self.orientation.apply(loopPoint)
+
+        worldCoordinatePoint = np.array(self.center) + loopPoint
+        return worldCoordinatePoint
+
+    def project(self, point):
+        position, _ = getPose()
+        tSamples = np.linspace(0, 1, num=1000)
+        nearstT  = tSamples[np.argmin([np.linalg.norm(position - self(t)) for t in tSamples])]
+        return nearstT
+
+def generateLoop(minRadius=6, maxRadius=9, knotCount=6, center=np.zeros((3,))):
+    radialKnots = (maxRadius-minRadius)*np.random.random(knotCount) + minRadius
+    radialKnots = np.array(list(radialKnots) + [radialKnots[0]])
+    orientation = R.from_euler('xyz', (0,0,2*np.pi*random.random()))
+    clockwise   = random.random() > 0.5
+
+    return Loop(radialKnots, center=center, orientation=orientation, clockwise=clockwise)
+
 class Path:
     def __init__(self, knotPoints):
         self.knotPoints = knotPoints
@@ -565,6 +625,7 @@ class Path:
         self.xSpline = CubicSpline(t, knots[:, 0])
         self.ySpline = CubicSpline(t, knots[:, 1])
         self.zSpline = CubicSpline(t, knots[:, 2])
+        self.knotPoints = knotPoints
 
     def __call__(self, t):
         return np.array([
@@ -1113,10 +1174,10 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
         updateOccupancies(occupancyMap)
 
         # handle timeout and collision check
-        if startTime + args.timeout < getTime():
+        if args.autoKill and startTime + args.timeout < getTime():
             raise RunFailure('Run timed out.')
 
-        if client.simGetCollisionInfo().has_collided:
+        if args.autoKill and client.simGetCollisionInfo().has_collided:
             raise RunFailure('Crashed.')
 
         # handle planning thread if needed
@@ -1159,7 +1220,8 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
         # TODO(cvorbach) move to its own thread
         t, lookAheadPoint = getLookAhead(path, t, position, lookAhead)
         lookAheadDisplacement = lookAheadPoint - position
-        if t > 1:
+        # print('t:', t)
+        if t >= 1:
             reachedEnd = True
             break
 
@@ -1396,30 +1458,54 @@ startingPose = client.simGetVehiclePose()
 # Collect data runs
 successes = 0
 for i in range(args.n_runs):
-    client.simSetVehiclePose(            
-        startingPose,
-        True
-    )
+    #print('S:', [startingPose.position.x_val, startingPose.position.y_val, startingPose.position.z_val])
+    # client.simSetVehiclePose(            
+    #     startingPose,
+    #     True
+    # )
+    time.sleep(5)
     position, orientation = getPose()
-    time.sleep(2)
     
     try:
+
+        if args.task == Task.DEMO:
+            loop = generateLoop()
+
+            t = np.linspace(0, 1, 1000) 
+            if args.plot_debug:
+                client.simPlotPoints([Vector3r(*loop(t_i)) for t_i in t], color_rgba = [0.0, 0.0, 1.0, 1.0], duration = 60)
+
+            # Move camera
+            rotation = R.from_rotvec(3*np.pi/2 * np.array([0,0,1]))  
+            camera_pose = airsim.Pose(Vector3r(0,8,0), Quaternionr(*rotation.as_quat())) 
+            client.simSetCameraPose('0', camera_pose)
+
+            moveToEndpoint(loop(0), occupancyMap)
+
+            if args.record:
+                client.startRecording()
+
+            followPath(loop)
+
+            if args.record:
+                client.stopRecording()
+
         if args.task == Task.TARGET:
             marker = markers[0]
 
-            print('here 1')
+            # print('here 1')
 
             # Random rotation
             client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
 
-            print('here 2')
+            # print('here 2')
 
             # Set up
             endpoint = generateMazeTarget(occupancyMap, radius=args.near_task_radius, zLimit=(-5, -15))
             if endpoint is None:
                 continue
 
-            print('here 3')
+            # print('here 3')
                 
             # place endpoint marker
             endpointPose = airsim.Pose()
@@ -1511,7 +1597,8 @@ for i in range(args.n_runs):
 
         successes += 1
         print(f'Run {i} succeeded: {successes}/{i+1} success rate.')
-    except RunFailure:
+    #except RunFailure:
+    except:
         print(f'Run {i} failed:    {successes}/{i+1} success rate.')
 
 
