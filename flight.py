@@ -42,7 +42,7 @@ class Task:
 # Parameters
 parser = argparse.ArgumentParser(description='Fly the deepdrone agent in the Airsim simulator')
 parser.add_argument('--task',               type=str,   default='target', help='Task to attempt')
-parser.add_argument('--endpoint_tolerance', type=float, default=10.0,      help='The distance tolerance on reaching the endpoint marker')
+parser.add_argument('--endpoint_tolerance', type=float, default=5.0,      help='The distance tolerance on reaching the endpoint marker')
 parser.add_argument('--near_task_radius',   type=float, default=15.0,     help='The max distance of endpoints in the near planning task')
 parser.add_argument('--far_task_radius',    type=float, default=50.0,     help='The max distance of endpoints in the far planning task')
 parser.add_argument('--min_blaze_gap',      type=float, default=10.0,     help='The minimum distance between hiking task blazes')
@@ -53,7 +53,7 @@ parser.add_argument('--voxel_size',         type=float, default=1.0,      help='
 parser.add_argument('--cache_size',         type=float, default=100000,   help='The number of entries in the local occupancy cache')
 parser.add_argument('--lookahead_distance', type=float, default=0.75,      help='Pure pursuit lookahead distance')
 parser.add_argument('--bogo_attempts',      type=int,   default=5000,     help='Number of attempts to make in generate and test algorithms')
-parser.add_argument('--n_runs',             type=int,   default=50,       help='Number of repetitions of the task to attempt')
+parser.add_argument('--n_runs',             type=int,   default=30,       help='Number of repetitions of the task to attempt')
 parser.add_argument("--plot_debug", dest="plot_debug", action="store_true")
 parser.set_defaults(gps_signal=False)
 parser.add_argument('--record', dest='record', action='store_true')
@@ -62,6 +62,7 @@ parser.add_argument('--model_weights', type=str, default=None, help='Model weigh
 parser.add_argument('--seq_len', type=int, default=64)
 parser.add_argument('--batch_size', type=int, default=8)
 parser.add_argument('--rnn_size', type=int, default=32, help='Select the size of RNN network you would like to train')
+parser.add_argument('--timeout', type=int, default=30)
 args = parser.parse_args()
 
 RECORDING_DIRECTORY    = 'C:/Users/MIT Driverless/Documents/AirSim'
@@ -94,7 +95,7 @@ if args.model_weights is not None:
     # Setup the network
     wiring = kncp.wirings.NCP(
         inter_neurons=12,   # Number of inter neurons
-        command_neurons=32,  # Number of command neurons
+        command_neurons=32, # Number of command neurons
         motor_neurons=3,    # Number of motor neurons
         sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
         inter_fanout=4,     # How many outgoing synapses has each inter neuron
@@ -1075,8 +1076,11 @@ def getLookAhead(path, t, position, lookAhead, dt=1e-4):
         
     return t, lookAheadPoint
 
+class RunFailure(Exception):
+    pass
 
 def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=None, planningWrapper=None, planningKnots=None, recordingEndpoint=None, model=None):
+    startTime       = getTime()
     position, _     = getPose()
     t               = path.project(position) # find the new nearest path(t)
     lookAheadPoint  = path(t)
@@ -1107,6 +1111,13 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
     while not reachedEnd:
         position, orientation = getPose()
         updateOccupancies(occupancyMap)
+
+        # handle timeout and collision check
+        if startTime + args.timeout < getTime():
+            raise RunFailure('Run timed out.')
+
+        if client.simGetCollisionInfo().has_collided:
+            raise RunFailure('Crashed.')
 
         # handle planning thread if needed
         if planningWrapper is not None:
@@ -1200,13 +1211,6 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
             image = np.reshape(image, IMAGE_SHAPE)
             image = image[:, :, ::-1]                 # Required since order is BGR instead of RGB by default
 
-            ## get gps
-            #gpsDirection = normalize(recordingEndpoint - position)
-
-            ## record direction vector to endpoint if needed 
-            #if args.record and recordingEndpoint is not None:
-            #    endpointDirections.append((time.time(), *gpsDirection))
-
             # add the image to the sliding window
             if numBufferEntries < args.seq_len:
                 imagesBuffer[0, numBufferEntries] = image
@@ -1216,10 +1220,6 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
                 imagesBuffer[0]     = np.roll(imagesBuffer[0], -1, axis=0)
                 imagesBuffer[0][-1] = image
 
-                # gpsBuffer[0]        = np.roll(gpsBuffer[0], -1, axis=0)
-                # gpsBuffer[0][-1]    = gpsDirection
-
-
             # compute a velocity vector from the model
             prediction = model.predict(imagesBuffer)[0][numBufferEntries-1]
             direction  = normalize(prediction)
@@ -1227,14 +1227,13 @@ def followPath(path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=No
             velocity   = args.speed * direction
 
             yawRotation = R.from_euler('xyz', [0, 0, R.from_quat(orientation).as_euler('xyz')[2]])
-            print(yawRotation.apply(velocity))
 
             # get yaw angle to the endpoint
             lookAheadDisplacement = lookAheadPoint - position
             yawAngle = np.arctan2(lookAheadDisplacement[1], lookAheadDisplacement[0]) * RADIANS_2_DEGREES
 
             endpointDisplacement = path(1.0) - position
-            # yawAngle = np.arctan2(endpointDisplacement[1], endpointDisplacement[0]) * RADIANS_2_DEGREES
+            yawAngle = np.arctan2(endpointDisplacement[1], endpointDisplacement[0]) * RADIANS_2_DEGREES
 
             # check if we've reached the endpoint
             if np.linalg.norm(endpointDisplacement) < args.endpoint_tolerance:
@@ -1373,7 +1372,7 @@ def generateHikingBlazes(start, occupancyMap, numBlazes = 2, zLimit=(-15, -1), m
 client.armDisarm(True)
 client.takeoffAsync().join()
 client.moveToZAsync(-10, 1).join()
-print("Taken off")
+# print("Taken off")
 
 occupancyMap = VoxelOccupancyCache(args.voxel_size, args.cache_size)
 
@@ -1391,109 +1390,129 @@ markerPose.position = Vector3r(0, 0, 100)
 for marker in markers:
     client.simSetObjectPose(marker, markerPose)
 
- 
+# The starting pose of each run
+startingPose = client.simGetVehiclePose()
+
 # Collect data runs
+successes = 0
 for i in range(args.n_runs):
+    client.simSetVehiclePose(            
+        startingPose,
+        True
+    )
     position, orientation = getPose()
+    time.sleep(2)
+    
+    try:
+        if args.task == Task.TARGET:
+            marker = markers[0]
 
-    if args.task == Task.TARGET:
-        marker = markers[0]
+            print('here 1')
 
-        # Random rotation
-        client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
+            # Random rotation
+            client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
 
-        # Set up
-        endpoint = generateMazeTarget(occupancyMap, radius=args.near_task_radius, zLimit=(-5, -15))
-        if endpoint is None:
-            continue
-            
-        # place endpoint marker
-        endpointPose = airsim.Pose()
-        endpointPose.position = Vector3r(*endpoint)
-        client.simSetObjectPose(marker, endpointPose)
+            print('here 2')
 
-        turnTowardEndpoint(endpoint, timeout=10)
+            # Set up
+            endpoint = generateMazeTarget(occupancyMap, radius=args.near_task_radius, zLimit=(-5, -15))
+            if endpoint is None:
+                continue
 
-        moveToEndpoint(endpoint, occupancyMap, model=flightModel)
+            print('here 3')
+                
+            # place endpoint marker
+            endpointPose = airsim.Pose()
+            endpointPose.position = Vector3r(*endpoint)
+            client.simSetObjectPose(marker, endpointPose)
 
-    if args.task == Task.FOLLOWING:
+            turnTowardEndpoint(endpoint, timeout=10)
 
-        marker = markers[0]
+            moveToEndpoint(endpoint, occupancyMap, model=flightModel)
 
-        updateOccupancies(occupancyMap)
-        print('updated occupancies')
+        if args.task == Task.FOLLOWING:
 
-        # TODO(cvorbach) Online path construction with collision checking along each spline length
-        walk = randomWalk(position, stepSize=5, occupancyMap=occupancyMap)
-        path = Path(walk)
-        # path = ExtendablePath(walk)
+            marker = markers[0]
 
-        # t = np.linspace(0, 1, 1000) 
-        # client.simPlotPoints([Vector3r(*path(t_i)) for t_i in t], color_rgba = [0.0, 0.0, 1.0, 1.0], duration = 60)
-        # sys.exit()
+            updateOccupancies(occupancyMap)
+            print('updated occupancies')
 
-        print('got path')
+            # TODO(cvorbach) Online path construction with collision checking along each spline length
+            walk = randomWalk(position, stepSize=5, occupancyMap=occupancyMap)
+            path = Path(walk)
+            # path = ExtendablePath(walk)
 
-        followPath(path, marker=marker, model=flightModel, earlyStopDistance=args.endpoint_tolerance)
-        print('reached path end')
+            # t = np.linspace(0, 1, 1000) 
+            # client.simPlotPoints([Vector3r(*path(t_i)) for t_i in t], color_rgba = [0.0, 0.0, 1.0, 1.0], duration = 60)
+            # sys.exit()
 
-    if args.task == Task.HIKING:
-        updateOccupancies(occupancyMap)
-        print('updated occupancies')
+            print('got path')
 
-        newStart = generateMazeTarget(occupancyMap, radius=args.near_task_radius)
-        moveToEndpoint(newStart, occupancyMap)
+            followPath(path, marker=marker, model=flightModel, earlyStopDistance=args.endpoint_tolerance)
+            print('reached path end')
 
-        print('move to z-level')
-        zLimit = (-10, -5)
-        client.moveToZAsync((zLimit[0] + zLimit[1])/2, 1).join()
-        print('reached z-level')
+        if args.task == Task.HIKING:
+            updateOccupancies(occupancyMap)
+            print('updated occupancies')
 
-        print('getting blazes')
-        hikingBlazes = generateHikingBlazes(position, occupancyMap, zLimit=zLimit)
-        turnTowardEndpoint(hikingBlazes[0], timeout=10)
-        print('Got blazes')
+            newStart = generateMazeTarget(occupancyMap, radius=args.near_task_radius)
+            moveToEndpoint(newStart, occupancyMap)
 
-        if len(hikingBlazes) > len(markers):
-            raise Exception('Not enough markers for each blaze to get one')
+            print('move to z-level')
+            zLimit = (-10, -5)
+            client.moveToZAsync((zLimit[0] + zLimit[1])/2, 1).join()
+            print('reached z-level')
 
-        # place makers
-        markerPose = airsim.Pose()
-        for i, blaze in enumerate(hikingBlazes):
-            print('placed blaze', i)
-            markerPose.position = Vector3r(*blaze)
-            client.simSetObjectPose(markers[i], markerPose)
+            print('getting blazes')
+            hikingBlazes = generateHikingBlazes(position, occupancyMap, zLimit=zLimit)
+            turnTowardEndpoint(hikingBlazes[0], timeout=10)
+            print('Got blazes')
 
-        if args.record:
-            client.startRecording()
+            if len(hikingBlazes) > len(markers):
+                raise Exception('Not enough markers for each blaze to get one')
 
-        for blaze in hikingBlazes:
-            print('moving to blaze')
-            moveToEndpoint(blaze, occupancyMap, model=flightModel)
-            # TODO(cvorbach) rotate 360
-            print('moved to blaze')
+            # place makers
+            markerPose = airsim.Pose()
+            for i, blaze in enumerate(hikingBlazes):
+                print('placed blaze', i)
+                markerPose.position = Vector3r(*blaze)
+                client.simSetObjectPose(markers[i], markerPose)
 
-        if args.record:
-            client.stopRecording()
+            if args.record:
+                client.startRecording()
 
-    if args.task == Task.MAZE:
-        # TODO(cvorbach) reimplement me
-        # record the direction vector
-        marker = markers[0]
+            for blaze in hikingBlazes:
+                print('moving to blaze')
+                moveToEndpoint(blaze, occupancyMap, model=flightModel)
+                # TODO(cvorbach) rotate 360
+                print('moved to blaze')
 
-        # Set up
-        endpoint = generateMazeTarget(occupancyMap, radius=args.far_task_radius, zLimit=(-5, -15))
-        if endpoint is None:
-            continue
-            
-        # place endpoint marker
-        endpointPose = airsim.Pose()
-        endpointPose.position = Vector3r(*endpoint)
-        client.simSetObjectPose(marker, endpointPose)
+            if args.record:
+                client.stopRecording()
 
-        turnTowardEndpoint(endpoint, timeout=10)
+        if args.task == Task.MAZE:
+            # TODO(cvorbach) reimplement me
+            # record the direction vector
+            marker = markers[0]
 
-        moveToEndpoint(endpoint, occupancyMap, recordEndpointDirection=True, model=flightModel)
+            # Set up
+            endpoint = generateMazeTarget(occupancyMap, radius=args.far_task_radius, zLimit=(-5, -15))
+            if endpoint is None:
+                continue
+                
+            # place endpoint marker
+            endpointPose = airsim.Pose()
+            endpointPose.position = Vector3r(*endpoint)
+            client.simSetObjectPose(marker, endpointPose)
+
+            turnTowardEndpoint(endpoint, timeout=10)
+
+            moveToEndpoint(endpoint, occupancyMap, recordEndpointDirection=True, model=flightModel)
+
+        successes += 1
+        print(f'Run {i} succeeded: {successes}/{i+1} success rate.')
+    except RunFailure:
+        print(f'Run {i} failed:    {successes}/{i+1} success rate.')
 
 
 print('Finished Data Runs')
