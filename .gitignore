@@ -20,6 +20,12 @@ training-histories/*
 model-piloted-runs/*
 console-log/*
 junk/*
+history/*
+histories/*
+logs/*
+airsim/*
+setup_path.py
+*~
 
 # pyenv
 .python-version

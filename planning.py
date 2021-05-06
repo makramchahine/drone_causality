@@ -5,6 +5,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 from collections import OrderedDict
 import heapq
+import random
 
 # TODO(cvorbach) convert these to argments / toml configuration
 CAMERA_FOV           = np.pi / 8
@@ -236,9 +237,9 @@ class CubicSpline:
         self.y = y
         self.coeff = self.fit(x, y, tol)
 
-        print(self.x.shape)
-        print(self.y.shape)
-        print([c.shape for c in self.coeff])
+        # print(self.x.shape)
+        # print(self.y.shape)
+        # print([c.shape for c in self.coeff])
 
     def fit(self, x, y, tol=1e-10):
         """
