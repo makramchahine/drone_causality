@@ -7,6 +7,15 @@ import threading
 
 from planning import *
 
+# Operating Modes
+class Task: 
+    TARGET = 'target'
+    FOLLOWING = 'following'
+    MAZE = 'maze'
+    HIKING = 'hiking'
+    DEMO = 'demo'
+    MULTITRACK = 'multitrack'
+
 class FlightController:
     def __init__(self, client, config):
         self.client = client
@@ -25,18 +34,20 @@ class FlightController:
         return position, orientation
 
 
-    def isValidEndpoint(self, endpoint):
+    def isValidEndpoint(self, endpoint, requireVisible=False):
         if endpoint in self.occupancy_cache:
             return False
 
         position, orientation = self.getPose()
+        if requireVisible and not isVisible(endpoint, position, R.from_quat(orientation), self.config):
+            return False
 
         # TODO(cvorbach) Check there is a valid path
 
         return True
 
 
-    def generateMazeTarget(self, radius=50, zLimit=[-30, -10]):
+    def generateMazeTarget(self, radius=50, zLimit=[-30, -10], requireVisible=False):
         isValid = False
         attempts = 0
         while not isValid:
@@ -45,7 +56,7 @@ class FlightController:
                 2 * radius * (random.random() - 0.5), 
                 (zLimit[0] - zLimit[1]) * random.random() + zLimit[1]])
 
-            isValid = self.isValidEndpoint(endpoint)
+            isValid = self.isValidEndpoint(endpoint, requireVisible=requireVisible)
 
             attempts += 1
             if attempts > self.config['bogo_attempts']:
@@ -187,19 +198,19 @@ class FlightController:
         return pursuitVector
 
 
-    def getLookAhead(self, path, t, position, lookAhead, dt=1e-4):
+    def getLookAhead(self, path, t, position, lookAhead, endT=1, dt=1e-1):
         lookAheadPoint        = position  # TODO(cvorbach) increments always?
         lookAheadDisplacement = 0
 
         while np.linalg.norm(lookAheadDisplacement) < lookAhead:
             t += dt
 
-            if t < 1:
+            if t < endT:
                 lookAheadDisplacement = lookAheadPoint - position
-                lookAheadPoint = path(t)
+                lookAheadPoint = path(t)[:3]
             else:
-                t = 1
-                lookAheadPoint = path(t)
+                t = endT
+                lookAheadPoint = path(t)[:3]
                 break
                 # TODO(cvorbach) unnecessary with extrapolation
             
@@ -207,6 +218,25 @@ class FlightController:
 
     class RunFailure(Exception):
         pass
+
+    def animateTrajectory(self, marker, trajectory, t):
+        markerPose = airsim.Pose()
+        position   = trajectory(t)
+
+        tangent  = normalize(trajectory.tangent(t))
+        normal   = normalize(np.cross(tangent, (0,0,1))) # Note, we use world z-axis for up direction
+        binormal = normalize(np.cross(tangent, normal))  # This fails if tangent == z-axis == (0,0,1)
+
+        orientation = R.from_matrix(np.array([tangent, normal, binormal]).T)
+
+        markerPose.position    = Vector3r(*position)
+        markerPose.orientation = Quaternionr(*orientation.as_quat())
+
+        self.client.simSetObjectPose(marker, markerPose)
+
+    def followTrajectory(self, trajectory, lookAhead = 2, kp=1):
+        raise NotImplementedError
+
 
     def followPath(self, path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=None, planningWrapper=None, planningKnots=None, recordingEndpoint=None, model=None):
         startTime       = self.getTime()

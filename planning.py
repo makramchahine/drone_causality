@@ -6,6 +6,9 @@ from scipy.spatial.transform import Rotation as R
 from collections import OrderedDict
 import heapq
 import random
+import miniball
+import math
+import sys
 
 # TODO(cvorbach) convert these to argments / toml configuration
 CAMERA_FOV           = np.pi / 8
@@ -30,6 +33,10 @@ def distance(p1, p2):
     return ||p1 - p2||
     '''
     return np.linalg.norm(p2 - p1)
+
+
+class ExtrapolationError(Exception):
+    pass
 
 
 class CatmullRomSegment:
@@ -135,7 +142,7 @@ class CatmullRomSpline:
         where s is the spline parameterization
         '''
         if t < 0 or t > 1:
-            raise Exception(f"Catmull Rom Spline cannot extrapolate")
+            raise ExtrapolationError(f"Catmull Rom Spline cannot extrapolate")
 
         s = t*len(self)
 
@@ -152,7 +159,7 @@ class CatmullRomSpline:
         where s is the spline parameter
         '''
         if t < 0 or t > 1:
-            raise Exception(f"Catmull Rom Spline cannot extrapolate")
+            raise ExtrapolationError(f"Catmull Rom Spline cannot extrapolate")
 
         s = t*len(self)
 
@@ -300,7 +307,7 @@ class CubicSpline:
 
         # TODO(cvorbach) allow extrapolation
         if t < x[0] or t > x[-1]:
-            raise Exception("Can't extrapolate")
+            raise ExtrapolationError("Can't extrapolate")
 
         # Index of segment to use
         idx = np.argmax(x > t) - 1
@@ -319,7 +326,7 @@ class CubicSpline:
 
         # TODO(cvorbach) allow extrapolation
         if t < x[0] or t > x[-1]:
-            raise Exception("Can't extrapolate")
+            raise ExtrapolationError("Can't extrapolate")
 
         # Index of segment to use
         idx = np.argmax(x > t) - 1
@@ -338,7 +345,7 @@ class CubicSpline:
 
         # TODO(cvorbach) allow extrapolation
         if t < x[0] or t > x[-1]:
-            raise Exception("Can't extrapolate")
+            raise ExtrapolationError("Can't extrapolate")
 
         # Index of segment to use
         idx = np.argmax(x > t) - 1
@@ -406,6 +413,53 @@ def generateLoop(minRadius=6, maxRadius=9, knotCount=6, center=np.zeros((3,))):
 
     return Loop(radialKnots, center=center, orientation=orientation, clockwise=clockwise)
 
+class Trajectory:
+    '''
+    Implements a 3D + time spline trajectory
+    '''
+
+    def __init__(self, knotPoints):
+        '''
+        @param knotPoints [x,y,z,t] points
+        '''
+        self.knotPoints = np.array(knotPoints)
+        self.fit(self.knotPoints)
+
+    def fit(self, knotPoints):
+        '''
+        Constructs the path from the 3D knot points and times.
+        @param knotPoints [x,y,z,t] points
+        '''
+        self.path = Path(knotPoints[:,:3], t=knotPoints[:, 3])
+
+    def __call__(self, t):
+        '''
+        Returns the 3D point on path at t
+        '''
+        return self.path(t)
+
+    def tangent(self, t):
+        '''
+        Returns the tangent vector to the path at t
+        '''
+        return self.path.tangent(t)
+
+    def normal(self, t):
+        '''
+        Returns the Frenet-Serret normal vector at t
+        '''
+        return self.path.normal(t)
+
+    def project(self, point):
+        '''
+        Numerically finds the closest path(t) point
+        to the passed point
+        '''
+        return self.path.tangent(point)
+    
+    def end(self):
+        return self.knotPoints[-1]
+
 class Path:
     '''
     Implements a 3D spline path. 
@@ -413,19 +467,22 @@ class Path:
     TODO(cvorbach) Add support for 1 and 2 point long paths,
                    currently these very short paths cause errors b/c can't build a spline
     '''
-    def __init__(self, knotPoints):
-        self.knotPoints = knotPoints
-        self.fit(knotPoints)
+    def __init__(self, knotPoints, t=None):
+        self.fit(knotPoints, t)
 
-    def fit(self, knotPoints):
+    def fit(self, knotPoints, t=None):
         '''
         Constructs the path from the 3D knot points.
 
         This can safely be updated with new knot points,
         but doing changes the t value of points on the curve.
         '''
+
         knots = np.array(knotPoints)
-        t = np.linspace(0, 1, knots.shape[0])
+
+        if t is None:
+            t = np.linspace(0, 1, knots.shape[0])
+
         self.xSpline = CubicSpline(t, knots[:, 0])
         self.ySpline = CubicSpline(t, knots[:, 1])
         self.zSpline = CubicSpline(t, knots[:, 2])
@@ -615,6 +672,7 @@ class VoxelOccupancyCache:
 
     These are the voxels which are passed as 'occupied'
     as well as the voxels adjacent to occupied voxels.
+    This lets the cache represent configuration space.
 
     See addPoint for details.
     '''
@@ -634,6 +692,8 @@ class VoxelOccupancyCache:
         Note, adding point also marks all of the points
         adjacent to it as occupied. This is to prevent the 
         drone from clipping / bumping against occupied voxels.
+        E.I. we want to store configuration space rather than
+        obstacle space.
         
         This is required because the drone has a non-zero radius.
         If you decrease the voxelSize too much, you may need to
@@ -703,7 +763,7 @@ class VoxelOccupancyCache:
 
         return adjacentVoxels
 
-    def getNextSteps(self, voxel, endpoint, endpoint_tolerance):
+    def getNextSteps(self, voxel, endpoint=None, endpoint_tolerance=None):
         '''
         Returns the possible voxels the drone can move into from
         voxel. 
@@ -717,7 +777,11 @@ class VoxelOccupancyCache:
         possibleNeighbors = self.getAdjacentVoxels(voxel)
 
         for v in possibleNeighbors:
-            if v not in self.cache or distance(np.array(v), np.array(endpoint)) < endpoint_tolerance:
+            isFeasible = v not in self.cache
+            if endpoint is not None:
+                isFeasible = isFeasible or distance(np.array(v), np.array(endpoint)) < endpoint_tolerance
+
+            if isFeasible:
                 neighbors.append(v) 
 
         return neighbors
@@ -755,33 +819,53 @@ def unreal2WorldCoordinates(vector):
     '''
     return (vector - DRONE_START) / WORLD_2_UNREAL_SCALE
 
-
-def isVisible(point, position, orientation):
+def isVisible(point, position, orientation, config):
     '''
     Checks if a point is in the camera frustrum if the drone
     is at position in orientation.
 
     TODO(cvorbach) implement occlusion checking
     '''
-    # Edge case point == position
-    if distance(point, position) < 0.05:
-        return True
+    # print('point', point)
+    # print('position', position)
+    # print('orientation', orientation.as_euler('xyz'))
+    cameraUnit = np.array([1,0,0])
+    cameraUnit = orientation.apply(cameraUnit)
 
-    # Check if endpoint is in frustrum
-    xUnit = np.array([1, 0, 0])
-    cameraDirection = R.from_quat(orientation).apply(xUnit)
+    pointRay = normalize(point - position)
 
-    endpointDirection = normalize(point - position)
+    angle = np.arccos(np.dot(cameraUnit, pointRay)) 
+    # print('pointRay', pointRay)
+    # print('cameraUnit', cameraUnit)
+    # print('angle', angle)
+    return abs(angle) < config['camera_field_of_view']
 
-    # TODO(cvorbach) check square, not circle
-    angle = np.arccos(np.dot(cameraDirection, endpointDirection)) 
-
-    if abs(angle) > CAMERA_FOV:
-        return False
-
-    # TODO(cvorbach) Check for occlusions with ray-tracing
-
-    return True
+# def isVisible(point, position, orientation):
+#     '''
+#     Checks if a point is in the camera frustrum if the drone
+#     is at position in orientation.
+# 
+#     TODO(cvorbach) implement occlusion checking
+#     '''
+#     # Edge case point == position
+#     if distance(point, position) < 0.05:
+#         return True
+# 
+#     # Check if endpoint is in frustrum
+#     xUnit = np.array([1, 0, 0])
+#     cameraDirection = R.from_quat(orientation).apply(xUnit)
+# 
+#     endpointDirection = normalize(point - position)
+# 
+#     # TODO(cvorbach) check square, not circle
+#     angle = np.arccos(np.dot(cameraDirection, endpointDirection)) 
+# 
+#     if abs(angle) > CAMERA_FOV:
+#         return False
+# 
+#     # TODO(cvorbach) Check for occlusions with ray-tracing
+# 
+#     return True
 
 
 def directionOf(point, position):
@@ -794,17 +878,20 @@ def directionOf(point, position):
 
     return orientation
 
+
 def euclidean(voxel1, voxel2):
     '''
     Euclidean distance metric
     '''
     return distance(np.array(voxel1), np.array(voxel2))
 
+
 def greedy(voxel1, voxel2):
     '''
     Gredy metric just heavily weighs euclidean distance
     '''
     return 100*euclidean(voxel1, voxel2)
+
 
 def findPath(startpoint, endpoint, occupancyMap, endpoint_tolerance, h=greedy, d=euclidean):
     '''
@@ -844,7 +931,7 @@ def findPath(startpoint, endpoint, occupancyMap, endpoint_tolerance, h=greedy, d
             
             return list(reversed(path))
 
-        for neighbor in occupancyMap.getNextSteps(current, end, endpoint_tolerance):
+        for neighbor in occupancyMap.getNextSteps(current, endpoint=end, endpoint_tolerance=endpoint_tolerance):
 
             # TODO(cvorbach) It would be nice to get this working
             # # skip neighbors from which the endpoint isn't visible
@@ -868,3 +955,192 @@ def findPath(startpoint, endpoint, occupancyMap, endpoint_tolerance, h=greedy, d
                 heapq.heappush(openSet, (fScore[neighbor], neighbor))
         
     raise ValueError("Couldn't find a path")
+
+
+def genericDFS(start, isEnd, getFeasibleNext, h):
+    openSet = []
+    openSet.append(start)
+    cameFrom = dict()
+
+    while openSet:
+        current = openSet.pop()
+        print(current)
+
+        # Test if we've found node in the end set
+        if isEnd(current):
+            # Walk back through parent pointers to find search path
+            trajectory = [current]
+            while trajectory[-1] != start:
+                current = cameFrom[current]
+                trajectory.append(current)
+
+            return list(reversed(trajectory))
+
+        for neighbor in sorted(getFeasibleNext(current), key=h, reverse=True):
+            cameFrom[neighbor] = current
+            openSet.append(neighbor)
+
+
+def genericHeuristicSearch(start, isEnd, getFeasibleNext, h=euclidean, d=euclidean):
+    '''
+    Implements highly generic heuristic search. 
+    @param start starting node
+    @param isEnd(node) function which is True iff passed a valid end node
+    @param getFeasibleNext(node) function which produces feasible adjacent nodes
+    @param h heuristic function
+    @param d edge cost function
+
+    If h is consistent and admissible, then this is A*
+    '''
+    
+    cameFrom = dict()
+
+    gScore = dict()
+    gScore[start] = 0
+
+    fScore = dict()
+    fScore[start] = h(start)
+
+    openSet = [(fScore[start], start)]
+
+    i = 0
+    while openSet:
+        if i % 100 == 1:
+            print('t', current[3])
+        i += 1
+        current = heapq.heappop(openSet)[1]
+
+        # Test if we've found node in the end set
+        if isEnd(current):
+            # Walk back through parent pointers to find search path
+            trajectory = [current]
+            while trajectory[-1] != start:
+                current = cameFrom[current]
+                trajectory.append(current)
+
+            return list(reversed(trajectory))
+
+        # print('feasible', getFeasibleNext(current))
+
+        # Else, find the possible next steps
+        for neighbor in getFeasibleNext(current):
+
+            # Cost to reach neighbor from current
+            tentativeGScore = gScore.get(current, float('inf')) + d(current, neighbor)
+
+            # If it is less costly to reach neighbor from current
+            # then update neighbor's cost-to-go estimate
+            if tentativeGScore < gScore.get(neighbor, float('inf')):
+                cameFrom[neighbor] = current
+                gScore[neighbor]   = tentativeGScore
+
+                if neighbor in fScore:
+                    try:
+                        openSet.remove((fScore[neighbor], neighbor))
+                    except:
+                        pass # Ignore if neighbor wasn't already on the heap
+
+                # Put neighbor back on heap with new cost-to-go
+                fScore[neighbor] = gScore.get(neighbor, float('inf')) + h(neighbor)
+                heapq.heappush(openSet, (fScore[neighbor], neighbor))
+
+    raise ValueError("Search failed: no path-to-end found.")
+
+
+def walzBoundingSphere(points):
+    C, r2 = miniball.get_bounding_ball(np.array(points))
+    return C, np.sqrt(r2)
+
+
+def findTrackingKnots(startingPosition, targetTrajectories, occupancy_cache, config, dt=1e-1, Qp = np.eye(3), Qc = np.eye(4)):
+    '''
+    Our goal is to find a drone trajectory which keeps all of the targets in
+    the camera frustrum as the targets move.
+
+    @param targetKnots (numTargets, numKnots, len([x,y,z]))
+    @param trajectoryTime len(trajectoryTime) = numKnots, the time of each knot from start
+    '''
+
+    endTime = targetTrajectories[0].end()[3]
+    N = math.ceil(endTime/dt)
+    time = np.linspace(0, endTime, N)
+
+    # True if knot is in the end set
+    def isEnd(knot):
+        t = knot[3]
+        return t >= endTime
+
+    # Produce all possible next knots
+    def getFeasibleNext(knot):
+        # print('t', knot[3] + dt, endTime)
+        p = np.array(knot[:3])
+        t = min(knot[3] + dt, endTime)
+        v = occupancy_cache.point2Voxel(p)
+
+        adjacentVoxels = occupancy_cache.getNextSteps(v)
+        
+        # print('AV', adjacentVoxels)
+
+        if v not in adjacentVoxels:
+            raise RuntimeError('Staying in voxel wasn\'t a returned option, but it should be.')
+
+        center, radius = walzBoundingSphere([traj(t) for traj in targetTrajectories])
+        yawAngle = np.arctan2((center - p)[1], (center - p)[0])
+        orientation = R.from_euler('xyz', [0,0,yawAngle])
+
+        # print('position', p)
+        # print('centerRay', normalize(center-p))
+
+        feasibleNeighbors = []
+        for neighbor in adjacentVoxels:
+
+            allTargetsVisible = True
+            for traj in targetTrajectories:
+                # print(isVisible(traj(t), np.array(neighbor), orientation, config))
+                allTargetsVisible = allTargetsVisible and isVisible(traj(t), np.array(neighbor), orientation, config)
+                if not allTargetsVisible:
+                    break
+            
+            if allTargetsVisible:
+                feasibleNeighbors.append(neighbor)
+
+        # print('t*', knot[3] + dt, endTime)
+        return [(*voxel, t) for voxel in feasibleNeighbors]
+
+    def costToGoHeuristic(knot, position, orientation):
+        #TODO(cvorbach) Think about me?
+        # centroid projected distance in camera plane
+        # and euclidean distance from the start (make edge cost linear)
+        p = np.array(knot[:3])
+        t = knot[3]
+        s = np.array(start[:3])
+
+        center, radius = walzBoundingSphere([traj(t) for traj in targetTrajectories])
+
+        z2x = R.from_euler('xyx', (-np.pi/2, -np.pi/2, 0))     # Rotates expected camera coordinates (z,x,y) to drone body frame (x,y,z)
+        cameraRotation = (z2x*orientation).inv().as_matrix()   # Rotate drone body frame to world frame, then get the inverse rotation
+        t = -cameraRotation.dot(position)[:, np.newaxis]       # Translation
+        P = np.concatenate((cameraRotation, t), axis=1)
+        P = np.concatenate((P, np.array(((0,0,0,1),))), axis=0) # Homogenous coordinates camera projection (unit focal length and pixel size)
+
+        centerTilde  = np.array(((*center, 1),))       # Location of bounding sphere center in homogenous coordinates
+        centerTilde  = P.dot(pTilde)                   # Project to image plane 
+        centerCamera = centerTilde[:2]/centerTilde[2]  # Get camera x,y coordinates
+
+        projectiveCost = np.linalg.norm(centerCamera)
+        movementCost   = distance(p,s)
+
+        return projectiveCost + movementCost
+
+    def edgeCost(knot1, knot2):
+        p1 = np.array(knot1[:3])
+        p2 = np.array(knot2[:3])
+
+        distanceCost = distance(p1, p2)
+        # TODO(cvorbach) add difference in projected distance from camera plane origin
+        return distanceCost
+
+    start = (*startingPosition, 0)
+    #trackingKnots = genericHeuristicSearch(start, isEnd=isEnd, getFeasibleNext=getFeasibleNext, h=costToGoHeuristic, d=edgeCost)
+    trackingKnots = genericDFS(start, isEnd, getFeasibleNext, costToGoHeuristic)
+    return trackingKnots

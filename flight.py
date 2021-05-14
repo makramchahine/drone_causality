@@ -22,7 +22,7 @@ import traceback
 from scipy.spatial.transform import Rotation as R
 
 from planning import *
-from ml_models import *
+# from ml_models import *
 from tasks import *
 
 # Start up
@@ -34,14 +34,6 @@ client.enableApiControl(True)
 client.simEnableWeather(True)
 client.simSetWeatherParameter(airsim.WeatherParameter.Fog, 0)
 client.simSetWeatherParameter(airsim.WeatherParameter.Rain, 0.25)
-
-# Operating Modes
-class Task: 
-    TARGET = 'target'
-    FOLLOWING = 'following'
-    MAZE = 'maze'
-    HIKING = 'hiking'
-    DEMO = 'demo'
 
 class Empty:
     def __repr__(self):
@@ -112,8 +104,8 @@ RECORDING_NAME_REGEX   = re.compile(r'^[0-9]+-[0-9]+-[0-9]+-[0-9]+-[0-9]+-[0-9]+
 
 # Setup the network
 flightModel = None
-if config['use_model']:
-    flight_model = initializeMLNetwork(config)
+# if config['use_model']:
+#     flight_model = initializeMLNetwork(config)
 
 # -----------------------------
 # MAIN
@@ -156,6 +148,75 @@ for i in range(config['num_repetitions']):
     # time.sleep(5)
     
     try:
+            
+        if config['task'] == Task.MULTITRACK:
+            marker1, marker2 = markers[:2]
+            markers = [marker1, marker2]
+
+            flight_control.updateOccupancies()
+
+            start1 = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), requireVisible=True)
+            start2 = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), requireVisible=True)
+
+            end1 = flight_control.generateMazeTarget(radius=2*config['max_endpoint_radius'], zLimit=(-5, -15))
+            end2 = flight_control.generateMazeTarget(radius=2*config['max_endpoint_radius'], zLimit=(-5, -15))
+
+            pathVoxels1 = findPath(start1, end1, flight_control.occupancy_cache, config['endpoint_tolerance'])
+            pathVoxels2 = findPath(start2, end2, flight_control.occupancy_cache, config['endpoint_tolerance'])
+
+            trajectoryTime = np.linspace(0, config['target_move_time'], len(pathVoxels1))
+
+            knots1 = np.array([[*pathVoxels1[i], t] for i, t in zip(range(len(pathVoxels1)), trajectoryTime)])
+            knots2 = np.array([[*pathVoxels2[i], t] for i, t in zip(range(len(pathVoxels2)), trajectoryTime)])
+
+            trajectory1 = Trajectory(knots1)
+            trajectory2 = Trajectory(knots2)
+            targetTrajectories = [trajectory1, trajectory2]
+
+            position, _ = flight_control.getPose()
+            center, radius = walzBoundingSphere([traj(0) for traj in targetTrajectories])
+            yawAngle = np.arctan2((center - position)[1], (center - position)[0])
+            orientation = R.from_euler('xyz', [0,0,yawAngle])
+            for traj in targetTrajectories:
+                if not isVisible(traj(0), position, orientation, config):
+                    raise RuntimeError('Target starts already out-of-view!')
+
+            for i in range(len(targetTrajectories)):
+                flight_control.animateTrajectory(markers[i], targetTrajectories[i], 0)
+
+            trackingTrajectory = Trajectory(findTrackingKnots(position, targetTrajectories, flight_control.occupancy_cache, config))
+
+            print('Starting at ', time.time())
+            startTime = time.time()
+            while time.time() - startTime < trajectoryTime[-1]:
+                position, _ = flight_control.getPose()
+                t = time.time() - startTime
+                print('t', t)
+
+                for i in range(len(targetTrajectories)):
+                    flight_control.animateTrajectory(markers[i], targetTrajectories[i], t)
+
+                lookAheadPoint        = trackingTrajectory(t + 0.1)
+                lookAheadDisplacement = lookAheadPoint - position
+
+                speed = min(np.linalg.norm(lookAheadDisplacement), config['max_speed'])
+                print('speed', speed)
+                try:
+                    velocity = speed*normalize(lookAheadDisplacement)
+                except ZeroDivisionError:
+                    velocity = np.zeros((3,1))
+                print('velocity', velocity)
+
+                center, radius = walzBoundingSphere([traj(t) for traj in targetTrajectories])
+                # yawAngle = np.arctan2((center - position)[1], (center - position)[0])
+
+                client.moveByVelocityAsync(
+                    float(velocity[0]), float(velocity[1]), float(velocity[2]), 
+                    config['control_update_period'], 
+                    # yaw_mode=YawMode(is_rate = False, yaw_or_rate = yawAngle)
+                ).join()
+
+
         if config['task'] == Task.DEMO:
             loop = generateLoop()
 
