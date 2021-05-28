@@ -22,18 +22,8 @@ import traceback
 from scipy.spatial.transform import Rotation as R
 
 from planning import *
-# from ml_models import *
+from ml_models import *
 from tasks import *
-
-# Start up
-client = airsim.MultirotorClient() 
-client.confirmConnection() 
-client.enableApiControl(True) 
-
-# Weather
-client.simEnableWeather(True)
-client.simSetWeatherParameter(airsim.WeatherParameter.Fog, 0)
-client.simSetWeatherParameter(airsim.WeatherParameter.Rain, 0.25)
 
 class Empty:
     def __repr__(self):
@@ -97,6 +87,16 @@ class FlightConfig:
 
 config = FlightConfig(args.mission, args)
 
+# Start up
+client = airsim.MultirotorClient() 
+client.confirmConnection() 
+client.enableApiControl(True) 
+
+# Weather
+client.simEnableWeather(True)
+client.simSetWeatherParameter(airsim.WeatherParameter.Fog, config['fog'])
+client.simSetWeatherParameter(airsim.WeatherParameter.Rain, config['rain'])
+
 RECORDING_DIRECTORY    = 'C:/Users/MIT Driverless/Documents/AirSim'
 RECORDING_NAME_REGEX   = re.compile(r'^[0-9]+-[0-9]+-[0-9]+-[0-9]+-[0-9]+-[0-9]+$')
 
@@ -104,10 +104,11 @@ RECORDING_NAME_REGEX   = re.compile(r'^[0-9]+-[0-9]+-[0-9]+-[0-9]+-[0-9]+-[0-9]+
 
 # Setup the network
 flightModel = None
-# if config['use_model']:
-#     flight_model = initializeMLNetwork(config)
+if config['use_model']:
+    from ml_models import *
+    flightModel = initializeMLNetwork(config)
 
-# -----------------------------
+# ---------------ght--------------
 # MAIN
 # -----------------------------
 
@@ -148,6 +149,38 @@ for i in range(config['num_repetitions']):
     # time.sleep(5)
     
     try:
+        if config['task'] == Task.OCCLUSION:
+            marker = markers[0]
+
+            newStart = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'])
+            flight_control.moveToEndpoint(newStart)
+
+            # Random rotation
+            client.rotateToYawAsync(random.random() * 2.0 * np.pi * RADIANS_2_DEGREES).join()
+
+            # print('here 2')
+
+            # Set up
+            endpoint = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), visibility=Visibility.NOT_VISIBLE)
+            if endpoint is None:
+                continue
+
+            # print('here 3')
+            position, _ = flight_control.getPose()
+            print(distance(endpoint, position))
+                
+            # place endpoint marker
+            endpointPose = airsim.Pose()
+            endpointPose.position = Vector3r(*endpoint)
+            client.simSetObjectPose(marker, endpointPose)
+
+            flight_control.turnTowardEndpoint(endpoint, timeout=10)
+
+            flight_control.moveToEndpoint(endpoint, model=flightModel)
+
+        if config['task'] == Task.INTERACTIVE:
+            print('Dropping to prompt')
+            sys.exit()
             
         if config['task'] == Task.MULTITRACK:
             marker1, marker2 = markers[:2]
@@ -155,8 +188,8 @@ for i in range(config['num_repetitions']):
 
             flight_control.updateOccupancies()
 
-            start1 = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), requireVisible=True)
-            start2 = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), requireVisible=True)
+            start1 = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), visibility=Visibility.VISIBLE)
+            start2 = flight_control.generateMazeTarget(radius=config['max_endpoint_radius'], zLimit=(-5, -15), visibility=Visibility.VISIBLE)
 
             end1 = flight_control.generateMazeTarget(radius=2*config['max_endpoint_radius'], zLimit=(-5, -15))
             end2 = flight_control.generateMazeTarget(radius=2*config['max_endpoint_radius'], zLimit=(-5, -15))
@@ -207,8 +240,9 @@ for i in range(config['num_repetitions']):
                     velocity = np.zeros((3,1))
                 print('velocity', velocity)
 
+
                 center, radius = walzBoundingSphere([traj(t) for traj in targetTrajectories])
-                # yawAngle = np.arctan2((center - position)[1], (center - position)[0])
+                yawAngle = np.arctan2((center - position)[1], (center - position)[0])
 
                 client.moveByVelocityAsync(
                     float(velocity[0]), float(velocity[1]), float(velocity[2]), 
@@ -255,6 +289,8 @@ for i in range(config['num_repetitions']):
                 continue
 
             # print('here 3')
+            position, _ = flight_control.getPose()
+            print(distance(endpoint, position))
                 
             # place endpoint marker
             endpointPose = airsim.Pose()
@@ -274,7 +310,7 @@ for i in range(config['num_repetitions']):
             position, _ = flight_control.getPose()
 
             # TODO(cvorbach) Online path construction with collision checking along each spline length
-            walk = randomWalk(position, stepSize=5, occupancyMap=flight_control.occupancy_cache)
+            walk = randomWalk(position, stepSize=1.5, occupancyMap=flight_control.occupancy_cache)
             path = Path(walk)
             # path = ExtendablePath(walk)
 

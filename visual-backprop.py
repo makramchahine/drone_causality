@@ -1,94 +1,152 @@
 import tensorflow as tf
 from tensorflow import keras
 import kerasncp as kncp
+from kerasncp.tf import LTCCell
+from node_cell import *
 
 import matplotlib.pyplot as plt
 import PIL.Image
 import numpy as np
 import os
 import datetime
+
 # from mxnet.gluon import nn
 # from mxnet import np, npx, init
 
 TRAIN_LSTM = False
-MODEL_RECORDING_DIRECTORY = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-piloted-runs\\2020-10-27-21-42-48\\images"
-IMAGE_OUTPUT_DIRECTORY    = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\image_output"
-WEIGHTS_PATH              = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-checkpoints\\weights.004--0.9377.hdf5'
+MODEL_RECORDING_DIRECTORY = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\data\\2021-05-20-20-19-28\\images"
+IMAGE_OUTPUT_DIRECTORY    = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\visualbackprop"
+WEIGHTS_PATH              = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\logs\\target-redwood\\ncp-2021-03-21-13-22-05-rev=13.0-weights.028--0.8371.hdf5'
 
 # Setup the network
 SEQUENCE_LENGTH = 32
 IMAGE_SHAPE     = (256,256,3)
 
+# wiring = kncp.wirings.NCP(
+#     inter_neurons=12,   # Number of inter neurons
+#     command_neurons=8,  # Number of command neurons
+#     motor_neurons=3,    # Number of motor neurons
+#     sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
+#     inter_fanout=4,     # How many outgoing synapses has each inter neuron
+#     recurrent_command_synapses=4,   # Now many recurrent synapses are in the
+#                                     # command neuron layer
+#     motor_fanin=6,      # How many incomming syanpses has each motor neuron
+# )
+
+# rnnCell = kncp.LTCCell(wiring)
+
+# kernels = [
+#     (5,5),
+#     (5,5),
+#     (3,3),
+#     (3,3),
+#     (3,3),
+# ]
+
+# strides = [
+#     (2,2),
+#     (2,2),
+#     (2,2),
+#     (1,1),
+#     (1,1),
+# ]
+
+# fullModel = keras.models.Sequential()
+# fullModel.add(keras.Input(shape=(None, *IMAGE_SHAPE)))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=kernels[0], strides=strides[0], activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=kernels[1], strides=strides[1], activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=kernels[2], strides=strides[2], activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=kernels[3], strides=strides[3], activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=kernels[4], strides=strides[4], activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
+# fullModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
+# fullModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
+
+# fullModel.compile(
+#     optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
+# )
+
+# # LSTM network
+# penultimateOutput = fullModel.layers[-2].output
+# lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
+# lstmModel = keras.models.Model(fullModel.input, lstmOutput)
+
+# # Configure the model we will train
+# if TRAIN_LSTM:
+#     visualizeModel = lstmModel
+# else:
+#     visualizeModel = fullModel
+
+# NCP Model
 wiring = kncp.wirings.NCP(
     inter_neurons=12,   # Number of inter neurons
-    command_neurons=8,  # Number of command neurons
+    command_neurons=32, # Number of command neurons
     motor_neurons=3,    # Number of motor neurons
     sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
     recurrent_command_synapses=4,   # Now many recurrent synapses are in the
                                     # command neuron layer
-    motor_fanin=6,      # How many incomming syanpses has each motor neuron
+    motor_fanin=6,      # How many incoming syanpses has each motor neuron
 )
 
-rnnCell = kncp.LTCCell(wiring)
+print(dir(kncp))
+
+rnnCell = LTCCell(wiring)
 
 kernels = [
     (5,5),
-    (5,5),
     (3,3),
+    (2,2),
+    (2,2)
+] 
+
+strides = [ 
     (3,3),
-    (3,3),
+    (2,2),
+    (2,2),
+    (2,2),
 ]
 
-strides = [
-    (2,2),
-    (2,2),
-    (2,2),
-    (1,1),
-    (1,1),
-]
 
-fullModel = keras.models.Sequential()
-fullModel.add(keras.Input(shape=(None, *IMAGE_SHAPE)))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=kernels[0], strides=strides[0], activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=kernels[1], strides=strides[1], activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=kernels[2], strides=strides[2], activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=kernels[3], strides=strides[3], activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=kernels[4], strides=strides[4], activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1000, activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=100,  activation='relu')))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.3)))
-fullModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=24,   activation='relu')))
-fullModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
+ncpModel = keras.models.Sequential()
+ncpModel.add(keras.Input(shape=(SEQUENCE_LENGTH, *IMAGE_SHAPE)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8, kernel_size= (2,2), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='linear')))
+ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
-fullModel.compile(
-    optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
+ncpModel.compile(
+    optimizer=keras.optimizers.Adam(0.0005), loss="cosine_similarity",
 )
 
-# LSTM network
-penultimateOutput = fullModel.layers[-2].output
-lstmOutput        = keras.layers.SimpleRNN(units=3, return_sequences=True, activation='relu')(penultimateOutput)
-lstmModel = keras.models.Model(fullModel.input, lstmOutput)
+# Load weights
+visualizationModel = ncpModel
 
-# Configure the model we will train
-if TRAIN_LSTM:
-    visualizeModel = lstmModel
-else:
-    visualizeModel = fullModel
 
 # Load weights
-visualizeModel.load_weights(WEIGHTS_PATH)
+visualizationModel.load_weights(WEIGHTS_PATH)
+visualizationModel.summary(line_length=80)
 
-convolutionalLayers = fullModel.layers[:5]
+convolutionalLayers = visualizationModel.layers[:4]
 
-fullModel.summary()
+visualizationModel.summary()
+# print([l.output_shape for l in convolutionalLayers])
+
+# sys.exit()
+
 
 # Separate the covolutional and dense outputs for individual inspection
-convModel = keras.models.Model(fullModel.input, outputs=[fullModel.layers[4].output])
-denseModel = keras.models.Model(fullModel.input, outputs=[fullModel.layers[11].output])
+# convModel = keras.models.Model(visualizationModel.input, outputs=[visualizationModel.layers[4].output])
+# denseModel = keras.models.Model(visualizationModel.input, outputs=[visualizationModel.layers[11].output])
 # rnnModel  = keras.models.Model(fullModel.input, outputs=[keras.])
 
 # Visual saliancy
@@ -96,7 +154,8 @@ denseModel = keras.models.Model(fullModel.input, outputs=[fullModel.layers[11].o
 # convolutionalOutput = model.layers[4].output
 # saliencyDetector = ConvolutionHead(filters=convolutionalOutput.shape[-1], features_per_filter=(convolutionalOutput.shape[-3]*convolutionalOutput.shape[-2]))
 
-activationModel = keras.models.Model(inputs=fullModel.input, outputs=[layer.output for layer in convolutionalLayers])
+activationModel = keras.models.Model(inputs=visualizationModel.input, outputs=[layer.output for layer in convolutionalLayers])
+
 
 # Show LTC Model
 # plt.figure()
@@ -109,7 +168,7 @@ activationModel = keras.models.Model(inputs=fullModel.input, outputs=[layer.outp
 FEATURES_PER_ROW = 12
 
 layer_names = []
-for layer in fullModel.layers:
+for layer in visualizationModel.layers:
     layer_names.append(layer.name)
 
 images = np.zeros((1, SEQUENCE_LENGTH, *IMAGE_SHAPE))
@@ -139,6 +198,8 @@ for i, imageFile in enumerate(os.listdir(MODEL_RECORDING_DIRECTORY)):
         average_layer_maps.append(average_feature_map)
         #print(average_feature_map.shape)
 
+    # print(average_layer_maps)
+    # print(average_layer_maps[0].shape)
     average_layer_maps = [fm[np.newaxis, :, :, np.newaxis] for fm in average_layer_maps]
     saliency_mask = tf.constant(average_layer_maps[-1])
     for l in reversed(range(0, len(average_layer_maps))):

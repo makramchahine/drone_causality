@@ -1107,7 +1107,7 @@ def findTrackingKnots(startingPosition, targetTrajectories, occupancy_cache, con
         # print('t*', knot[3] + dt, endTime)
         return [(*voxel, t) for voxel in feasibleNeighbors]
 
-    def costToGoHeuristic(knot, position, orientation):
+    def costToGoHeuristic(knot):
         #TODO(cvorbach) Think about me?
         # centroid projected distance in camera plane
         # and euclidean distance from the start (make edge cost linear)
@@ -1116,16 +1116,18 @@ def findTrackingKnots(startingPosition, targetTrajectories, occupancy_cache, con
         s = np.array(start[:3])
 
         center, radius = walzBoundingSphere([traj(t) for traj in targetTrajectories])
+        yawAngle = np.arctan2((center - p)[1], (center - p)[0])
+        orientation = R.from_euler('xyz', [0,0,yawAngle])
 
-        z2x = R.from_euler('xyx', (-np.pi/2, -np.pi/2, 0))     # Rotates expected camera coordinates (z,x,y) to drone body frame (x,y,z)
-        cameraRotation = (z2x*orientation).inv().as_matrix()   # Rotate drone body frame to world frame, then get the inverse rotation
-        t = -cameraRotation.dot(position)[:, np.newaxis]       # Translation
+        z2x = R.from_euler('xyx', (-np.pi/2, -np.pi/2, 0))      # Rotates expected camera coordinates (z,x,y) to drone body frame (x,y,z)
+        cameraRotation = (z2x*orientation).inv().as_matrix()    # Rotate drone body frame to world frame, then get the inverse rotation
+        t = -cameraRotation.dot(p)[:, np.newaxis]               # Translation
         P = np.concatenate((cameraRotation, t), axis=1)
         P = np.concatenate((P, np.array(((0,0,0,1),))), axis=0) # Homogenous coordinates camera projection (unit focal length and pixel size)
 
-        centerTilde  = np.array(((*center, 1),))       # Location of bounding sphere center in homogenous coordinates
-        centerTilde  = P.dot(pTilde)                   # Project to image plane 
-        centerCamera = centerTilde[:2]/centerTilde[2]  # Get camera x,y coordinates
+        centerTilde  = np.array((*center, 1))[:, np.newaxis]    # Location of bounding sphere center in homogenous coordinates
+        centerTilde  = P.dot(centerTilde)                       # Project to image plane 
+        centerCamera = centerTilde[:2]/centerTilde[2]           # Get camera x,y coordinates
 
         projectiveCost = np.linalg.norm(centerCamera)
         movementCost   = distance(p,s)

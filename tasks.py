@@ -2,10 +2,11 @@
 # Utilities for creating and executing drone tasks in airsim
 
 import airsim
-from airsim import Vector3r, Pose, Quaternionr, YawMode
+from airsim import Vector3r, Quaternionr, YawMode
 import threading
 
 from planning import *
+
 
 # Operating Modes
 class Task: 
@@ -15,6 +16,23 @@ class Task:
     HIKING = 'hiking'
     DEMO = 'demo'
     MULTITRACK = 'multitrack'
+    INTERACTIVE = 'interactive'
+    OCCLUSION = 'occlusion'
+
+
+# Yaw Tracking Point
+class YawTrackingMode:
+    ENDPOINT = 'endpoint'
+    LOOKAHEAD = 'lookahead'
+
+class Visibility:
+    VISIBLE = 'visible'
+    NOT_VISIBLE = 'not_visible'
+    EITHER = 'either'
+
+class RunFailure(Exception):
+    pass
+
 
 class FlightController:
     def __init__(self, client, config):
@@ -34,12 +52,15 @@ class FlightController:
         return position, orientation
 
 
-    def isValidEndpoint(self, endpoint, requireVisible=False):
+    def isValidEndpoint(self, endpoint, visibility=Visibility.EITHER):
         if endpoint in self.occupancy_cache:
             return False
 
         position, orientation = self.getPose()
-        if requireVisible and not isVisible(endpoint, position, R.from_quat(orientation), self.config):
+        if visibility == Visibility.VISIBLE and not isVisible(endpoint, position, R.from_quat(orientation), self.config):
+            return False
+
+        if visibility == Visibility.NOT_VISIBLE and isVisible(endpoint, position, R.from_quat(orientation), self.config):
             return False
 
         # TODO(cvorbach) Check there is a valid path
@@ -47,16 +68,18 @@ class FlightController:
         return True
 
 
-    def generateMazeTarget(self, radius=50, zLimit=[-30, -10], requireVisible=False):
+    def generateMazeTarget(self, radius=50, zLimit=[-30, -10], visibility=Visibility.EITHER):
         isValid = False
         attempts = 0
         while not isValid:
             endpoint = np.array([
                 2 * radius * (random.random() - 0.5), 
                 2 * radius * (random.random() - 0.5), 
-                (zLimit[0] - zLimit[1]) * random.random() + zLimit[1]])
+                0])
 
-            isValid = self.isValidEndpoint(endpoint, requireVisible=requireVisible)
+            endpoint += self.getPose()[0]
+
+            isValid = self.isValidEndpoint(endpoint, visibility=visibility)
 
             attempts += 1
             if attempts > self.config['bogo_attempts']:
@@ -197,27 +220,23 @@ class FlightController:
         pursuitVector = self.config['drone_speed'] * normalize(pursuitVector)
         return pursuitVector
 
+    def getLookAhead(self, path, t, lookAhead, endT=1, dt=1e-2):
+        position, _           = self.getPose()
+        lookAheadPoint        = path(t)
+        lookAheadDisplacement = distance(lookAheadPoint, position)
 
-    def getLookAhead(self, path, t, position, lookAhead, endT=1, dt=1e-1):
-        lookAheadPoint        = position  # TODO(cvorbach) increments always?
-        lookAheadDisplacement = 0
-
-        while np.linalg.norm(lookAheadDisplacement) < lookAhead:
+        while lookAheadDisplacement < lookAhead:
             t += dt
 
             if t < endT:
-                lookAheadDisplacement = lookAheadPoint - position
-                lookAheadPoint = path(t)[:3]
+                lookAheadPoint = path(t)
+                lookAheadDisplacement = distance(lookAheadPoint, position)
             else:
                 t = endT
-                lookAheadPoint = path(t)[:3]
+                lookAheadPoint = path(t)
                 break
-                # TODO(cvorbach) unnecessary with extrapolation
-            
-        return t, lookAheadPoint
 
-    class RunFailure(Exception):
-        pass
+        return t, lookAheadPoint
 
     def animateTrajectory(self, marker, trajectory, t):
         markerPose = airsim.Pose()
@@ -238,12 +257,12 @@ class FlightController:
         raise NotImplementedError
 
 
-    def followPath(self, path, lookAhead = 2, dt = 1e-4, marker=None, earlyStopDistance=None, planningWrapper=None, planningKnots=None, recordingEndpoint=None, model=None):
-        startTime       = self.getTime()
-        position, _     = self.getPose()
-        t               = path.project(position) # find the new nearest path(t)
-        lookAheadPoint  = path(t)
-        reachedEnd      = False
+    def followPath(self, path, dt = 1e-4, marker=None, earlyStopDistance=None, planningWrapper=None, planningKnots=None, recordingEndpoint=None, model=None):
+        startTime      = self.getTime()
+        position, _    = self.getPose()
+        pathParameter  = path.project(position) # find the new nearest path(t)
+        lookAheadPoint = path(pathParameter)
+        reachedEnd     = False
 
         lastPlotTime    = self.getTime()
         markerPose      = airsim.Pose()
@@ -265,10 +284,9 @@ class FlightController:
         numBufferEntries   = 0
 
         # control loop
-        lastVelocity = None
-        alpha        = 1.0
         while not reachedEnd:
             position, orientation = self.getPose()
+            pathParameter         = path.project(position) # find the new nearest path(t)
             self.updateOccupancies()
 
             # handle timeout and collision check
@@ -287,7 +305,7 @@ class FlightController:
                     # update the spline path
                     if np.any(planningKnots != path.knotPoints):
                         path.fit(planningKnots.copy())
-                        t = path.project(position) # find the new nearest path(t)
+                        pathParameter = path.project(position) # find the new nearest path(t)
 
                     # restart planning
                     planningThread = threading.Thread(target=planningWrapper, args=(planningKnots,))
@@ -295,53 +313,33 @@ class FlightController:
 
                 planningThread.join(timeout=self.config['control_update_period'])
 
+            # advance the pursuit point if needed
+            lookAheadT, lookAheadPoint = self.getLookAhead(path, pathParameter, self.config['lookahead_distance'])
+            lookAheadDisplacement      = lookAheadPoint - position
+
             # place marker if passed
             if marker is not None:
-                markerT, markerPosition = self.getLookAhead(path, t, position, lookAhead)
-
-            #  tangent  = normalize(path.tangent(markerT))
-            #  normal   = normalize(np.cross(tangent, (0, 0, 1)))
-
-            #  inclinationAngle = np.pi + MAX_INCLINATION * (1 - np.abs(tangent[2])) # pi is b/c the drone is upside down at 0 inclination
-            #  inclination = R.from_rotvec(inclinationAngle*normal)
-            #  tangent     = inclination.apply([tangent[0], tangent[1], 0])
-
-            #  binormal = normalize(np.cross(tangent, normal))
-
-            #  markerOrientation = R.from_matrix(np.array([tangent, normal, binormal]).T)
-
-            #  markerPose.orientation = Quaternionr(*markerOrientation.as_quat())
-                markerPose.position    = Vector3r(*markerPosition)
+                markerPose.position    = Vector3r(*lookAheadPoint)
                 self.client.simSetObjectPose(marker, markerPose)
 
-            # advance the pursuit point if needed
-            # TODO(cvorbach) move to its own thread
-            t, lookAheadPoint = self.getLookAhead(path, t, position, lookAhead)
-            lookAheadDisplacement = lookAheadPoint - position
-            # print('t:', t)
-            if t >= 1:
+            # optionally stop within distance of path end
+            if distance(path.end(), position) < earlyStopDistance:
                 reachedEnd = True
+
+            if lookAheadT >= 1:
+                reachedEnd = True
+
+            if reachedEnd:
                 break
 
             if model is None:
-                # optionally stop within distance of path end
-                if earlyStopDistance is not None:
-                    if distance(path(1.0), position) < earlyStopDistance:
-                        reachedEnd = True
-
-                if reachedEnd:
-                    break
-
                 # get yaw angle and pursuit velocity to the lookAheadPoint
+                # TODO(cvorbach) parameterize which point yawAngle tracks
                 endpointDisplacement = path(1.0) - position
                 yawAngle = np.arctan2(endpointDisplacement[1], endpointDisplacement[0]) * RADIANS_2_DEGREES
+                yawAngle = np.arctan2(lookAheadDisplacement[1], lookAheadDisplacement[0]) * RADIANS_2_DEGREES
 
-                if lastVelocity is None:
-                    velocity = self.config['drone_speed'] * normalize(lookAheadDisplacement)
-                else:
-                    velocity = self.config['drone_speed'] * normalize(lookAheadDisplacement)
-                    velocity = alpha * velocity + (1-alpha)*lastVelocity
-                lastVelocity = velocity
+                velocity = self.config['drone_speed'] * normalize(lookAheadDisplacement)
 
                 # plot
                 if self.config['plot_debug']:
@@ -374,7 +372,6 @@ class FlightController:
                 # add the image to the sliding window
                 if numBufferEntries < self.config['seq_len']:
                     imagesBuffer[0, numBufferEntries] = image
-                    # gpsBuffer[0, numBufferEntries]    = gpsDirection
                     numBufferEntries += 1
                 else:
                     imagesBuffer[0]     = np.roll(imagesBuffer[0], -1, axis=0)
@@ -389,16 +386,16 @@ class FlightController:
                 yawRotation = R.from_euler('xyz', [0, 0, R.from_quat(orientation).as_euler('xyz')[2]])
 
                 # get yaw angle to the endpoint
-                lookAheadDisplacement = lookAheadPoint - position
-                yawAngle = np.arctan2(lookAheadDisplacement[1], lookAheadDisplacement[0]) * RADIANS_2_DEGREES
+                # lookAheadDisplacement = lookAheadPoint - position
+                # yawAngle = np.arctan2(lookAheadDisplacement[1], lookAheadDisplacement[0]) * RADIANS_2_DEGREES
 
                 endpointDisplacement = path(1.0) - position
                 yawAngle = np.arctan2(endpointDisplacement[1], endpointDisplacement[0]) * RADIANS_2_DEGREES
 
                 # check if we've reached the endpoint
-                if np.linalg.norm(endpointDisplacement) < self.config['endpoint_tolerance']:
-                    reachedEnd = True
-                    break
+                # if np.linalg.norm(endpointDisplacement) < self.config['endpoint_tolerance']:
+                #     reachedEnd = True
+                #     break
 
                 # start control thread
                 if controlThread is not None:

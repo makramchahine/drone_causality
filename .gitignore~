@@ -3,6 +3,8 @@
 save/
 log/
 
+tags
+
 # Ignore PyCharm idea files
 .idea
 __pycache__
@@ -11,5 +13,26 @@ __pycache__
 *.h5
 
 # Data
-training-data/*
+data/*
 model-checkpoints/*
+processed-data/*
+training-histories/*
+model-piloted-runs/*
+console-log/*
+junk/*
+history/*
+histories/*
+logs/*
+airsim/*
+setup_path.py
+*~
+
+# pyenv
+.python-version
+
+# keras
+.cache/*
+.keras/*
+
+# vim
+*.swp

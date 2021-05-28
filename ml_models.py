@@ -1,7 +1,9 @@
 # ml-models  Copyright (C) 2021  Charles Vorbach, Ramin Hasani, Alexander Amini
 from tensorflow import keras
 import kerasncp as kncp
+from kerasncp.tf import LTCCell
 from node_cell import *
+
 
 # Setup the ML Networks
 def initializeMLNetwork(config):
@@ -18,10 +20,10 @@ def initializeMLNetwork(config):
         motor_fanin=6,      # How many incoming syanpses has each motor neuron
     )
 
-    rnnCell = kncp.LTCCell(wiring)
+    rnnCell = LTCCell(wiring)
 
     ncpModel = keras.models.Sequential()
-    ncpModel.add(keras.Input(shape=(config['sequenceLength'], *config['imageShape'])))
+    ncpModel.add(keras.Input(shape=(config['seq_len'], *config['image_shape'])))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')))
     ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu')))
@@ -33,32 +35,32 @@ def initializeMLNetwork(config):
 
     # LSTM network
     penultimateOutput = ncpModel.layers[-2].output
-    lstmOutput        = keras.layers.LSTM(units=config['rnnSize'], return_sequences=True)(penultimateOutput)
+    lstmOutput        = keras.layers.LSTM(units=config['rnn_size'], return_sequences=True)(penultimateOutput)
     lstmOutput        = keras.layers.Dense(units=3, activation='linear')(lstmOutput)
     lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
     # Vanilla RNN network
     penultimateOutput = ncpModel.layers[-2].output
-    rnnOutput         = keras.layers.SimpleRNN(units=config['rnnSize'], return_sequences=True)(penultimateOutput)
+    rnnOutput         = keras.layers.SimpleRNN(units=config['rnn_size'], return_sequences=True)(penultimateOutput)
     rnnOutput         = keras.layers.Dense(units=3, activation='linear')(rnnOutput)
     rnnModel          = keras.models.Model(ncpModel.input, rnnOutput)
 
     # GRU network
     penultimateOutput = ncpModel.layers[-2].output
-    gruOutput         = keras.layers.GRU(units=config['rnnSize'], return_sequences=True)(penultimateOutput)
+    gruOutput         = keras.layers.GRU(units=config['rnn_size'], return_sequences=True)(penultimateOutput)
     gruOutput         = keras.layers.Dense(units=3, activation='linear')(gruOutput)
     gruModel          = keras.models.Model(ncpModel.input, gruOutput)
 
     # CT-GRU network
     penultimateOutput  = ncpModel.layers[-2].output
-    ctgruCell          = CTGRU(units=config['rnnSize'])
+    ctgruCell          = CTGRU(units=config['rnn_size'])
     ctgruOutput        = keras.layers.RNN(ctgruCell, return_sequences=True)(penultimateOutput)
     ctgruOutput        = keras.layers.Dense(units=3, activation='linear')(ctgruOutput)
     ctgruModel         = keras.models.Model(ncpModel.input, ctgruOutput)
 
     # ODE-RNN network
     penultimateOutput = ncpModel.layers[-2].output
-    odernnCell        = CTRNNCell(units=config['rnnSize'], method='dopri5')
+    odernnCell        = CTRNNCell(units=config['rnn_size'], method='dopri5')
     odernnOutput      = keras.layers.RNN(odernnCell, return_sequences=True)(penultimateOutput)
     odernnOutput      = keras.layers.Dense(units=3, activation='linear')(odernnOutput)
     odernnModel       = keras.models.Model(ncpModel.input, odernnOutput)
@@ -76,7 +78,7 @@ def initializeMLNetwork(config):
     # TODO(cvorbach) Not sure if this makes sense for a cnn?
 
     # Select the model we will train
-    modelName = config['modelName'] 
+    modelName = config['model_name'] 
     print(f'Loading ML Model [{modelName}]')
 
     if modelName == "lstm":
@@ -101,7 +103,7 @@ def initializeMLNetwork(config):
     )
 
     # Load weights
-    flightModel.load_weights(config['modelWeights'])
+    flightModel.load_weights(config['model_weights'])
     flightModel.summary(line_length=80)
 
     return flightModel
