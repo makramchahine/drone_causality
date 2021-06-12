@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import argparse
 import os
 import pickle
@@ -12,6 +13,7 @@ import numpy as np
 
 from tensorflow import keras
 import kerasncp as kncp
+from kerasncp.tf import LTCCell
 from node_cell import *
 
 MODEL_REVISION_LABEL = 13.0
@@ -35,7 +37,8 @@ parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
 IMAGE_SHAPE                = (256, 256, 3)
-POSITION_SHAPE             = (3,)
+#POSITION_SHAPE             = (3,)
+POSITION_SHAPE             = (4,)
 
 print("Creating logging directories, if they dont exist")
 for dir in [args.data_dir, args.save_dir, args.history_dir]:
@@ -164,7 +167,8 @@ if len(sampleDirectories) == 0:
 wiring = kncp.wirings.NCP(
     inter_neurons=12,   # Number of inter neurons
     command_neurons=32,  # Number of command neurons
-    motor_neurons=3,    # Number of motor neurons
+    #motor_neurons=3,    # Number of motor neurons
+    motor_neurons=4,    # Number of motor neurons
     sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
     recurrent_command_synapses=4,   # Now many recurrent synapses are in the
@@ -172,7 +176,8 @@ wiring = kncp.wirings.NCP(
     motor_fanin=6,      # How many incoming syanpses has each motor neuron
 )
 
-rnnCell = kncp.LTCCell(wiring)
+#rnnCell = kncp.LTCCell(wiring)
+rnnCell = LTCCell(wiring)
 
 ncpModel = keras.models.Sequential()
 ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
@@ -315,7 +320,7 @@ else:
         raise ValueError(f"Unsupported model type: {args.model}")
 
 trainingModel.compile(
-    optimizer=keras.optimizers.Adam(0.0005), loss="cosine_similarity",
+    optimizer=keras.optimizers.Adam(0.0005), loss="mean_squared_error",
 )
 
 # Load weights
