@@ -16,6 +16,8 @@ import kerasncp as kncp
 from kerasncp.tf import LTCCell
 from node_cell import *
 
+import matplotlib.pyplot as plt
+
 MODEL_REVISION_LABEL = 13.0
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
@@ -33,6 +35,8 @@ parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
 parser.add_argument("--gps_signal", dest="gps_signal", action="store_true")
 parser.add_argument('--cnn_units', type=int, default=1000)
+parser.add_argument('--infer_only', action='store_true', help='Use to run inference only. Must use with --hotstart')
+parser.add_argument('--plot_dir', type=str, default='none', help="Name of directory for inference plots")
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
@@ -80,7 +84,10 @@ class DataGenerator(keras.utils.Sequence):
 
         for i, directory in enumerate(directories):
             try:
-                X[i,] = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
+                img = np.load(os.path.join(args.data_dir, directory, 'images.npy')).astype(np.float32)
+                #img = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
+                img = ((img / 255.) - 0.5) / 0.03
+                X[i,] = img
                 Y[i,] = np.load(os.path.join(args.data_dir, directory, 'vectors.npy'))
             except Exception as e:
                 print("Failed on directory: ", directory)
@@ -320,7 +327,7 @@ else:
         raise ValueError(f"Unsupported model type: {args.model}")
 
 trainingModel.compile(
-    optimizer=keras.optimizers.Adam(0.0005), loss="mean_squared_error",
+    optimizer=keras.optimizers.Adam(0.05), loss="mean_squared_error",
 )
 
 # Load weights
@@ -329,26 +336,71 @@ if args.hotstart is not None:
 
 trainingModel.summary(line_length=80)
 
-# Train
-checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
-    save_weights_only=True,
-    save_best_only=True,
-    save_freq='epoch'
-)
-
-try:
-    h = trainingModel.fit(
-        x                   = trainData,
-        validation_data     = validData,
-        epochs              = args.epochs,
-        use_multiprocessing = False,
-        workers             = 1,
-        max_queue_size      = 5,
-        verbose             = 1,
-        callbacks           = [checkpointCallback]
+if not args.infer_only:
+    # Train
+    checkpointCallback = keras.callbacks.ModelCheckpoint(
+        filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
+        save_weights_only=True,
+        save_best_only=True,
+        save_freq='epoch'
     )
-finally:
-    # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
-        pickle.dump(trainingModel.history.history, fp)
+
+    try:
+        h = trainingModel.fit(
+            x                   = trainData,
+            validation_data     = validData,
+            epochs              = args.epochs,
+            use_multiprocessing = False,
+            workers             = 1,
+            max_queue_size      = 5,
+            verbose             = 1,
+            callbacks           = [checkpointCallback]
+        )
+    finally:
+        # Dump history
+        with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
+            pickle.dump(trainingModel.history.history, fp)
+
+else:
+
+    dirs = list(os.listdir(args.data_dir))
+    for d in dirs:
+        img = np.load(os.path.join(args.data_dir, d, 'images.npy'))
+        
+        prediction = trainingModel.predict(np.array([img]))
+        gt = np.load(os.path.join(args.data_dir, d, 'vectors.npy'))
+
+        plt.figure()
+        plt.plot(prediction[0,:,0])
+        plt.plot(gt[:,0])
+        plt.title('%s, x' % d)
+        plt.legend(['prediction', 'actual'])
+        plt.ylim([-1, 1])
+        plt.savefig(os.path.join(args.plot_dir, 'vx' + d + '.png'))
+
+        plt.figure()
+        plt.plot(prediction[0,:,1])
+        plt.plot(gt[:,1])
+        plt.title('%s, y' % d)
+        plt.legend(['prediction', 'actual'])
+        plt.ylim([-1, 1])
+        plt.savefig(os.path.join(args.plot_dir, 'vy' + d + '.png'))
+
+        plt.figure()
+        plt.plot(prediction[0,:,2])
+        plt.plot(gt[:,2])
+        plt.title('%s, z' % d)
+        plt.legend(['prediction', 'actual'])
+        plt.ylim([-1, 1])
+        plt.savefig(os.path.join(args.plot_dir, 'vz' + d + '.png'))
+
+        plt.figure()
+        plt.plot(prediction[0,:,3])
+        plt.plot(gt[:,3])
+        plt.title('%s, yawrate' % d)
+        plt.legend(['prediction', 'actual'])
+        plt.ylim([-1, 1])
+        plt.savefig(os.path.join(args.plot_dir, 'yawrate' + d + '.png'))
+
+        plt.close('all')
+
