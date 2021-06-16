@@ -28,7 +28,7 @@ parser.add_argument('--data_dir', type=str, default="./data", help='Path to trai
 parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
 parser.add_argument('--samples', type=int, default=None)
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--seq_len', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--val_split', type=float, default=0.1)
@@ -37,6 +37,7 @@ parser.add_argument("--gps_signal", dest="gps_signal", action="store_true")
 parser.add_argument('--cnn_units', type=int, default=1000)
 parser.add_argument('--infer_only', action='store_true', help='Use to run inference only. Must use with --hotstart')
 parser.add_argument('--plot_dir', type=str, default='none', help="Name of directory for inference plots")
+parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
@@ -88,7 +89,7 @@ class DataGenerator(keras.utils.Sequence):
                 #img = np.load(os.path.join(args.data_dir, directory, 'images.npy'))
                 img = ((img / 255.) - 0.5) / 0.03
                 X[i,] = img
-                Y[i,] = np.load(os.path.join(args.data_dir, directory, 'vectors.npy'))
+                Y[i,] = np.load(os.path.join(args.data_dir, directory, 'vectors.npy')) * 5
             except Exception as e:
                 print("Failed on directory: ", directory)
                 raise e
@@ -167,16 +168,16 @@ else:
     trainData = GPSDataGenerator(paritions['train'], min(args.batch_size, len(paritions['train'])), IMAGE_SHAPE, POSITION_SHAPE)
     validData = GPSDataGenerator(paritions['valid'], min(args.batch_size, len(paritions['valid'])), IMAGE_SHAPE, POSITION_SHAPE)
 
-if len(sampleDirectories) == 0:
-    raise ValueError("No samples in " + args.data_dir)
+#if len(sampleDirectories) == 0:
+#    raise ValueError("No samples in " + args.data_dir)
 
 # Setup the network
 wiring = kncp.wirings.NCP(
-    inter_neurons=12,   # Number of inter neurons
-    command_neurons=32,  # Number of command neurons
+    inter_neurons=18,   # Number of inter neurons
+    command_neurons=12,  # Number of command neurons
     #motor_neurons=3,    # Number of motor neurons
     motor_neurons=4,    # Number of motor neurons
-    sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
+    sensory_fanout=6,   # How many outgoing synapses has each sensory neuron
     inter_fanout=4,     # How many outgoing synapses has each inter neuron
     recurrent_command_synapses=4,   # Now many recurrent synapses are in the
                                     # command neuron layer
@@ -189,11 +190,27 @@ rnnCell = LTCCell(wiring)
 ncpModel = keras.models.Sequential()
 ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu')))
-ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8, kernel_size=(2,2), strides=(2,2), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(1,1), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(1,1), activation='relu')))
+ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=128, kernel_size=(2,2), strides=(2,2), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
+#kprint(tf.shape(keras.layers.TimeDistributed(keras.layers.Flatten())))
+
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5)))
+#ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='relu')))
+#ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='linear')))
 ncpModel.add(keras.layers.RNN(rnnCell, return_sequences=True))
 
@@ -213,7 +230,7 @@ npcMultiModel = keras.models.Model(inputs=[imageInput, gpsInput], outputs = [rnn
 # LSTM network
 penultimateOutput = ncpModel.layers[-2].output
 lstmOutput        = keras.layers.LSTM(units=args.rnn_size, return_sequences=True)(penultimateOutput)
-lstmOutput        = keras.layers.Dense(units=3, activation='linear')(lstmOutput)
+lstmOutput        = keras.layers.Dense(units=4, activation='linear')(lstmOutput)
 lstmModel = keras.models.Model(ncpModel.input, lstmOutput)
 
 # LSTM multiple input network
@@ -327,7 +344,7 @@ else:
         raise ValueError(f"Unsupported model type: {args.model}")
 
 trainingModel.compile(
-    optimizer=keras.optimizers.Adam(0.05), loss="mean_squared_error",
+    optimizer=keras.optimizers.Adam(0.0005), loss="mean_squared_error",
 )
 
 # Load weights
@@ -341,20 +358,38 @@ if not args.infer_only:
     checkpointCallback = keras.callbacks.ModelCheckpoint(
         filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
         save_weights_only=True,
-        save_best_only=True,
+        save_best_only=False,
         save_freq='epoch'
     )
 
+    log_dir = args.tb_dir
+    if not os.path.exists(log_dir):
+        #os.mkdir(log_dir)
+        os.makedirs(log_dir)
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
+    from video_frame_generator import VideoFrameGenerator
+    train_datagen = VideoFrameGenerator(rescale=1./255, zoom_range=0.1, width_shift_range=0.1, height_shift_range=0.1, brightness_range=(-.1,.1), featurewise_center=True, featurewise_std_normalization=True)
+    train_datagen.mean = 0.5
+    train_datagen.std = 0.03
+    train_generator = train_datagen.flow_from_directory(os.path.join(args.data_dir,'training'), target_size=(256, 256), batch_size=16, class_mode='npy')
+
+    test_datagen = VideoFrameGenerator(rescale=1./255, featurewise_center=True, featurewise_std_normalization=True)
+    test_datagen.mean = 0.5
+    test_datagen.std = 0.03
+    validation_generator = test_datagen.flow_from_directory(os.path.join(args.data_dir,'validation'), target_size=(256,256), batch_size=16, class_mode='npy')
     try:
         h = trainingModel.fit(
-            x                   = trainData,
-            validation_data     = validData,
+            #x                   = trainData,
+            x                   = train_generator,
+            #validation_data     = validData,
+            validation_data     = validation_generator,
             epochs              = args.epochs,
-            use_multiprocessing = False,
-            workers             = 1,
-            max_queue_size      = 5,
+            use_multiprocessing = True,
+            workers             = 16,
+            max_queue_size      = 20,
             verbose             = 1,
-            callbacks           = [checkpointCallback]
+            callbacks           = [checkpointCallback, tensorboard_callback]
         )
     finally:
         # Dump history
@@ -366,40 +401,41 @@ else:
     dirs = list(os.listdir(args.data_dir))
     for d in dirs:
         img = np.load(os.path.join(args.data_dir, d, 'images.npy'))
+        img = ((img / 255.) - 0.5) / 0.03
         
         prediction = trainingModel.predict(np.array([img]))
         gt = np.load(os.path.join(args.data_dir, d, 'vectors.npy'))
 
         plt.figure()
         plt.plot(prediction[0,:,0])
-        plt.plot(gt[:,0])
+        plt.plot(5*gt[:,0])
         plt.title('%s, x' % d)
         plt.legend(['prediction', 'actual'])
-        plt.ylim([-1, 1])
+        plt.ylim([-5, 5])
         plt.savefig(os.path.join(args.plot_dir, 'vx' + d + '.png'))
 
         plt.figure()
         plt.plot(prediction[0,:,1])
-        plt.plot(gt[:,1])
+        plt.plot(5*gt[:,1])
         plt.title('%s, y' % d)
         plt.legend(['prediction', 'actual'])
-        plt.ylim([-1, 1])
+        plt.ylim([-5, 5])
         plt.savefig(os.path.join(args.plot_dir, 'vy' + d + '.png'))
 
         plt.figure()
         plt.plot(prediction[0,:,2])
-        plt.plot(gt[:,2])
+        plt.plot(5*gt[:,2])
         plt.title('%s, z' % d)
         plt.legend(['prediction', 'actual'])
-        plt.ylim([-1, 1])
+        plt.ylim([-5, 5])
         plt.savefig(os.path.join(args.plot_dir, 'vz' + d + '.png'))
 
         plt.figure()
         plt.plot(prediction[0,:,3])
-        plt.plot(gt[:,3])
+        plt.plot(5*gt[:,3])
         plt.title('%s, yawrate' % d)
         plt.legend(['prediction', 'actual'])
-        plt.ylim([-1, 1])
+        plt.ylim([-5, 5])
         plt.savefig(os.path.join(args.plot_dir, 'yawrate' + d + '.png'))
 
         plt.close('all')

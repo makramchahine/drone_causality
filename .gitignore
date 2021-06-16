@@ -37,3 +37,6 @@ setup_path.py
 
 # vim
 *.swp
+
+aaron*
+*_logs
