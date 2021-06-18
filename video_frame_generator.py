@@ -33,6 +33,7 @@ class BatchFromFilesMixin():
                              image_data_generator,
                              target_size,
                              frames_per_step,
+                             label_scale,
                              color_mode,
                              data_format,
                              save_to_dir,
@@ -70,6 +71,7 @@ class BatchFromFilesMixin():
         self.target_size = tuple(target_size)
         self.keep_aspect_ratio = keep_aspect_ratio
         self.frames_per_step = frames_per_step
+        self.label_scale = label_scale
         if color_mode not in {'rgb', 'rgba', 'grayscale'}:
             raise ValueError('Invalid color mode:', color_mode,
                              '; expected "rgb", "rgba", or "grayscale".')
@@ -171,9 +173,9 @@ class BatchFromFilesMixin():
         elif self.class_mode != 'npy':
             return batch_x
         if self.sample_weight is None:
-            return batch_x, batch_y
+            return batch_x, batch_y * self.label_scale
         else:
-            return batch_x, batch_y, self.sample_weight[index_array]
+            return batch_x, batch_y * self.label_scale, self.sample_weight[index_array]
 
     @property
     def filepaths(self):
@@ -269,6 +271,7 @@ class DirectoryIterator(BatchFromFilesMixin, Iterator):
                  image_data_generator,
                  target_size=(256, 256),
                  frames_per_step=64,
+                 label_scale=1,
                  color_mode='rgb',
                  classes=None,
                  class_mode='categorical',
@@ -287,6 +290,7 @@ class DirectoryIterator(BatchFromFilesMixin, Iterator):
         super(DirectoryIterator, self).set_processing_attrs(image_data_generator,
                                                             target_size,
                                                             frames_per_step,
+                                                            label_scale,
                                                             color_mode,
                                                             data_format,
                                                             save_to_dir,
@@ -555,6 +559,7 @@ class VideoFrameGenerator(object):
                  data_format='channels_last',
                  validation_split=0.0,
                  interpolation_order=1,
+                 label_scale=1,
                  dtype='float32'):
 
         self.featurewise_center = featurewise_center
@@ -577,6 +582,7 @@ class VideoFrameGenerator(object):
         self.preprocessing_function = preprocessing_function
         self.dtype = dtype
         self.interpolation_order = interpolation_order
+        self.label_scale = label_scale
 
         if data_format not in {'channels_last', 'channels_first'}:
             raise ValueError(
@@ -814,6 +820,7 @@ class VideoFrameGenerator(object):
             directory,
             self,
             target_size=target_size,
+            label_scale=self.label_scale,
             frames_per_step=frames_per_step,
             keep_aspect_ratio=keep_aspect_ratio,
             color_mode=color_mode,

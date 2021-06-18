@@ -38,6 +38,7 @@ parser.add_argument('--cnn_units', type=int, default=1000)
 parser.add_argument('--infer_only', action='store_true', help='Use to run inference only. Must use with --hotstart')
 parser.add_argument('--plot_dir', type=str, default='none', help="Name of directory for inference plots")
 parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
+parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
@@ -344,7 +345,7 @@ else:
         raise ValueError(f"Unsupported model type: {args.model}")
 
 trainingModel.compile(
-    optimizer=keras.optimizers.Adam(0.0005), loss="mean_squared_error",
+    optimizer=keras.optimizers.Adam(args.lr), loss="mean_squared_error",
 )
 
 # Load weights
@@ -369,15 +370,17 @@ if not args.infer_only:
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
     from video_frame_generator import VideoFrameGenerator
-    train_datagen = VideoFrameGenerator(rescale=1./255, zoom_range=0.1, width_shift_range=0.1, height_shift_range=0.1, brightness_range=(-.1,.1), featurewise_center=True, featurewise_std_normalization=True)
+    #train_datagen = VideoFrameGenerator(rescale=1./255, zoom_range=0.1, width_shift_range=0.1, height_shift_range=0.1, brightness_range=(-.1,.1), featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
+    train_datagen = VideoFrameGenerator(rescale=1./255, width_shift_range=0.01, height_shift_range=0.01, featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
+    #train_datagen = VideoFrameGenerator(rescale=1./255, featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
     train_datagen.mean = 0.5
     train_datagen.std = 0.03
-    train_generator = train_datagen.flow_from_directory(os.path.join(args.data_dir,'training'), target_size=(256, 256), batch_size=16, class_mode='npy')
+    train_generator = train_datagen.flow_from_directory(os.path.join(args.data_dir,'training'), target_size=(256, 256), batch_size=16, frames_per_step=64, class_mode='npy')
 
-    test_datagen = VideoFrameGenerator(rescale=1./255, featurewise_center=True, featurewise_std_normalization=True)
+    test_datagen = VideoFrameGenerator(rescale=1./255, featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
     test_datagen.mean = 0.5
     test_datagen.std = 0.03
-    validation_generator = test_datagen.flow_from_directory(os.path.join(args.data_dir,'validation'), target_size=(256,256), batch_size=16, class_mode='npy')
+    validation_generator = test_datagen.flow_from_directory(os.path.join(args.data_dir,'validation'), target_size=(256,256), batch_size=16, frames_per_step=64, class_mode='npy')
     try:
         h = trainingModel.fit(
             #x                   = trainData,
