@@ -39,6 +39,7 @@ parser.add_argument('--infer_only', action='store_true', help='Use to run infere
 parser.add_argument('--plot_dir', type=str, default='none', help="Name of directory for inference plots")
 parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
 parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
+parser.add_argument('--opt', type=str, default='adam', help="Optimizer to use (adam, sgd)")
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
@@ -344,9 +345,14 @@ else:
     else:
         raise ValueError(f"Unsupported model type: {args.model}")
 
-trainingModel.compile(
-    optimizer=keras.optimizers.Adam(args.lr), loss="mean_squared_error",
-)
+if args.opt == 'adam':
+    optimizer = keras.optimizers.Adam(learning_rate=args.lr)
+elif args.opt == 'sgd':
+    optimizer = keras.optimizers.SGD(learning_rate=args.lr)
+else:
+    raise Exception('Unsupported optimizer type %s' % args.opt)
+
+trainingModel.compile(optimizer=optimizer, loss="mean_squared_error")
 
 # Load weights
 if args.hotstart is not None:
