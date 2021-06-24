@@ -260,18 +260,18 @@ for i in range(config['num_repetitions']):
 
             # Move camera
             rotation = R.from_rotvec(3*np.pi/2 * np.array([0,0,1]))  
-            camera_pose = airsim.Pose(Vector3r(0,8,0), Quaternionr(*rotation.as_quat())) 
+            camera_pose = airsim.Pose(Vector3r(0,3,0), Quaternionr(*rotation.as_quat())) 
             client.simSetCameraPose('0', camera_pose)
 
             flight_control.moveToEndpoint(loop(0))
 
-            if config['record']:
-                client.startRecording()
+            # if config['record']:
+            #     client.startRecording()
 
             flight_control.followPath(loop)
 
-            if config['record']:
-                client.stopRecording()
+            # if config['record']:
+            #     client.stopRecording()
 
         if config['task'] == Task.TARGET:
             marker = markers[0]

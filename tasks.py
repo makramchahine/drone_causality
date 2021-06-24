@@ -257,7 +257,7 @@ class FlightController:
         raise NotImplementedError
 
 
-    def followPath(self, path, dt = 1e-4, marker=None, earlyStopDistance=None, planningWrapper=None, planningKnots=None, recordingEndpoint=None, model=None):
+    def followPath(self, path, dt = 1e-4, marker=None, endpointTolerance=1, planningWrapper=None, planningKnots=None, recordingEndpoint=None, model=None):
         startTime      = self.getTime()
         position, _    = self.getPose()
         pathParameter  = path.project(position) # find the new nearest path(t)
@@ -323,7 +323,7 @@ class FlightController:
                 self.client.simSetObjectPose(marker, markerPose)
 
             # optionally stop within distance of path end
-            if distance(path.end(), position) < earlyStopDistance:
+            if distance(path.end(), position) < endpointTolerance:
                 reachedEnd = True
 
             if lookAheadT >= 1:
@@ -443,7 +443,7 @@ class FlightController:
         else:
             recordingEndpoint = None
 
-        self.followPath(pathToEndpoint, earlyStopDistance=self.config['endpoint_tolerance'], planningWrapper=planningWrapper, planningKnots=pathKnots, recordingEndpoint=recordingEndpoint, model=model)
+        self.followPath(pathToEndpoint, endpointTolerance=self.config['endpoint_tolerance'], planningWrapper=planningWrapper, planningKnots=pathKnots, recordingEndpoint=recordingEndpoint, model=model)
         print('Reached Endpoint')
 
 

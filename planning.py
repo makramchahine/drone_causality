@@ -402,6 +402,9 @@ class Loop:
         nearstT  = tSamples[np.argmin([np.linalg.norm(point - self(t)) for t in tSamples])]
         return nearstT
 
+    def end(self):
+        return self(1.0)
+
 def generateLoop(minRadius=6, maxRadius=9, knotCount=6, center=np.zeros((3,))):
     '''
     Generates a random closed loop with 'good' defaults.

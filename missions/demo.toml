@@ -16,10 +16,12 @@ occupancy_cache_size = 100000
 lookahead_distance   = 0.75
 bogo_attempts        = 5000
 
-num_repetitions      = 10
+num_repetitions      = 500
 timeout              = 30
 autoKill             = false
 record               = false
+fog                  = 0
+rain                 = 0
 
 # ML model configuration
 use_model  = false
