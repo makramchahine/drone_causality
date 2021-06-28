@@ -13,8 +13,13 @@ import tensorflow as tf
 from tensorflow import keras
 #from node_cell import *
 
+def tlen(dataset):
+    for (ix, _) in enumerate(dataset):
+        pass
+    return ix
 
-from tf_data_loader import load_dataset
+
+from tf_data_loader import load_dataset, get_dataset_multi
 from keras_models import generate_ncp_model, generate_lstm_model
 
 MODEL_REVISION_LABEL = 13.0
@@ -43,6 +48,7 @@ parser.add_argument('--label_scale', type=float, default=1, help='Scale factor t
 parser.add_argument('--translation_factor', type=float, default=0.1, help='Amount to (randomly) translate width and height (0 - 1.0). Must be used with --augment.')
 parser.add_argument('--rotation_factor', type=float, default=0.1, help='Amount to (randomly) rotate (0.0 - 1.0). Must be used with --augment.')
 parser.add_argument('--zoom_factor', type=float, default=0.1, help='Amount to (randomly) zoom. Must be used with --augment.')
+parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
 
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
@@ -57,25 +63,39 @@ IMAGE_SHAPE                = (256, 256, 3)
 POSITION_SHAPE             = (4,)
 
 
-training_np, validation_np = load_dataset(args.data_dir, args.label_scale)
+#training_np, validation_np = load_dataset(args.data_dir, args.label_scale)
 
-print('============================')
-print('Training Input Shape: ', training_np[0].shape)
-print('Training Labels Shape: ', training_np[1].shape)
-print('Training Input Size in RAM: ' + str(training_np[0].size * training_np[0].itemsize / 1e9) + ' GB')
-print('----------------------------')
-print('Validation Input Shape: ', validation_np[0].shape)
-print('Validation Labels Shape: ', validation_np[1].shape)
-print('Validation Input Size in RAM: ' + str(validation_np[0].size * validation_np[0].itemsize / 1e9) + ' GB')
+#print('============================')
+#print('Training Input Shape: ', training_np[0].shape)
+#print('Training Labels Shape: ', training_np[1].shape)
+#print('Training Input Size in RAM: ' + str(training_np[0].size * training_np[0].itemsize / 1e9) + ' GB')
+#print('----------------------------')
+#print('Validation Input Shape: ', validation_np[0].shape)
+#print('Validation Labels Shape: ', validation_np[1].shape)
+#print('Validation Input Size in RAM: ' + str(validation_np[0].size * validation_np[0].itemsize / 1e9) + ' GB')
 
-training_dataset = tf.data.Dataset.from_tensor_slices(training_np).shuffle(100).batch(args.batch_size)
-validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
+#training_dataset = tf.data.Dataset.from_tensor_slices(training_np).shuffle(100).batch(args.batch_size)
+#validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
+
+training_dataset, validation_dataset = get_dataset_multi(args.data_dir, 64, 1, args.data_stride, args.val_split, args.label_scale)
+training_dataset = training_dataset.shuffle(100).batch(args.batch_size)
+
+td = training_dataset
+print(td)
+print(tlen(td))
+for x in td.take(1):
+    print(x)
+
+validation_dataset = validation_dataset.batch(args.batch_size)
+
 
 
 if args.model == 'ncp':
-    model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
+    #model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
+    model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, None, augmentation_params)
 elif args.model == 'lstm':
-    model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
+    #model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
+    model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, None, augmentation_params)
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 
