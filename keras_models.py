@@ -2,8 +2,11 @@ from tensorflow import keras
 from kerasncp.tf import LTCCell
 import kerasncp as kncp
 
+
 def generate_lstm_model(rnn_size, seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None):
     lstm_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params)
+    lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
+    lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
     lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
     lstm_model.add(keras.layers.Dense(units=4, activation='linear'))
     return lstm_model
@@ -34,22 +37,44 @@ def generate_ncp_model(seq_len, image_shape, do_normalization, do_augmentation, 
 
 
 def generate_convolutional_layers(model):
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=128, kernel_size=(2,2), strides=(2,2), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(2,2), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8, kernel_size=(2,2), strides=(2,2), activation='relu')))
+
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(2,2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    #model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(2,2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8,  kernel_size=(3,3), strides=(3,3), activation='relu')))
+
     return model
 
 

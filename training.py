@@ -40,6 +40,7 @@ parser.add_argument('--plot_dir', type=str, default='none', help="Name of direct
 parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
 parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
 parser.add_argument('--opt', type=str, default='adam', help="Optimizer to use (adam, sgd)")
+parser.add_argument('--augment', type=bool, action='store_true', help="Whether to turn on data augmentation in network")
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
 
@@ -191,6 +192,19 @@ rnnCell = LTCCell(wiring)
 
 ncpModel = keras.models.Sequential()
 ncpModel.add(keras.Input(shape=(args.seq_len, *IMAGE_SHAPE)))
+
+if args.model_normalization:
+    ncpModel.add(keras.layers.experimental.preprocessing.Rescaling(1./255))
+    normalization_layer = keras.layers.experimental.preprocessing.Normalization()
+    normalization_layer.adapt(DATA) # DATA is all the data after loading into RAM (single array)
+    ncpModel.add(normalization_layer)
+
+if args.augment:
+    # translate -> rotate -> zoom
+    ncpModel.add(keras.layers.experimental.preprocessing.RandomTranslation(height_factor=0.1, weidth_factor=0.1))
+    ncpModel.add(keras.layers.experimental.preprocessing.RandomRotation(0.05))
+    ncpModel.add(keras.layers.experimental.preprocessing.RandomZoom(height_factor=0.1, weidth_factor=0.1))
+
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')))
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
 ncpModel.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(3,3), strides=(1,1), activation='relu'))) # added
@@ -377,7 +391,7 @@ if not args.infer_only:
 
     from video_frame_generator import VideoFrameGenerator
     #train_datagen = VideoFrameGenerator(rescale=1./255, zoom_range=0.1, width_shift_range=0.1, height_shift_range=0.1, brightness_range=(-.1,.1), featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
-    train_datagen = VideoFrameGenerator(rescale=1./255, width_shift_range=0.01, height_shift_range=0.01, featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
+    train_datagen = VideoFrameGenerator(rescale=1./255, width_shift_range=0.1, height_shift_range=0.1, featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
     #train_datagen = VideoFrameGenerator(rescale=1./255, featurewise_center=True, featurewise_std_normalization=True, label_scale=5)
     train_datagen.mean = 0.5
     train_datagen.std = 0.03

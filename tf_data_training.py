@@ -35,6 +35,7 @@ parser.add_argument('--hotstart', type=str, default=None, help="Starting weights
 parser.add_argument('--cnn_units', type=int, default=1000)
 parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
 parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
+parser.add_argument('--momentum', type=float, default='0.0', help="Momentum (for use with SGD)")
 parser.add_argument('--opt', type=str, default='adam', help="Optimizer to use (adam, sgd)")
 parser.add_argument('--augment', action='store_true', help="Whether to turn on data augmentation in network")
 parser.add_argument('--normalize', action='store_true', help="Whether to have float conversion and normalization inside network layers")
@@ -78,10 +79,11 @@ elif args.model == 'lstm':
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 
+
 if args.opt == 'adam':
     optimizer = keras.optimizers.Adam(learning_rate=args.lr)
 elif args.opt == 'sgd':
-    optimizer = keras.optimizers.SGD(learning_rate=args.lr)
+    optimizer = keras.optimizers.SGD(learning_rate=args.lr, momentum=args.momentum)
 else:
     raise Exception('Unsupported optimizer type %s' % args.opt)
 
@@ -98,7 +100,7 @@ checkpointCallback = keras.callbacks.ModelCheckpoint(
     filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
     save_weights_only=True,
     save_best_only=False,
-    save_freq='epoch'
+    #save_freq='epoch'
 )
 
 log_dir = args.tb_dir
