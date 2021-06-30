@@ -49,6 +49,7 @@ parser.add_argument('--translation_factor', type=float, default=0.1, help='Amoun
 parser.add_argument('--rotation_factor', type=float, default=0.1, help='Amount to (randomly) rotate (0.0 - 1.0). Must be used with --augment.')
 parser.add_argument('--zoom_factor', type=float, default=0.1, help='Amount to (randomly) zoom. Must be used with --augment.')
 parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
+parser.add_argument('--data_shift', type=int, default=1, help='Window shift between windows. Default=1.')
 
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
@@ -77,7 +78,7 @@ POSITION_SHAPE             = (4,)
 #training_dataset = tf.data.Dataset.from_tensor_slices(training_np).shuffle(100).batch(args.batch_size)
 #validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
 
-training_dataset, validation_dataset = get_dataset_multi(args.data_dir, 64, 1, args.data_stride, args.val_split, args.label_scale)
+training_dataset, validation_dataset = get_dataset_multi(args.data_dir, 64, args.data_shift, args.data_stride, args.val_split, args.label_scale)
 training_dataset = training_dataset.shuffle(100).batch(args.batch_size)
 
 td = training_dataset

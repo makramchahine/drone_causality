@@ -57,7 +57,7 @@ def get_dataset_multi(root, seq_len, shift, stride, validation_ratio, label_scal
 
     indices = np.arange(len(ds))
     np.random.shuffle(indices)
-    val_ix = int(len(ds) * 0.2)
+    val_ix = int(len(ds) * validation_ratio)
     validation_datasets = ds[:val_ix]
     training_datasets = ds[val_ix:]
     
