@@ -6,8 +6,8 @@ import kerasncp as kncp
 def generate_lstm_model(rnn_size, seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None):
     lstm_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params)
     lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
-    lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
-    lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
+    #lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
+    #lstm_model.add(keras.layers.LSTM(units=rnn_size, return_sequences=True))
     lstm_model.add(keras.layers.Dense(units=4, activation='linear'))
     return lstm_model
 

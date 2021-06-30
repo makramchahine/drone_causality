@@ -81,10 +81,10 @@ training_dataset, validation_dataset = get_dataset_multi(args.data_dir, 64, 1, a
 training_dataset = training_dataset.shuffle(100).batch(args.batch_size)
 
 td = training_dataset
-print(td)
-print(tlen(td))
-for x in td.take(1):
-    print(x)
+#print(td)
+#print(tlen(td))
+#for x in td.take(1):
+#    print(x)
 
 validation_dataset = validation_dataset.batch(args.batch_size)
 
@@ -126,7 +126,8 @@ checkpointCallback = keras.callbacks.ModelCheckpoint(
 log_dir = args.tb_dir
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, profile_batch='10, 15')
+#tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, profile_batch='10, 15')
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, update_freq=100)
 
 try:
     h = model.fit(
