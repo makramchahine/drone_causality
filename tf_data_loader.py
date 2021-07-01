@@ -34,7 +34,7 @@ def load_dataset_multi(root, seq_len, shift, stride, label_scale):
         return tf.data.Dataset.zip((sfb, slb))
         #return sub.batch(seq_len, drop_remainder=True)
 
-    dirs = os.listdir(root)[:5]
+    dirs = os.listdir(root)
     datasets = []
     for d in dirs:
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1)
