@@ -60,7 +60,8 @@ augmentation_params['translation'] = args.translation_factor
 augmentation_params['rotation'] = args.rotation_factor
 augmentation_params['zoom'] = args.zoom_factor
 
-IMAGE_SHAPE                = (256, 256, 3)
+#IMAGE_SHAPE                = (256, 256, 3)
+IMAGE_SHAPE                = (170, 256, 3)
 POSITION_SHAPE             = (4,)
 
 
@@ -79,9 +80,16 @@ POSITION_SHAPE             = (4,)
 #validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
 
 training_dataset, validation_dataset = get_dataset_multi(args.data_dir, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale)
+#from matplotlib.image import imsave
+#for ds in training_dataset.take(1):
+#    for (ix, d) in enumerate(ds[0]):
+#        img = d.numpy()
+#        print(img.shape)
+#        imsave('window_test/clip%03d.jpg' % ix, img)
+
+print('\n\nTraining Dataset Size: %d\n\n' % tlen(training_dataset))
 training_dataset = training_dataset.shuffle(100).batch(args.batch_size)
 
-td = training_dataset
 
 validation_dataset = validation_dataset.batch(args.batch_size)
 

@@ -41,9 +41,12 @@ def load_dataset_multi(root, seq_len, shift, stride, label_scale):
         labels = labels[:,1:] * label_scale
         labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
         n_images = len(os.listdir(os.path.join(root, d))) - 1
-        dataset_np = np.empty((n_images, 256, 256, 3), dtype=np.uint8)
+        #dataset_np = np.empty((n_images, 256, 256, 3), dtype=np.uint8)
+        dataset_np = np.empty((n_images, 170, 256, 3), dtype=np.uint8)
+
         for ix in range(n_images):
-            dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
+            #dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
+            dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))[86:, :, :]
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
         dataset = tf.data.Dataset.zip((images_dataset, labels_dataset))
