@@ -1,137 +1,188 @@
+from re import S
 import tensorflow as tf
 from tensorflow import keras
 import kerasncp as kncp
+from kerasncp.tf import LTCCell
+from node_cell import *
 
 import matplotlib.pyplot as plt
+import matplotlib
 import PIL.Image
 import numpy as np
 import os
 import datetime
 from functools import reduce
-from operator import mul
+from operator import length_hint, mul
 import pickle
+import argparse
 
-# from mxnet.gluon import nn
-# from mxnet import np, npx, init
-NEURON = 0
+import rowan
+from scipy.spatial.transform import Rotation as R
 
-TRAIN_LSTM = False
-MODEL_RECORDING_DIRECTORY = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-piloted-runs\\2020-11-04-21-44-59\\images"
+parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
+parser.add_argument('--rnn_size', type=int, default=32, help='Select the size of RNN network you would like to train')
+parser.add_argument('--seq_len', type=int, default=16)
+parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--data_dir', type=str, default="./data/2021-06-19-03-37-00", help='Path to training data')
+args = parser.parse_args()
+
 IMAGE_OUTPUT_DIRECTORY    = "C:\\Users\\MIT Driverless\\Documents\\deepdrone\\image_output"
-WEIGHTS_PATH              = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-checkpoints\\new-ncp-2020_10_29_16_56_05-weights.022--0.8495.hdf5'
+WEIGHTS_PATH              = 'C:\\Users\\MIT Driverless\\Documents\\deepdrone\\model-checkpoints\\ncp_encoder_decoder-2021_06_24_23_25_30-rev=13.0-weights.026-0.0494.hdf5'
 
 # Setup the network
-BATCH_SIZE      = 1
-SEQUENCE_LENGTH = 32
 IMAGE_SHAPE     = (256,256,3)
 
-wiring = kncp.wirings.NCP(
-    inter_neurons=12,   # Number of inter neurons
-    command_neurons=8,  # Number of command neurons
-    motor_neurons=3,    # Number of motor neurons
-    sensory_fanout=4,   # How many outgoing synapses has each sensory neuron
-    inter_fanout=4,     # How many outgoing synapses has each inter neuron
-    recurrent_command_synapses=4,   # Now many recurrent synapses are in the
-                                    # command neuron layer
-    motor_fanin=6,      # How many incomming syanpses has each motor neuron
-)
+encoder_inputs = keras.Input(shape=(args.seq_len, *IMAGE_SHAPE))
+encoder        = encoder_inputs
 
-rnnCell = kncp.LTCCell(wiring)
-
-kernels = [
-    (5,5),
-    (5,5),
-    (3,3),
-    (3,3),
-    (3,3),
+convolutionalLayers = [
+    keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu')),
+    keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu')),
+    keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu')),
+    keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8,  kernel_size=(2,2), strides=(2,2), activation='relu'))
 ]
 
-strides = [
-    (2,2),
-    (2,2),
-    (2,2),
-    (1,1),
-    (1,1),
-]
+for l in convolutionalLayers:
+    encoder = l(encoder)
 
-inputs = keras.Input(batch_size = BATCH_SIZE, shape = (SEQUENCE_LENGTH, *IMAGE_SHAPE))
-c1 = keras.layers.Conv2D(filters=24, kernel_size=kernels[0], strides=strides[0], activation='relu')(inputs)
-c2 = keras.layers.Conv2D(filters=36, kernel_size=kernels[1], strides=strides[1], activation='relu')(c1)
-c3 = keras.layers.Conv2D(filters=48, kernel_size=kernels[2], strides=strides[2], activation='relu')(c2)
-c4 = keras.layers.Conv2D(filters=64, kernel_size=kernels[3], strides=strides[3], activation='relu')(c3)
-c5 = keras.layers.Conv2D(filters=64, kernel_size=kernels[4], strides=strides[4], activation='relu')(c4)
-f1 = keras.layers.Reshape((SEQUENCE_LENGTH, reduce(mul, c5.shape[2:])))(c5)
-d1 = keras.layers.Dropout(rate=0.5)(f1)
-den2 = keras.layers.Dense(units=24, activation='linear')(d1)
+encoder = keras.layers.TimeDistributed(keras.layers.Flatten())(encoder)
+encoder = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5))(encoder)
+encoder = keras.layers.TimeDistributed(keras.layers.Dense(units=64, activation='linear'))(encoder)
 
-rnn, state = keras.layers.RNN(rnnCell, return_state=True)(den2)
+encoderRnnCell = LTCCell(kncp.wirings.FullyConnected(64, 13))
+encoder_outputs, hidden_state = keras.layers.RNN(encoderRnnCell, return_sequences=True, return_state=True)(encoder)
 
-model = keras.models.Model(inputs=inputs, outputs = [rnn, state])
+decoder_inputs = keras.Input(shape=(args.seq_len, *IMAGE_SHAPE))
+decoder = keras.layers.TimeDistributed(keras.layers.Conv2D(filters=16, kernel_size=(5,5), strides=(3,3), activation='relu'))(decoder_inputs)
+decoder = keras.layers.TimeDistributed(keras.layers.Conv2D(filters=32, kernel_size=(3,3), strides=(2,2), activation='relu'))(decoder)
+decoder = keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(2,2), strides=(2,2), activation='relu'))(decoder)
+decoder = keras.layers.TimeDistributed(keras.layers.Conv2D(filters=8,  kernel_size=(2,2), strides=(2,2), activation='relu'))(decoder)
+decoder = keras.layers.TimeDistributed(keras.layers.Flatten())(decoder)
+decoder = keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.5))(decoder)
+decoder = keras.layers.TimeDistributed(keras.layers.Dense(units=64, activation='linear'))(decoder)
+
+decoderRnnCell = LTCCell(kncp.wirings.FullyConnected(64, 13))
+decoder_outputs = keras.layers.RNN(decoderRnnCell, return_sequences=True)(decoder, initial_state=hidden_state)
+
+encoder_decoder_model = keras.Model([encoder_inputs, decoder_inputs], decoder_outputs)
+
+model = encoder_decoder_model
 
 model.compile(
-    optimizer=keras.optimizers.Adam(0.00005), loss="cosine_similarity",
+    optimizer=keras.optimizers.Adam(0.0005), loss="mean_squared_error",
 )
 
 # Load weights
 model.load_weights(WEIGHTS_PATH)
-
-model.summary()
+model.summary(line_length=80)
+tf.keras.utils.plot_model(
+    model,
+)
 
 # Load images
-imageFiles = os.listdir(MODEL_RECORDING_DIRECTORY)
-images = np.zeros((len(imageFiles), *IMAGE_SHAPE))
-for i, imageFile in enumerate(imageFiles):
-    try:
-        image = np.array(PIL.Image.open(MODEL_RECORDING_DIRECTORY + '\\' + imageFile).convert('RGB'), dtype=np.float32) / 255
-    except PIL.UnidentifiedImageError:
-        raise Exception("Image: ", MODEL_RECORDING_DIRECTORY, "\\", imageFile, " is corrupt.")
+images = np.load(f'{args.data_dir}/images.npy')
+states = np.load(f'{args.data_dir}/vectors.npy').view('<f4').reshape(args.seq_len, -1)
 
-    images[i] = image
-
-batch = np.zeros((BATCH_SIZE, SEQUENCE_LENGTH, *IMAGE_SHAPE))
+batch = np.zeros((1, args.seq_len, *IMAGE_SHAPE))
 k = 0
-vectors = []
-activations = []
-while (k + 1) * BATCH_SIZE * SEQUENCE_LENGTH < len(imageFiles):
-    for i in range(BATCH_SIZE):
-        for j in range(SEQUENCE_LENGTH):
-            batch[i, j] = images[k * BATCH_SIZE * SEQUENCE_LENGTH + i * SEQUENCE_LENGTH + j]
+statePredictions = []
 
-            prediction, state = model.predict(batch)
-            print(prediction.shape)
-            vectors.append(prediction[0])
-            activations.append(state[0, NEURON])
-    k += 1
+for i in range(images.shape[0]):
+    if i < args.seq_len:
+        batch[0, i]  = images[i]
+    else:
+        batch[0]     = np.roll(batch[0], -1, axis=0)  
+        batch[0][-1] = images[i]
+
+    # if i == 9:
+    #     plt.imshow(images[i])
+    #     plt.show()
+
+    prediction = model.predict([batch, batch])[0, min(i, args.seq_len-1)]
+    statePredictions.append(prediction)
+
+statePredictions = np.array(statePredictions)
+
+print(statePredictions.shape)
 
 # with open('vectors.p', 'wb') as f:
-#     pickle.dump(vectors, f)
-# 
-# with open('activations.p', 'wb') as f:
-#     pickle.dump(activations, f)
+#     pickle.dump(statePredictions, f)
 
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 import matplotlib.pyplot as plt
 
-SPEED = 0.5
-TIMESTEP = 0.05
+# with open('vectors.p', 'rb') as f:
+#     statePredictions = np.array(pickle.load(f))
 
-with open('vectors.p', 'rb') as f:
-    vectors = pickle.load(f)
-
-with open('activations.p', 'rb') as f:
-    activations = pickle.load(f)
-
-positions = np.zeros((len(vectors) + 1, 3))
-for i, v in enumerate(vectors):
-    positions[i+1] = v * SPEED * TIMESTEP + positions[i]
-
-positions = positions[1:]
-
-print(positions[0])
+print(statePredictions.shape)
 
 fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+ax = fig.add_subplot(projection='3d')
 
-ax.scatter(positions[:, 0], positions[:, 1], positions[:, 2], c = activations)
-plt.title('Neuron ', NEURON, ' Activations')
-# plt.show()
+ax.quiver(statePredictions[:, 0], statePredictions[:, 1], statePredictions[:, 2], 
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[0, 0] for i in range(statePredictions.shape[0])],
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[1, 0] for i in range(statePredictions.shape[0])],
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[2, 0] for i in range(statePredictions.shape[0])],
+    length=0.1,
+    normalize=True,
+    color='red'
+)
+
+ax.quiver(statePredictions[:, 0], statePredictions[:, 1], statePredictions[:, 2], 
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[0, 1] for i in range(statePredictions.shape[0])],
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[1, 1] for i in range(statePredictions.shape[0])],
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[2, 1] for i in range(statePredictions.shape[0])],
+    length=0.1,
+    normalize=True,
+    color='blue'
+)
+
+ax.quiver(statePredictions[:, 0], statePredictions[:, 1], statePredictions[:, 2], 
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[0, 2] for i in range(statePredictions.shape[0])],
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[1, 2] for i in range(statePredictions.shape[0])],
+    [R.from_quat(statePredictions[i, 3:7]).as_matrix()[2, 2] for i in range(statePredictions.shape[0])],
+    length=0.1,
+    normalize=True,
+    color='green'
+)
+
+ax.quiver(states[:, 0], states[:, 1], states[:, 2], 
+    [R.from_quat(states[i, 3:7]).as_matrix()[0, 0] for i in range(states.shape[0])],
+    [R.from_quat(states[i, 3:7]).as_matrix()[1, 0] for i in range(states.shape[0])],
+    [R.from_quat(states[i, 3:7]).as_matrix()[2, 0] for i in range(states.shape[0])],
+    length=0.1,
+    normalize=True,
+    color='red'
+)
+
+ax.quiver(states[:, 0], states[:, 1], states[:, 2], 
+    [R.from_quat(states[i, 3:7]).as_matrix()[0, 1] for i in range(states.shape[0])],
+    [R.from_quat(states[i, 3:7]).as_matrix()[1, 1] for i in range(states.shape[0])],
+    [R.from_quat(states[i, 3:7]).as_matrix()[2, 1] for i in range(states.shape[0])],
+    length=0.1,
+    normalize=True,
+    color='blue'
+)
+
+ax.quiver(states[:, 0], states[:, 1], states[:, 2], 
+    [R.from_quat(states[i, 3:7]).as_matrix()[0, 2] for i in range(states.shape[0])],
+    [R.from_quat(states[i, 3:7]).as_matrix()[1, 2] for i in range(states.shape[0])],
+    [R.from_quat(states[i, 3:7]).as_matrix()[2, 2] for i in range(states.shape[0])],
+    length=0.1,
+    normalize=True,
+    color='green'
+)
+
+ax.scatter(statePredictions[:, 0], statePredictions[:, 1], statePredictions[:, 2])
+ax.scatter(states[:, 0], states[:, 1], states[:, 2])
+scatter1_proxy = matplotlib.lines.Line2D([0],[0], linestyle="none", c='orange', marker = '*')
+scatter2_proxy = matplotlib.lines.Line2D([0],[0], linestyle="none", c='blue', marker = '*')
+ax.legend([scatter1_proxy, scatter2_proxy], ['position', 'prediction'], numpoints = 1)
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
+ax.axes.set_xlim3d(left=-1, right=0) 
+ax.axes.set_ylim3d(bottom=0, top=1) 
+ax.axes.set_zlim3d(bottom=0, top=1)
+plt.title('Drone Demonstration Task Path and Orientation')
+plt.show()

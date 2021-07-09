@@ -271,7 +271,7 @@ else:
     raise ValueError(f"Unsupported model type: {args.model}")
 
 trainingModel.compile(
-    optimizer=keras.optimizers.Adam(0.0005), loss="cosine_similarity",
+    optimizer=keras.optimizers.Adam(0.0005), loss="mean_squared_error",
 )
 
 # Load weights
@@ -282,7 +282,7 @@ trainingModel.summary(line_length=80)
 
 # Train
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
+    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y_%m_%d_%H_%M_%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
     save_weights_only=True,
     save_best_only=True,
     save_freq='epoch'
@@ -301,5 +301,5 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
+    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y_%m_%d_%H_%M_%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
         pickle.dump(trainingModel.history.history, fp)
