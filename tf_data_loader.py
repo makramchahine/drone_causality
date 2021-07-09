@@ -26,7 +26,7 @@ def load_dataset(data_root, label_scale=1):
 
 
 
-def load_dataset_multi(root, seq_len, shift, stride, label_scale):
+def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
     def sub_to_batch(sub_feature, sub_label):
         sfb = sub_feature.batch(seq_len, drop_remainder=True)
@@ -42,11 +42,11 @@ def load_dataset_multi(root, seq_len, shift, stride, label_scale):
         labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
         n_images = len(os.listdir(os.path.join(root, d))) - 1
         #dataset_np = np.empty((n_images, 256, 256, 3), dtype=np.uint8)
-        dataset_np = np.empty((n_images, 170, 256, 3), dtype=np.uint8)
+        dataset_np = np.empty((n_images, *image_size), dtype=np.uint8)
 
         for ix in range(n_images):
             #dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
-            dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))[86:, :, :]
+            dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))[256 - image_size[0]:, :, :]
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
         dataset = tf.data.Dataset.zip((images_dataset, labels_dataset))
@@ -55,14 +55,38 @@ def load_dataset_multi(root, seq_len, shift, stride, label_scale):
 
     return datasets
 
-def get_dataset_multi(root, seq_len, shift, stride, validation_ratio, label_scale):
-    ds = load_dataset_multi(root, seq_len, shift, stride, label_scale)
+def get_dataset_multi(root, image_size, seq_len, shift, stride, validation_ratio, label_scale, extra_data_root=None):
+    ds = load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale)
+    print('n bags: %d' % len(ds))
+    cnt = 0
+    for d in ds:
+        for (ix, _) in enumerate(d):
+            pass
+        cnt += ix
+    print('n windows: %d' % cnt)
+
+
+    if extra_data_root is not None:
+        ds_extra = load_dataset_multi(extra_data_root, image_size, seq_len, shift, stride, label_scale)
+        print('\n\n Loaded Extra Dataset! \n\n')
+        print('n extra bags: %d' % len(ds_extra))
+        cnt = 0
+        for d in ds_extra:
+            for (ix, _) in enumerate(d):
+                pass
+            cnt += ix
+        print('n extra windows: %d' % cnt)
 
     indices = np.arange(len(ds))
     np.random.shuffle(indices)
     val_ix = int(len(ds) * validation_ratio)
     validation_datasets = ds[:val_ix]
-    training_datasets = ds[val_ix:]
+
+    if extra_data_root is not None:
+        training_datasets = ds[val_ix:] + ds_extra
+        print('Total data length: %d' % len(training_datasets))
+    else:
+        training_datasets = ds[val_ix:]
     
     validation = tf.data.Dataset.from_tensor_slices(validation_datasets).flat_map(lambda x: x)
     training = tf.data.Dataset.from_tensor_slices(training_datasets).flat_map(lambda x: x)

@@ -29,6 +29,7 @@ parser.add_argument('--model', type=str, default="ncp", help='The type of model 
 # Revisiont 4: rnn_size from 64 to 32
 parser.add_argument('--rnn_size', type=int, default=32, help='Select the size of RNN network you would like to train')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
+parser.add_argument('--extra_data_dir', type=str, default=None, help='Path to extra training data, used for training but not validation')
 parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
 parser.add_argument('--samples', type=int, default=None)
@@ -50,6 +51,7 @@ parser.add_argument('--rotation_factor', type=float, default=0.1, help='Amount t
 parser.add_argument('--zoom_factor', type=float, default=0.1, help='Amount to (randomly) zoom. Must be used with --augment.')
 parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
 parser.add_argument('--data_shift', type=int, default=1, help='Window shift between windows. Default=1.')
+parser.add_argument('--top_crop', type=float, default=0.3, help='Proportion of height to clip from image')
 
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
@@ -61,7 +63,8 @@ augmentation_params['rotation'] = args.rotation_factor
 augmentation_params['zoom'] = args.zoom_factor
 
 #IMAGE_SHAPE                = (256, 256, 3)
-IMAGE_SHAPE                = (170, 256, 3)
+#IMAGE_SHAPE                = (170, 256, 3)
+IMAGE_SHAPE = (256 - int(args.top_crop * 256), 256, 3)
 POSITION_SHAPE             = (4,)
 
 
@@ -79,7 +82,7 @@ POSITION_SHAPE             = (4,)
 #training_dataset = tf.data.Dataset.from_tensor_slices(training_np).shuffle(100).batch(args.batch_size)
 #validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
 
-training_dataset, validation_dataset = get_dataset_multi(args.data_dir, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale)
+training_dataset, validation_dataset = get_dataset_multi(args.data_dir, IMAGE_SHAPE, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale, args.extra_data_dir)
 #from matplotlib.image import imsave
 #for ds in training_dataset.take(1):
 #    for (ix, d) in enumerate(ds[0]):
