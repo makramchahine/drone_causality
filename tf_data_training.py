@@ -5,6 +5,7 @@ import pickle
 import random
 import pathlib
 import time
+import glob
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,31 +28,30 @@ MODEL_REVISION_LABEL = 13.0
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
 parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
 # Revisiont 4: rnn_size from 64 to 32
-parser.add_argument('--rnn_size', type=int, default=32, help='Select the size of RNN network you would like to train')
+parser.add_argument('--rnn_sizes', type=int, nargs='+', help='Select the size of RNN network you would like to train')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
+parser.add_argument('--cached_data_dir', type=str, default=None, help='Path to pre-cached dataset')
 parser.add_argument('--extra_data_dir', type=str, default=None, help='Path to extra training data, used for training but not validation')
 parser.add_argument('--save_dir', type=str, default="./model-checkpoints", help='Path to save checkpoints')
 parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
-parser.add_argument('--samples', type=int, default=None)
 parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--seq_len', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
-parser.add_argument('--cnn_units', type=int, default=1000)
 parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
 parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
 parser.add_argument('--momentum', type=float, default='0.0', help="Momentum (for use with SGD)")
 parser.add_argument('--opt', type=str, default='adam', help="Optimizer to use (adam, sgd)")
 parser.add_argument('--augment', action='store_true', help="Whether to turn on data augmentation in network")
-parser.add_argument('--normalize', action='store_true', help="Whether to have float conversion and normalization inside network layers")
+#parser.add_argument('--normalize', action='store_true', help="Whether to have float conversion and normalization inside network layers")
 parser.add_argument('--label_scale', type=float, default=1, help='Scale factor to apply to labels')
 parser.add_argument('--translation_factor', type=float, default=0.1, help='Amount to (randomly) translate width and height (0 - 1.0). Must be used with --augment.')
 parser.add_argument('--rotation_factor', type=float, default=0.1, help='Amount to (randomly) rotate (0.0 - 1.0). Must be used with --augment.')
 parser.add_argument('--zoom_factor', type=float, default=0.1, help='Amount to (randomly) zoom. Must be used with --augment.')
 parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
 parser.add_argument('--data_shift', type=int, default=1, help='Window shift between windows. Default=1.')
-parser.add_argument('--top_crop', type=float, default=0.3, help='Proportion of height to clip from image')
+parser.add_argument('--top_crop', type=float, default=0.0, help='Proportion of height to clip from image')
 
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
@@ -67,6 +67,7 @@ IMAGE_SHAPE                = (144, 256, 3)
 #IMAGE_SHAPE = (256 - int(args.top_crop * 256), 256, 3)
 
 POSITION_SHAPE             = (4,)
+REV = 0
 
 
 #training_np, validation_np = load_dataset(args.data_dir, args.label_scale)
@@ -83,13 +84,27 @@ POSITION_SHAPE             = (4,)
 #training_dataset = tf.data.Dataset.from_tensor_slices(training_np).shuffle(100).batch(args.batch_size)
 #validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
 
-training_dataset, validation_dataset = get_dataset_multi(args.data_dir, IMAGE_SHAPE, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale, args.extra_data_dir)
-#from matplotlib.image import imsave
-#for ds in training_dataset.take(1):
-#    for (ix, d) in enumerate(ds[0]):
-#        img = d.numpy()
-#        print(img.shape)
-#        imsave('window_test/clip%03d.jpg' % ix, img)
+print('\n')
+if args.cached_data_dir is None:
+    print('Loading data from: ' + args.data_dir)
+    training_dataset, validation_dataset = get_dataset_multi(args.data_dir, IMAGE_SHAPE, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale, args.extra_data_dir)
+    if not os.path.exists(os.path.join(args.data_dir, 'cached_dataset.tf')):
+        cached_training_fn = os.path.join(args.data_dir, 'cached_dataset.tf')
+        print('Saving cached training data at %s' % cached_training_fn)
+        tf.data.experimental.save(training_dataset, cached_training_fn)
+
+        cached_validation_fn = os.path.join(args.data_dir, 'cached_dataset_validation.tf')
+        print('Saving cached training data at %s' % cached_validation_fn)
+        tf.data.experimental.save(validation_dataset, cached_validation_fn)
+else:
+    training_data_fn = os.path.join(args.cached_data_dir, 'cached_dataset.tf')
+    print('Loading cached dataset from %s' % training_data_fn)
+    training_dataset = tf.data.experimental.load(os.path.join(args.cached_data_dir, 'cached_dataset.tf'))
+
+    validation_data_fn = os.path.join(args.cached_data_dir, 'cached_dataset_validation.tf')
+    print('Loading cached dataset from %s' % validation_data_fn)
+    validation_dataset = tf.data.experimental.load(validation_data_fn)
+
 
 print('\n\nTraining Dataset Size: %d\n\n' % tlen(training_dataset))
 training_dataset = training_dataset.shuffle(100).batch(args.batch_size)
@@ -100,10 +115,10 @@ validation_dataset = validation_dataset.batch(args.batch_size)
 
 if args.model == 'ncp':
     #model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, None, augmentation_params)
+    model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params)
 elif args.model == 'lstm':
     #model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, None, augmentation_params)
+    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params)
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 
@@ -124,11 +139,12 @@ if args.hotstart is not None:
 model.summary(line_length=80)
 
 # Train
+time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f"-rev={MODEL_REVISION_LABEL}" + '-weights.{epoch:03d}-{val_loss:.4f}.hdf5'),
-    save_weights_only=True,
-    save_best_only=False,
-    #save_freq='epoch'
+    filepath=os.path.join(args.save_dir, 'rev-%d_model-%s_seq-%d_opt-%s_lr-%f_crop-%f_epoch-{epoch:03d}_val_loss:{val_loss:.4f}_%s' % (REV, args.model, args.seq_len, args.opt, args.lr, args.top_crop, time_str)),
+    save_weights_only=False,
+    save_best_only=True,
+    save_freq='epoch'
 )
 
 log_dir = args.tb_dir
@@ -150,6 +166,17 @@ try:
     )
 finally:
     # Dump history
-    with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
-        pickle.dump(model.history.history, fp)
+    pass
+    #with open(os.path.join(args.history_dir, args.model + '-' + time.strftime("%Y:%m:%d:%H:%M:%S") + f'-history-rev={MODEL_REVISION_LABEL}.p'), 'wb') as fp:
+    #    pickle.dump(model.history.history, fp)
+
+
+lof = glob.glob('./model-checkpoints/*')
+last_checkpoint = max(lof, key=os.path.getmtime)
+evaluation_model = tf.keras.models.load_model(last_checkpoint)
+
+
+
+
+
 
