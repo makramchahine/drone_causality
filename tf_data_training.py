@@ -63,8 +63,9 @@ augmentation_params['rotation'] = args.rotation_factor
 augmentation_params['zoom'] = args.zoom_factor
 
 #IMAGE_SHAPE                = (256, 256, 3)
-#IMAGE_SHAPE                = (170, 256, 3)
-IMAGE_SHAPE = (256 - int(args.top_crop * 256), 256, 3)
+IMAGE_SHAPE                = (144, 256, 3)
+#IMAGE_SHAPE = (256 - int(args.top_crop * 256), 256, 3)
+
 POSITION_SHAPE             = (4,)
 
 

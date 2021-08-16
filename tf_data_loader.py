@@ -27,6 +27,7 @@ def load_dataset(data_root, label_scale=1):
 
 
 def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
+    file_ending = 'png'
 
     def sub_to_batch(sub_feature, sub_label):
         sfb = sub_feature.batch(seq_len, drop_remainder=True)
@@ -36,17 +37,25 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
     dirs = os.listdir(root)
     datasets = []
-    for d in dirs:
+    for (run_number, d) in enumerate(dirs):
+        print('Loading Run %d of %d (%s)' % (run_number, len(dirs), d))
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1)
-        labels = labels[:,1:] * label_scale
+        if labels.shape[1] == 4:
+            labels = labels * label_scale
+        elif labels.shape[1] == 5:
+            labels = labels[:,1:] * label_scale
+        else:
+            raise Exception('Wrong size of input data (expected 4, got %d' % labels.shape[1])
         labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
-        n_images = len(os.listdir(os.path.join(root, d))) - 1
+        #n_images = len(os.listdir(os.path.join(root, d))) - 1
+        n_images = len([fn for fn in os.listdir(os.path.join(root, d)) if 'png' in fn or 'jpg' in fn or 'jpeg' in fn])
         #dataset_np = np.empty((n_images, 256, 256, 3), dtype=np.uint8)
         dataset_np = np.empty((n_images, *image_size), dtype=np.uint8)
 
         for ix in range(n_images):
             #dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
-            dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))[256 - image_size[0]:, :, :]
+            img = imread(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
+            dataset_np[ix] = img[img.shape[0] - image_size[0]:, :, :]
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
         dataset = tf.data.Dataset.zip((images_dataset, labels_dataset))
