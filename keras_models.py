@@ -3,15 +3,19 @@ from kerasncp.tf import LTCCell
 import kerasncp as kncp
 
 
-def generate_lstm_model(rnn_sizes, seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None):
-    lstm_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params)
+def generate_lstm_model(rnn_sizes, seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None, rnn_stateful=False, batch_size=None):
+    lstm_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params, rnn_stateful=rnn_stateful, batch_size=batch_size)
 
+    print(lstm_model.summary())
+
+    #print(lstm_model.layers[-1].output_shape)
+    #print(batch_size, seq_len, lstm_model.layers[-1].output_shape[-1])
     for (ix, s) in enumerate(rnn_sizes):
-        lstm_model.add(keras.layers.LSTM(units=s, return_sequences=True))
+        lstm_model.add(keras.layers.LSTM(s, batch_input_shape=(batch_size, seq_len, lstm_model.layers[-1].output_shape[-1]), return_sequences=True, stateful=rnn_stateful, dropout=0.2, recurrent_dropout=0.1))
         if ix < len(rnn_sizes) - 1:
             lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.1)))
     
-    lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.05)))
+    #lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.05)))
     lstm_model.add(keras.layers.Dense(units=4, activation='linear'))
 
     return lstm_model
@@ -54,6 +58,7 @@ def generate_convolutional_layers(model):
 
 
 def generate_normalization_layers(model, data=None):
+    #model.add(keras.layers.experimental.preprocessing.Rescaling(1./255, batch_input_shape=(6, 64, 144, 256, 3)))
     model.add(keras.layers.experimental.preprocessing.Rescaling(1./255))
 
     if data is not None:
@@ -76,10 +81,13 @@ def generate_augmentation_layers(model, augmentation_params):
     model.add(keras.layers.TimeDistributed(keras.layers.experimental.preprocessing.RandomZoom(height_factor=zoom, width_factor=zoom)))
     return model
 
-def generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data=None, augmentation_params=None):
+def generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data=None, augmentation_params=None, rnn_stateful=False, batch_size=None):
 
     model = keras.models.Sequential()
-    model.add(keras.Input(shape=(seq_len, *image_shape)))
+    #model.add(keras.layers.InputLayer(input_shape=(seq_len, *image_shape), batch_size=batch_size))
+    model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, *image_shape)))
+    #model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, 144, 256, 3)))
+    #model.add(keras.Input(batch_shape=(6, seq_len, *image_shape)))
 
     if do_normalization:
         model = generate_normalization_layers(model)
@@ -88,6 +96,7 @@ def generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentati
         model = generate_augmentation_layers(model, augmentation_params)
 
     model = generate_convolutional_layers(model)
+    print(model.summary())
     model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
     model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.2)))
     model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=64,   activation='linear')))

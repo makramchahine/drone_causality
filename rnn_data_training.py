@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
 
-from tf_data_loader import load_dataset, get_dataset_multi, get_output_normalization
+from tf_data_loader import load_dataset, get_dataset_multi, get_output_normalization, load_dataset_rnn
 from keras_models import generate_ncp_model, generate_lstm_model
 
 def tlen(dataset):
@@ -82,35 +82,58 @@ REV = 0
 #validation_dataset = tf.data.Dataset.from_tensor_slices(validation_np).batch(args.batch_size)
 
 
-if args.cached_data_dir is not None:
-    cached_training_fn = os.path.join(args.cached_data_dir, 'cached_dataset_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
-    cached_validation_fn = os.path.join(args.cached_data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
+batch_size, validation_batch_size, training_data, validation_data = load_dataset_rnn(args.data_dir, IMAGE_SHAPE, args.seq_len, args.val_split)
 
-if args.cached_data_dir is not None and os.path.exists(cached_training_fn) and os.path.exists(cached_validation_fn):
-        print('Loading cached dataset from %s' % cached_training_fn)
-        training_dataset = tf.data.experimental.load(cached_training_fn)
-        print('Loading cached dataset from %s' % cached_validation_fn)
-        validation_dataset = tf.data.experimental.load(cached_validation_fn)
-else:
-    
-    print('Loading data from: ' + args.data_dir)
-    training_dataset, validation_dataset = get_dataset_multi(args.data_dir, IMAGE_SHAPE, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale, args.extra_data_dir)
-    cached_training_fn = os.path.join(args.data_dir, 'cached_dataset_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
-    cached_validation_fn = os.path.join(args.data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
+tl = training_data[1]
+tl = np.reshape(tl, (tl.shape[0]*tl.shape[1], tl.shape[2], tl.shape[3]))
+td = training_data[0]
+td = np.reshape(td, (td.shape[0]*td.shape[1], td.shape[2], td.shape[3], td.shape[4], td.shape[5]))
+training_data = (td, tl)
+print(training_data[0].shape)
+print(training_data[1].shape)
 
-    print('Saving cached training data at %s' % cached_training_fn)
-    tf.data.experimental.save(training_dataset, cached_training_fn)
+vl = validation_data[1] # n batches * batch_size * data
 
-    print('Saving cached validation data at %s' % cached_validation_fn)
-    tf.data.experimental.save(validation_dataset, cached_validation_fn)
+vl_extended = np.zeros((vl.shape[0], batch_size, *vl.shape[2:]))
+for ix in range(batch_size):
+    vl_extended[:, ix] = vl[:, ix % vl.shape[1]]
 
+vl_extended = np.reshape(vl_extended, (vl_extended.shape[0]*vl_extended.shape[1], vl_extended.shape[2], vl_extended.shape[3]))
 
+vd = validation_data[0]
 
-print('\n\nTraining Dataset Size: %d\n\n' % tlen(training_dataset))
-training_dataset = training_dataset.shuffle(100).batch(args.batch_size)
+vd_extended = np.zeros((vd.shape[0], batch_size, *vd.shape[2:]), dtype=np.uint8)
+for ix in range(batch_size):
+    vd_extended[:, ix] = vd[:, ix % vd.shape[1]]
+vd_extended = np.reshape(vd_extended, (vd_extended.shape[0]*vd_extended.shape[1], vd_extended.shape[2], vd_extended.shape[3], vd_extended.shape[4], vd_extended.shape[5]))
 
+validation_data = (vd_extended, vl_extended)
 
-validation_dataset = validation_dataset.batch(args.batch_size)
+print(validation_data[0].shape)
+print(validation_data[1].shape)
+
+#if args.cached_data_dir is not None:
+#    cached_training_fn = os.path.join(args.cached_data_dir, 'cached_dataset_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
+#    cached_validation_fn = os.path.join(args.cached_data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
+#
+#if args.cached_data_dir is not None and os.path.exists(cached_training_fn) and os.path.exists(cached_validation_fn):
+#        print('Loading cached dataset from %s' % cached_training_fn)
+#        training_dataset = tf.data.experimental.load(cached_training_fn)
+#        print('Loading cached dataset from %s' % cached_validation_fn)
+#        validation_dataset = tf.data.experimental.load(cached_validation_fn)
+#else:
+#    
+#    print('Loading data from: ' + args.data_dir)
+#    training_dataset, validation_dataset = get_dataset_multi(args.data_dir, IMAGE_SHAPE, args.seq_len, args.data_shift, args.data_stride, args.val_split, args.label_scale, args.extra_data_dir)
+#    cached_training_fn = os.path.join(args.data_dir, 'cached_dataset_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
+#    cached_validation_fn = os.path.join(args.data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
+#
+#    print('Saving cached training data at %s' % cached_training_fn)
+#    tf.data.experimental.save(training_dataset, cached_training_fn)
+#
+#    print('Saving cached validation data at %s' % cached_validation_fn)
+#    tf.data.experimental.save(validation_dataset, cached_validation_fn)
+
 
 
 if args.model == 'ncp':
@@ -118,7 +141,7 @@ if args.model == 'ncp':
     model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params)
 elif args.model == 'lstm':
     #model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params, rnn_stateful=False)
+    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params, rnn_stateful=True, batch_size=batch_size)
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 
@@ -153,15 +176,22 @@ if not os.path.exists(log_dir):
 #tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, profile_batch='10, 15')
 tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, update_freq=100)
 
+print('\n====== Debug ==========')
+print(training_data[0].shape)
+print(training_data[1].shape)
+print('\n=======================')
 try:
     h = model.fit(
-        x                   = training_dataset,
-        validation_data     = validation_dataset,
+        x                   = training_data[0],
+        y                   = training_data[1],
+        validation_data     = validation_data,
         epochs              = args.epochs,
         use_multiprocessing = False,
         workers             = 1,
         max_queue_size      = 5,
         verbose             = 1,
+        batch_size = batch_size,
+        validation_batch_size = batch_size,
         callbacks           = [checkpointCallback, tensorboard_callback]
     )
 finally:
