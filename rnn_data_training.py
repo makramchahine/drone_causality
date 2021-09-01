@@ -49,7 +49,7 @@ parser.add_argument('--zoom_factor', type=float, default=0.1, help='Amount to (r
 parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
 parser.add_argument('--data_shift', type=int, default=1, help='Window shift between windows. Default=1.')
 parser.add_argument('--top_crop', type=float, default=0.0, help='Proportion of height to clip from image')
-parser.add_argument('--training_duplication_multiplier', type=int, default=1, help='Number of times to duplicate training data. Ask Ramin.')
+parser.add_argument('--training_duplication_multiplier', type=float, default=1, help='Number of times to duplicate training data. Ask Ramin.')
 
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
@@ -92,11 +92,11 @@ tdsingle = training_data[0]
 tlsingle = training_data[1]
 print('Data shape before duplication: ', td.shape)
 if args.training_duplication_multiplier > 1 and args.training_duplication_multiplier < 2:
-    ix_duplicate = (args.training_duplication_multiplier - 1) * len(tdsingle)
-    td = np.append(td, tdsingle[:ix_duplicate], axis=1)
-    tl = np.append(tl, tlsingle[:ix_duplicate], axis=1)
+    ix_duplicate = int((args.training_duplication_multiplier - 1) * tdsingle.shape[1])
+    td = np.append(td, tdsingle[:,:ix_duplicate], axis=1)
+    tl = np.append(tl, tlsingle[:,:ix_duplicate], axis=1)
 else:
-    for data_duplication_ix in range(args.training_duplication_multiplier - 1):
+    for data_duplication_ix in range(int(args.training_duplication_multiplier) - 1):
         td = np.append(td, tdsingle, axis=1)
         tl = np.append(tl, tlsingle, axis=1)
 print('Data shape after duplication: ', td.shape)
