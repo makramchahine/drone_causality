@@ -24,7 +24,7 @@ def tlen(dataset):
 MODEL_REVISION_LABEL = 13.0
 
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
-parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
+parser.add_argument('--model', type=str, default="lstm", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
 parser.add_argument('--rnn_sizes', type=int, nargs='+', help='Select the size of RNN network you would like to train')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
 parser.add_argument('--cached_data_dir', type=str, default=None, help='Path to pre-cached dataset')
@@ -49,6 +49,7 @@ parser.add_argument('--zoom_factor', type=float, default=0.1, help='Amount to (r
 parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
 parser.add_argument('--data_shift', type=int, default=1, help='Window shift between windows. Default=1.')
 parser.add_argument('--top_crop', type=float, default=0.0, help='Proportion of height to clip from image')
+parser.add_argument('--training_duplication_multiplier', type=int, default=1, help='Number of times to duplicate training data. Ask Ramin.')
 
 parser.set_defaults(gps_signal=False)
 args = parser.parse_args()
@@ -84,9 +85,23 @@ REV = 0
 
 batch_size, validation_batch_size, training_data, validation_data = load_dataset_rnn(args.data_dir, IMAGE_SHAPE, args.seq_len, args.val_split)
 
-tl = training_data[1]
-tl = np.reshape(tl, (tl.shape[0]*tl.shape[1], tl.shape[2], tl.shape[3]))
+# hack to double the training data
 td = training_data[0]
+tl = training_data[1]
+tdsingle = training_data[0]
+tlsingle = training_data[1]
+print('Data shape before duplication: ', td.shape)
+if args.training_duplication_multiplier > 1 and args.training_duplication_multiplier < 2:
+    ix_duplicate = (args.training_duplication_multiplier - 1) * len(tdsingle)
+    td = np.append(td, tdsingle[:ix_duplicate], axis=1)
+    tl = np.append(tl, tlsingle[:ix_duplicate], axis=1)
+else:
+    for data_duplication_ix in range(args.training_duplication_multiplier - 1):
+        td = np.append(td, tdsingle, axis=1)
+        tl = np.append(tl, tlsingle, axis=1)
+print('Data shape after duplication: ', td.shape)
+
+tl = np.reshape(tl, (tl.shape[0]*tl.shape[1], tl.shape[2], tl.shape[3]))
 td = np.reshape(td, (td.shape[0]*td.shape[1], td.shape[2], td.shape[3], td.shape[4], td.shape[5]))
 training_data = (td, tl)
 print(training_data[0].shape)
@@ -141,7 +156,7 @@ if args.model == 'ncp':
     model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params)
 elif args.model == 'lstm':
     #model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params, rnn_stateful=True, batch_size=batch_size)
+    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, False, False, None, augmentation_params, rnn_stateful=True, batch_size=batch_size)
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 
@@ -166,7 +181,7 @@ time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
 checkpointCallback = keras.callbacks.ModelCheckpoint(
     filepath=os.path.join(args.save_dir, 'rev-%d_model-%s_seq-%d_opt-%s_lr-%f_crop-%f_epoch-{epoch:03d}_val_loss:{val_loss:.4f}_%s' % (REV, args.model, args.seq_len, args.opt, args.lr, args.top_crop, time_str)),
     save_weights_only=False,
-    save_best_only=True,
+    save_best_only=False,
     save_freq='epoch'
 )
 

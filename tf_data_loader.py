@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 import os
 from matplotlib.image import imread
+import matplotlib.pyplot as plt
+from PIL import Image
 
 def process_dataset(root, label_scale):
     run_dirs = os.listdir(root) # should be directories named run%03d
@@ -144,14 +146,16 @@ def frames_to_array_rnn(root, dirs, image_size, seq_len):
     print('Shortest Run: %d steps' % min(run_lengths))
     print(list(zip(run_lengths, dirs)))
 
-    run_len_threshold = 4096
+    run_len_threshold = 2048
 
     assert run_len_threshold % seq_len == 0, 'seq_len must divide run_len_threshold'
     max_bins = run_len_threshold // seq_len
     n_runs_over_thresh = len([r for r in run_lengths if r > run_len_threshold])
     print('N runs over length threshold (will be split):',  n_runs_over_thresh)
-    total_extra_runs = sum([int(np.ceil(r / run_len_threshold)) - 1 for r in [f for f in run_lengths if f > run_len_threshold]])
+    total_extra_runs = sum([int(np.floor(r / run_len_threshold)) - 1 for r in [f for f in run_lengths if f > run_len_threshold]])
     print('Total extra runs: %d' % total_extra_runs)
+    max_frame_index = [min(int(max(np.floor(r / run_len_threshold), 1)) * run_len_threshold, r) for r in run_lengths]
+    print('max_frame_index: ', max_frame_index)
 
     cur_extra_run = 0
     n_batches = min(int(np.ceil(max_run_length / seq_len)), run_len_threshold)
@@ -162,15 +166,16 @@ def frames_to_array_rnn(root, dirs, image_size, seq_len):
     for (ix, dname) in enumerate(dirs):
         print('Loading directory %d of %d (%s)' % (ix, n_runs, dname))
         label_raw = np.genfromtxt(os.path.join(root, dname, 'data_out.csv'), delimiter=',', skip_header=1)
-        for jx in range(run_lengths[ix]):
+        #for jx in range(run_lengths[ix]):
+        for jx in range(max_frame_index[ix]):
             if jx == run_len_threshold:
                 cur_extra_run += 1
-            img = imread(os.path.join(root, dname, '%06d.png' % jx))
+            img = Image.open(os.path.join(root, dname, '%06d.png' % jx))
             bin_number = int(np.floor(jx / seq_len)) % max_bins
             frame_in_bin = jx % seq_len
             data[bin_number, ix + cur_extra_run, frame_in_bin] = img
             labels[bin_number, ix + cur_extra_run, frame_in_bin] = label_raw[jx] 
-        assert len(label_raw)-1 == jx, '%d, %d' % (len(label_raw), jx)
+        #assert len(label_raw)-1 == jx, '%d, %d' % (len(label_raw), jx)
     return (data, labels), full_batch_size
 
 def load_dataset_rnn(root, image_size, seq_len, validation_ratio):
@@ -178,7 +183,7 @@ def load_dataset_rnn(root, image_size, seq_len, validation_ratio):
     dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d]
     output_means, output_stds = get_output_normalization(root)
 
-    rng_val_split = np.random.default_rng(123)
+    rng_val_split = np.random.default_rng(124)
     rng_val_split.shuffle(dirs)
     val_ix = int(len(dirs) * validation_ratio)
     validation_dirs = dirs[:val_ix]

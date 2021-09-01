@@ -41,3 +41,4 @@ setup_path.py
 aaron*
 *_logs
 tuner_tests/
+*.vscode
