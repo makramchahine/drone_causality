@@ -98,11 +98,11 @@ else:
     cached_training_fn = os.path.join(args.data_dir, 'cached_dataset_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
     cached_validation_fn = os.path.join(args.data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (args.seq_len, args.data_stride, args.data_shift))
 
-    print('Saving cached training data at %s' % cached_training_fn)
-    tf.data.experimental.save(training_dataset, cached_training_fn)
+    #print('Saving cached training data at %s' % cached_training_fn)
+    #tf.data.experimental.save(training_dataset, cached_training_fn)
 
-    print('Saving cached validation data at %s' % cached_validation_fn)
-    tf.data.experimental.save(validation_dataset, cached_validation_fn)
+    #print('Saving cached validation data at %s' % cached_validation_fn)
+    #tf.data.experimental.save(validation_dataset, cached_validation_fn)
 
 
 

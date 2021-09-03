@@ -100,6 +100,7 @@ else:
         td = np.append(td, tdsingle, axis=1)
         tl = np.append(tl, tlsingle, axis=1)
 print('Data shape after duplication: ', td.shape)
+batch_size = td.shape[1]
 
 tl = np.reshape(tl, (tl.shape[0]*tl.shape[1], tl.shape[2], tl.shape[3]))
 td = np.reshape(td, (td.shape[0]*td.shape[1], td.shape[2], td.shape[3], td.shape[4], td.shape[5]))
@@ -156,7 +157,7 @@ if args.model == 'ncp':
     model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params)
 elif args.model == 'lstm':
     #model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, False, False, None, augmentation_params, rnn_stateful=True, batch_size=batch_size)
+    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, True, False, None, augmentation_params, rnn_stateful=True, batch_size=batch_size)
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 

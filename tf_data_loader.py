@@ -96,12 +96,12 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 def get_dataset_multi(root, image_size, seq_len, shift, stride, validation_ratio, label_scale, extra_data_root=None):
     ds = load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale)
     print('n bags: %d' % len(ds))
-    cnt = 0
-    for d in ds:
-        for (ix, _) in enumerate(d):
-            pass
-        cnt += ix
-    print('n windows: %d' % cnt)
+    #cnt = 0
+    #for d in ds:
+    #    for (ix, _) in enumerate(d):
+    #        pass
+    #    cnt += ix
+    #print('n windows: %d' % cnt)
 
 
     if extra_data_root is not None:
