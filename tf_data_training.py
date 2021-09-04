@@ -36,7 +36,7 @@ parser.add_argument('--seq_len', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=30)
 parser.add_argument('--val_split', type=float, default=0.1)
 parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
-parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
+#parser.add_argument('--tb_dir', type=str, default='tb_logs', help="Name of directory to save tensorboard logs")
 parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
 parser.add_argument('--momentum', type=float, default='0.0', help="Momentum (for use with SGD)")
 parser.add_argument('--opt', type=str, default='adam', help="Optimizer to use (adam, sgd)")
@@ -147,11 +147,11 @@ checkpointCallback = keras.callbacks.ModelCheckpoint(
     save_freq='epoch'
 )
 
-log_dir = args.tb_dir
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
+# log_dir = args.tb_dir
+# if not os.path.exists(log_dir):
+#     os.makedirs(log_dir)
 #tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, profile_batch='10, 15')
-tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, update_freq=100)
+# tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1, update_freq=100)
 
 try:
     h = model.fit(
@@ -162,7 +162,7 @@ try:
         workers             = 1,
         max_queue_size      = 5,
         verbose             = 1,
-        callbacks           = [checkpointCallback, tensorboard_callback]
+        callbacks           = [checkpointCallback]
     )
 finally:
     # Dump history
