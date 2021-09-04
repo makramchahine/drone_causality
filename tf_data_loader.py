@@ -83,7 +83,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
         for ix in range(n_images):
             #dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
-            img = imread(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
+            img = Image.open(os.path.join(root, dname, '%06d.%s' % (ix, file_ending)))
             dataset_np[ix] = img[img.shape[0] - image_size[0]:, :, :]
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
@@ -193,19 +193,6 @@ def load_dataset_rnn(root, image_size, seq_len, validation_ratio):
     validation_data, validation_batch_size = frames_to_array_rnn(root, validation_dirs, image_size, seq_len)
 
     return batch_size, validation_batch_size, training_data, validation_data
-
-
-    
-
-
-
-
-
-
-
-
-
-
 
 
 
