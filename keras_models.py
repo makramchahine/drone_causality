@@ -133,6 +133,8 @@ def generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentati
     x = rescaling_layer(layers[0])
     x = keras.layers.TimeDistributed(normalization_layer)(x)
 
+    my_input_model = keras.Model(inputs=inputs, outputs=x)
+
     for i in range(len(layers)):
         if i == 0:
             continue
@@ -143,10 +145,20 @@ def generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentati
     
     my_time_model = keras.Model(inputs=inputs, outputs=x)
 
+
     model = keras.models.Sequential()
 
-    model.add(my_time_model)
+    #model.add(my_time_model)
+    model.add(my_input_model)
 
+    #Conv Layers
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
+
+    #fully connected layers
     model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
     model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1024,   activation='linear')))
     model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=DROPOUT)))
