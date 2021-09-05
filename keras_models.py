@@ -160,7 +160,7 @@ def generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentati
 
     #fully connected layers
     model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-    model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1024,   activation='linear')))
+    model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=128,   activation='linear')))
     model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=DROPOUT)))
 
     #print(model.summary())
