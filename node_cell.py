@@ -62,6 +62,7 @@ class CTRNNCell(tf.keras.layers.Layer):
                 min_step_size_factor=0.1,
                 max_step_size_factor=10.0,
                 max_num_steps=None,
+                make_adjoint_solver_fn=None,
                 validate_args=False,
                 name="dormand_prince",
             )
@@ -85,7 +86,7 @@ class CTRNNCell(tf.keras.layers.Layer):
                 idx = tf.argsort(elapsed)
                 solution_times = tf.gather(elapsed, idx)
             else:
-                solution_times = [elapsed]
+                solution_times = elapsed
             hidden_state = states[0]
             res = self.solver.solve(
                 ode_fn=self.dfdt_wrapped,
@@ -199,14 +200,15 @@ class LSTMCell(tf.keras.layers.Layer):
         return output_state, [new_cell, output_state]
 
 
-class ODELSTM(tf.keras.layers.Layer):
+# mmRNN uses a LSTM as memory cell and CT-RNN (= neural ODE) for the time-continuous pathway
+class mmRNN(tf.keras.layers.Layer):
     def __init__(self, units, **kwargs):
         self.units = units
         self.state_size = (units, units)
         self.initializer = "glorot_uniform"
         self.recurrent_initializer = "orthogonal"
         self.ctrnn = CTRNNCell(self.units, num_unfolds=4, method="euler")
-        super(ODELSTM, self).__init__(**kwargs)
+        super(mmRNN, self).__init__(**kwargs)
 
     def get_initial_state(self, inputs=None, batch_size=None, dtype=None):
         return (
@@ -261,7 +263,9 @@ class ODELSTM(tf.keras.layers.Layer):
         new_cell = cell_state * forget_gate + input_activation * input_gate
         ode_input = tf.nn.tanh(new_cell) * output_gate
 
+        # Implementation choice on how to parametrize ODE component
         ode_output, new_ode_state = self.ctrnn.call([ode_input, elapsed], [ode_state])
+        # ode_output, new_ode_state = self.ctrnn.call([ode_input, elapsed], [ode_input])
 
         return ode_output, [new_cell, new_ode_state[0]]
 
@@ -274,8 +278,8 @@ class CTGRU(tf.keras.layers.Layer):
         self.state_size = units * self.M
 
         # Pre-computed tau table (as recommended in paper)
-        self.ln_tau_table = np.empty(self.M, dtype=np.float32)
-        self.tau_table = np.empty(self.M, dtype=np.float32)
+        self.ln_tau_table = np.empty(self.M)
+        self.tau_table = np.empty(self.M)
         tau = 1.0
         for i in range(self.M):
             self.ln_tau_table[i] = np.log(tau)
@@ -330,7 +334,7 @@ class CTGRU(tf.keras.layers.Layer):
         # Now the elapsed time enters the state update
         base_term = (1 - ski) * h_hat + ski * qk
         exp_term = tf.exp(-elapsed / self.tau_table)
-        exp_term = tf.reshape(exp_term, [1, 1, self.M])
+        exp_term = tf.reshape(exp_term, [batch_dim, 1, self.M])
         h_hat_next = base_term * exp_term
 
         # Compute new state

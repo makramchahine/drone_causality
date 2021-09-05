@@ -1,6 +1,9 @@
 #!/usr/bin/python3
-import argparse
+
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+import argparse
 import pickle
 import random
 import pathlib
@@ -14,7 +17,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 from tf_data_loader import load_dataset, get_dataset_multi, get_output_normalization
-from keras_models import generate_ncp_model, generate_lstm_model
+from keras_models import generate_ncp_model, generate_lstm_model, generate_ctrnn_model
 
 def tlen(dataset):
     for (ix, _) in enumerate(dataset):
@@ -23,8 +26,22 @@ def tlen(dataset):
 
 MODEL_REVISION_LABEL = 13.0
 
+# This is for CfC models
+DEFAULT_CONFIG = {
+    "clipnorm": 1,
+    "size": 64,
+    "backbone_activation": "silu",
+    "backbone_dr": 0.1,
+    "forget_bias": 1.6,
+    "backbone_units": 256,
+    "backbone_layers": 1,
+    "weight_decay": 1e-06,
+    "use_mixed": False,
+}
+
 parser = argparse.ArgumentParser(description='Train the model on deepdrone data')
-parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, cnn, odernn, rnn, gru, ctgru)')
+parser.add_argument('--model', type=str, default="ncp", help='The type of model (ncp, lstm, ctrnn)')
+parser.add_argument('--ct_type', type=str, default="ctrnn", help='The type of the continuous model (ctrnn, node, cfc, ctgru, grud, mmrnn, mixedcfc, bidirect, vanilla, phased, gruode, hawk, ltc)')
 parser.add_argument('--rnn_sizes', type=int, nargs='+', help='Select the size of RNN network you would like to train')
 parser.add_argument('--data_dir', type=str, default="./data", help='Path to training data')
 parser.add_argument('--cached_data_dir', type=str, default=None, help='Path to pre-cached dataset')
@@ -115,10 +132,17 @@ validation_dataset = validation_dataset.batch(args.batch_size)
 
 if args.model == 'ncp':
     #model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params)
+    model = generate_ncp_model(args.seq_len, IMAGE_SHAPE, False,
+                               args.augment, None, augmentation_params, rnn_stateful=False)
 elif args.model == 'lstm':
     #model = generate_lstm_model(args.rnn_size, args.seq_len, IMAGE_SHAPE, args.normalize, args.augment, training_np[0], augmentation_params)
-    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, True, args.augment, None, augmentation_params, rnn_stateful=False)
+    model = generate_lstm_model(args.rnn_sizes, args.seq_len, IMAGE_SHAPE, False,
+                                args.augment, None, augmentation_params, rnn_stateful=False)
+elif args.model == 'ctrnn':
+    model = generate_ctrnn_model(args.rnn_sizes, args.seq_len,
+                         IMAGE_SHAPE, False,
+                         args.augment, None, augmentation_params,
+                         rnn_stateful=False, batch_size=None, ct_network_type=args.ct_type, config=DEFAULT_CONFIG)
 else:
     raise Exception('Unsupported model type: %s' % args.model)
 
@@ -140,8 +164,15 @@ model.summary(line_length=80)
 
 # Train
 time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
+if args.model == 'ctrnn':
+    file_path = os.path.join(args.save_dir, 'rev-%d_model-%s_type-%s_seq-%d_opt-%s_lr-%f_crop-%f_epoch-{epoch:03d}_val_loss:{val_loss:.4f}_loss:{loss:.4f}_%s' % (REV, args.model, args.ct_type, args.seq_len, args.opt, args.lr, args.top_crop, time_str)),
+else:
+    file_path = os.path.join(args.save_dir,
+                             'rev-%d_model-%s_seq-%d_opt-%s_lr-%f_crop-%f_epoch-{epoch:03d}_val_loss:{val_loss:.4f}_loss:{loss:.4f}_%s' % (
+                             REV, args.model, args.seq_len, args.opt, args.lr, args.top_crop, time_str)),
+
 checkpointCallback = keras.callbacks.ModelCheckpoint(
-    filepath=os.path.join(args.save_dir, 'rev-%d_model-%s_seq-%d_opt-%s_lr-%f_crop-%f_epoch-{epoch:03d}_val_loss:{val_loss:.4f}_loss:{loss:.4f}_%s' % (REV, args.model, args.seq_len, args.opt, args.lr, args.top_crop, time_str)),
+    filepath=file_path,
     save_weights_only=False,
     save_best_only=False,
     save_freq='epoch'

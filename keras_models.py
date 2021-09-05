@@ -1,12 +1,26 @@
 from tensorflow import keras
 from kerasncp.tf import LTCCell
 import kerasncp as kncp
+from node_cell import *
+from tf_cfc import CfcCell, MixedCfcCell, LTCCell
 
 LSTM_DROPOUT = 0.1
 LSTM_RECURRENT_DROPOUT = 0.1
 DROPOUT = 0.1
 
-def generate_lstm_model(rnn_sizes, seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None, rnn_stateful=True, batch_size=None):
+DEFAULT_CONFIG = {
+    "clipnorm": 1,
+    "size": 64,
+    "backbone_activation": "silu",
+    "backbone_dr": 0.1,
+    "forget_bias": 1.6,
+    "backbone_units": 256,
+    "backbone_layers": 1,
+    "weight_decay": 1e-06,
+    "use_mixed": False,
+}
+
+def generate_lstm_model(rnn_sizes, seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None, rnn_stateful=False, batch_size=None):
     lstm_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params, rnn_stateful=rnn_stateful, batch_size=batch_size)
 
     #print(lstm_model.layers[-1].output_shape)
@@ -18,19 +32,18 @@ def generate_lstm_model(rnn_sizes, seq_len, image_shape, do_normalization, do_au
     
     #lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.05)))
     lstm_model.add(keras.layers.Dense(units=4, activation='linear'))
-    print(lstm_model.summary())
+    #print(lstm_model.summary())
     return lstm_model
 
 
-def generate_ncp_model(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None):
+def generate_ncp_model(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params=None, rnn_stateful=False, batch_size=None):
 
-    ncp_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params)
+    ncp_model = generate_network_trunk(seq_len, image_shape, do_normalization, do_augmentation, data, augmentation_params, rnn_stateful=rnn_stateful, batch_size=batch_size)
 
     # Setup the network
     wiring = kncp.wirings.NCP(
         inter_neurons=12,   # Number of inter neurons
         command_neurons=8,  # Number of command neurons
-        #motor_neurons=3,    # Number of motor neurons
         motor_neurons=4,    # Number of motor neurons
         sensory_fanout=6,   # How many outgoing synapses has each sensory neuron
         inter_fanout=4,     # How many outgoing synapses has each inter neuron
@@ -41,9 +54,59 @@ def generate_ncp_model(seq_len, image_shape, do_normalization, do_augmentation, 
 
     rnnCell = LTCCell(wiring)
 
-    ncp_model.add(keras.layers.RNN(rnnCell, return_sequences=True))
+    ncp_model.add(keras.layers.RNN(rnnCell, return_sequences=True, stateful=rnn_stateful))
     return ncp_model
-    
+
+
+def generate_ctrnn_model(rnn_sizes, seq_len,
+                         image_shape, do_normalization,
+                         do_augmentation, data,augmentation_params=None,
+                         rnn_stateful=False, batch_size=None, ct_network_type = 'ctrnn', config =DEFAULT_CONFIG):
+
+    ctrnn_model = generate_network_trunk(seq_len, image_shape,
+                                         do_normalization, do_augmentation, data,
+                                         augmentation_params, rnn_stateful=rnn_stateful,
+                                         batch_size=batch_size)
+
+
+    for (ix, s) in enumerate(rnn_sizes):
+        if ct_network_type == 'ctrnn':
+            Cell = CTRNNCell(units=s, method='dopri5')
+        elif ct_network_type == "node":
+            Cell = CTRNNCell(units=s, method="dopri5", tau=0)
+        elif ct_network_type == "mmrnn":
+            Cell = mmRNN(units=s)
+        elif ct_network_type == "ctgru":
+            Cell = CTGRU(units=s)
+        elif ct_network_type == "vanilla":
+            Cell = VanillaRNN(units=s)
+        elif ct_network_type == "bidirect":
+            Cell = BidirectionalRNN(units=s)
+        elif ct_network_type == "grud":
+            Cell = GRUD(units=s)
+        elif ct_network_type == "phased":
+            Cell = PhasedLSTM(units=s)
+        elif ct_network_type == "gruode":
+            Cell = GRUODE(units=s)
+        elif ct_network_type == "hawk":
+            Cell = HawkLSTMCell(units=s)
+        elif ct_network_type == "ltc":
+            Cell = LTCCell(units=s)
+        elif ct_network_type == "cfc":
+            Cell = CfcCell(units=s, hparams=config)
+        elif ct_network_type == "mixedcfc":
+            Cell = MixedCfcCelll(units=s, hparams=config)
+        else:
+            raise ValueError("Unknown model type '{}'".format(ct_network_type))
+        ctrnn_model.add(
+            keras.layers.RNN(Cell,
+                             batch_input_shape=(batch_size, seq_len,
+                                                ctrnn_model.layers[-1].output_shape[-1]),
+                             return_sequences=True, stateful=rnn_stateful, time_major=False))
+
+    ctrnn_model.add(keras.layers.Dense(units=4, activation='linear'))
+    # print(ctrnn_model.summary())
+    return ctrnn_model
 
 
 def generate_convolutional_layers(model):
