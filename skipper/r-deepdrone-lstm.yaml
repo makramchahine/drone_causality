@@ -13,11 +13,11 @@ spec:
           - "python tf_data_training.py \
             --model lstm \
             --rnn_sizes 128 \
-            --data_dir /data/devens_drone_data/doesitwork \
-            --save_dir /data/model-checkpoints \
+            --data_dir /data/devens_drone_data/devens_2021-08-04_corrected \
+            --save_dir /data/model-checkpoints/ \
             --seq_len 256 \
-            --epochs 50 \
-            --val_split 0.3 \
+            --epochs 2 \
+            --val_split 0.05 \
             --opt adam \
             --lr .0008 \
             --data_shift 16 \

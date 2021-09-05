@@ -54,7 +54,11 @@ def generate_ncp_model(seq_len, image_shape, do_normalization, do_augmentation, 
 
     rnnCell = LTCCell(wiring)
 
-    ncp_model.add(keras.layers.RNN(rnnCell, return_sequences=True, stateful=rnn_stateful))
+    ncp_model.add(keras.layers.RNN(rnnCell,
+                                   batch_input_shape=(batch_size,
+                                                      seq_len,
+                                                      ncp_model.layers[-1].output_shape[-1]),
+                                   return_sequences=True))
     return ncp_model
 
 
