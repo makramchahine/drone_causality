@@ -15,7 +15,8 @@ spec:
             --ct_type mmrnn \
             --rnn_sizes 128 \
             --data_dir /data/devens_drone_data/devens_2021-08-04_corrected \
-            --seq_len 256 \
+            --save_dir /data/model-checkpoints/ \
+            --seq_len 512 \
             --epochs 50 \
             --val_split 0.05 \
             --opt adam \
