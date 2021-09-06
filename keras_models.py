@@ -42,14 +42,15 @@ def generate_ncp_model(seq_len, image_shape, do_normalization, do_augmentation, 
 
     # Setup the network
     wiring = kncp.wirings.NCP(
-        inter_neurons=12,   # Number of inter neurons
-        command_neurons=8,  # Number of command neurons
-        motor_neurons=4,    # Number of motor neurons
-        sensory_fanout=6,   # How many outgoing synapses has each sensory neuron
-        inter_fanout=4,     # How many outgoing synapses has each inter neuron
-        recurrent_command_synapses=4,   # Now many recurrent synapses are in the
-                                        # command neuron layer
-        motor_fanin=6,      # How many incoming syanpses has each motor neuron
+        inter_neurons=18,  # Number of inter neurons
+        command_neurons=12,  # Number of command neurons
+        # motor_neurons=3,    # Number of motor neurons
+        motor_neurons=4,  # Number of motor neurons
+        sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
+        inter_fanout=4,  # How many outgoing synapses has each inter neuron
+        recurrent_command_synapses=4,  # Now many recurrent synapses are in the
+        # command neuron layer
+        motor_fanin=6,  # How many incoming syanpses has each motor neuron
     )
 
     rnnCell = LTCCell(wiring)
