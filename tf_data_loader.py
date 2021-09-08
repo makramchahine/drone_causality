@@ -24,7 +24,7 @@ def load_dataset(data_root, label_scale=1):
 
     training_np = process_dataset(training_root, label_scale)
     validation_np = process_dataset(validation_root, label_scale)
-    return training_np.astype(np.float32), validation_np.astype(np.float32)
+    return training_np, validation_np
 
 
 
@@ -65,7 +65,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
     for (run_number, d) in enumerate(dirs):
         print('Loading Run %d of %d (%s)' % (run_number, len(dirs), d))
-        labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1)
+        labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
 
         if labels.shape[1] == 4:
             labels = (labels - output_means) / output_stds
