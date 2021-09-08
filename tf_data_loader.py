@@ -92,7 +92,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
         datasets.append(dataset)
 
-    return datasets.astype(np.float32)
+    return datasets
 
 def get_dataset_multi(root, image_size, seq_len, shift, stride, validation_ratio, label_scale, extra_data_root=None):
     ds = load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale)
