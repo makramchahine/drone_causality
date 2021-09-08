@@ -304,8 +304,8 @@ class CTGRU(tf.keras.layers.Layer):
     def call(self, inputs, states):
         elapsed = 1.0
         if (isinstance(inputs, tuple) or isinstance(inputs, list)) and len(inputs) > 1:
-            elapsed = inputs[1]
-            inputs = inputs[0]
+            elapsed = inputs[1].astype(np.float64)
+            inputs = inputs[0].astype(np.float64)
 
         batch_dim = tf.shape(inputs)[0]
 
