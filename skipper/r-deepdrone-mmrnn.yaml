@@ -13,11 +13,11 @@ spec:
           - "python tf_data_training.py \
             --model ctrnn \
             --ct_type mmrnn \
-            --rnn_sizes 128 \
+            --rnn_sizes 256 \
             --data_dir /data/devens_drone_data/devens_2021-08-04_corrected \
             --save_dir /data/model-checkpoints/ \
-            --seq_len 512 \
-            --epochs 50 \
+            --seq_len 64 \
+            --epochs 200 \
             --val_split 0.05 \
             --opt adam \
             --lr .0008 \

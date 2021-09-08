@@ -24,7 +24,7 @@ def load_dataset(data_root, label_scale=1):
 
     training_np = process_dataset(training_root, label_scale)
     validation_np = process_dataset(validation_root, label_scale)
-    return training_np, validation_np
+    return training_np.astype(np.float32), validation_np.astype(np.float32)
 
 
 
@@ -92,7 +92,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
         datasets.append(dataset)
 
-    return datasets
+    return datasets.astype(np.float32)
 
 def get_dataset_multi(root, image_size, seq_len, shift, stride, validation_ratio, label_scale, extra_data_root=None):
     ds = load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale)
