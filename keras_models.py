@@ -2,7 +2,7 @@ from tensorflow import keras
 from kerasncp.tf import LTCCell
 import kerasncp as kncp
 from node_cell import *
-from tf_cfc import CfcCell, MixedCfcCell, LTCCell
+from tf_cfc import CfcCell, MixedCfcCell
 
 LSTM_DROPOUT = 0.1
 LSTM_RECURRENT_DROPOUT = 0.1
@@ -10,12 +10,12 @@ DROPOUT = 0.1
 
 DEFAULT_CONFIG = {
     "clipnorm": 1,
-    "size": 64,
-    "backbone_activation": "silu",
+    "size": 128,
+    "backbone_activation": "tanh",
     "backbone_dr": 0.1,
     "forget_bias": 1.6,
     "backbone_units": 256,
-    "backbone_layers": 1,
+    "backbone_layers": 2,
     "weight_decay": 1e-06,
     "use_mixed": False,
 }
@@ -150,7 +150,7 @@ def generate_ctrnn_model(rnn_sizes,
         elif ct_network_type == "cfc":
             Cell = CfcCell(units=s, hparams=config)
         elif ct_network_type == "mixedcfc":
-            Cell = MixedCfcCelll(units=s, hparams=config)
+            Cell = MixedCfcCell(units=s, hparams=config)
         else:
             raise ValueError("Unknown model type '{}'".format(ct_network_type))
         ctrnn_model.add(
@@ -178,7 +178,7 @@ def generate_convolutional_layers(model):
     model.add(keras.layers.TimeDistributed(
         keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
     model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
+        keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(3,3), activation='relu')))
     
     return model
 
@@ -329,7 +329,8 @@ def generate_network_trunk(seq_len,
         keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
 
     model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
+        keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu')))
+    
 
     #fully connected layers
 

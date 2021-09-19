@@ -186,7 +186,7 @@ def load_dataset_rnn(root, image_size, seq_len, validation_ratio):
     dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d]
     output_means, output_stds = get_output_normalization(root)
 
-    rng_val_split = np.random.default_rng(124)
+    rng_val_split = np.random.default_rng(5432)
     rng_val_split.shuffle(dirs)
     val_ix = int(len(dirs) * validation_ratio)
     validation_dirs = dirs[:val_ix]
@@ -196,6 +196,3 @@ def load_dataset_rnn(root, image_size, seq_len, validation_ratio):
     validation_data, validation_batch_size = frames_to_array_rnn(root, validation_dirs, image_size, seq_len)
 
     return batch_size, validation_batch_size, training_data, validation_data
-
-
-
