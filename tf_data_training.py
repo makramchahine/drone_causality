@@ -234,23 +234,37 @@ model.summary(line_length=80)
 # Train
 time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
 if args.model == 'ctrnn':
+    dc = DEFAULT_CONFIG
     file_path = os.path.join(args.save_dir,
-                             'rev-%d_model-%s_ct_type-%s'
-                             '_seq-%d_opt-%s_lr-%f_crop-%f'
-                             '_epoch-{epoch:03d}_val_loss:{val_loss:.4f}'
-                             '_mse:{mse:.4f}_%s'
-                             % (REV, args.model, args.ct_type, args.seq_len,
-                                args.opt, args.lr, args.top_crop, time_str))
+                               'rev-%d' % REV
+                             + '_model-%s' % args.model
+                             + '_ctt-%s' % args.ct_type
+                             + '_cn-%f' % dc['clipnorm']
+                             + '_bba-%s' % dc['backbone_activation']
+                             + '_bb-dr-%f' % dc['backbone_dr']
+                             + '_fb-%f' % dc['forget_bias']
+                             + '_bbu-%d' % dc['backbone_units']
+                             + '_bbl-%d' % dc['backbone_layers']
+                             + '_wd-%f' % dc['weight_decay']
+                             + '_mixed-%d' % dc['use_mixed']
+                             + '_seq-%d' % args.seq_len
+                             + '_opt-%s' % args.opt
+                             + '_lr-%f' % args.lr
+                             + '_crop-%f' % args.top_crop
+                             + '_epoch-{epoch:03d}'
+                             + '_val-loss:{val_loss:.4f}'
+                             + '_mse:{mse:.4f}'
+                             + '_%s.hdf5' % time_str)
 else:
     file_path = os.path.join(args.save_dir,
                              'rev-%d_model-%s_seq-%d_opt-%s'
                              '_lr-%f_crop-%f_epoch-{epoch:03d}'
-                             '_val_loss:{val_loss:.4f}_mse:{mse:.4f}_%s'
+                             '_val_loss:{val_loss:.4f}_mse:{mse:.4f}_%s.hdf5'
                              % (REV, args.model, args.seq_len, args.opt,
                                 args.lr, args.top_crop, time_str))
 
 checkpointCallback = keras.callbacks.ModelCheckpoint(filepath=file_path,
-                                                     save_weights_only=False,
+                                                     save_weights_only=True,
                                                      save_best_only=False,
                                                      save_freq='epoch'
                                                      )
