@@ -1,0 +1,7 @@
+**/.git
+*.pyc
+
+log
+data
+model-checkpoints
+histories
