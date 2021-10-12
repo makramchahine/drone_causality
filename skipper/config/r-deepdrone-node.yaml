@@ -1,0 +1,3 @@
+model: ctrnn
+ct_type: node
+rnn_sizes: 128

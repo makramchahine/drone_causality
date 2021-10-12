@@ -1,0 +1,2 @@
+model: bidirect
+rnn_sizes: 128
