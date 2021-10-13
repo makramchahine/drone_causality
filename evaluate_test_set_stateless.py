@@ -34,14 +34,25 @@ output_means, output_std = get_output_normalization(training_root)
 #                     'rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-020_val_loss:0.2127_mse:0.1679_2021:09:20:02:24:31',
 #                     'rev-0_model-lstm_seq-256_opt-adam_lr-0.000900_crop-0.000000_epoch-012_val_loss:0.2495_mse:0.0408_2021:09:14:13:35:09']
 
-test_model_names = ['rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-049_val_loss:0.2629_mse:0.0672_2021:09:24:09:22:31.hdf5']
+#test_model_names = ['rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-049_val_loss:0.2629_mse:0.0672_2021:09:24:09:22:31.hdf5']
+#test_model_names = ['rev-0_model-ctrnn_ct_type-mixedcfc_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-008_val_loss:0.2011_mse:0.1416_2021:09:19:13:06:47']
+
+test_model_names = ['rev-0_model-ctrnn_ct_type-mixedcfc_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-008_val_loss:0.2011_mse:0.1416_2021:09:19:13:06:47',
+                    'rev-0_model-ctrnn_ct_type-mixedcfc_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-012_val_loss:0.2142_mse:0.1129_2021:09:19:13:06:47',
+                    'rev-0_model-ctrnn_ct_type-mixedcfc_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-014_val_loss:0.2359_mse:0.0989_2021:09:19:13:06:47',
+                    'rev-0_model-ctrnn_ct_type-mixedcfc_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-024_val_loss:0.2584_mse:0.0580_2021:09:19:11:25:20',
+                    'rev-0_model-ctrnn_ct_type-mixedcfc_seq-512_opt-adam_lr-0.000900_crop-0.000000_epoch-043_val_loss:0.2591_mse:0.0016_2021:09:17:08:30:51']
+
 
 checkpoints = ['./model-checkpoints/' + n for n in test_model_names]
 
 
 for (ix, c) in enumerate(checkpoints):
     last_checkpoint = c
-    last_model = tf.keras.models.load_model(last_checkpoint)
+    if 'ctrnn' in last_checkpoint:
+        last_model = tf.saved_model.load(last_checkpoint)
+    else:
+        last_model = tf.keras.models.load_model(last_checkpoint)
 
     model_name = test_model_names[ix]
     #seq_len = int(model_name.split('_')[2].split['-'][1]
@@ -69,7 +80,7 @@ for (ix, c) in enumerate(checkpoints):
         outputs = []
         labels = np.genfromtxt(os.path.join(test_root, d, 'data_out.csv'), delimiter=',', skip_header=1)
         n_frames = len([f for f in os.listdir(os.path.join(test_root, d)) if 'png' in f])
-        frame_stack_np = np.zeros((n_frames, 144, 256, 3))
+        frame_stack_np = np.zeros((n_frames, 144, 256, 3), dtype=np.float32)
         for ix in range(n_frames):
             frame_stack_np[ix] = Image.open(os.path.join(test_root, d, '%06d.png' % ix))
         for ix in range(seq_len, n_frames):
@@ -96,7 +107,7 @@ for (ix, c) in enumerate(checkpoints):
         outputs = []
         labels = np.genfromtxt(os.path.join(test_root, d, 'data_out.csv'), delimiter=',', skip_header=1)
         n_frames = len([f for f in os.listdir(os.path.join(test_root, d)) if 'png' in f])
-        frame_stack_np = np.zeros((n_frames, 144, 256, 3))
+        frame_stack_np = np.zeros((n_frames, 144, 256, 3), dtype=np.float32)
         for ix in range(n_frames):
             frame_stack_np[ix] = Image.open(os.path.join(test_root, d, '%06d.png' % ix))
         for ix in range(seq_len, n_frames):

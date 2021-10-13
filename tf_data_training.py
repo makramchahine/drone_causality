@@ -255,6 +255,7 @@ if args.model == 'ctrnn':
                              + '_val-loss:{val_loss:.4f}'
                              + '_mse:{mse:.4f}'
                              + '_%s.hdf5' % time_str)
+    print(file_path)
 else:
     file_path = os.path.join(args.save_dir,
                              'rev-%d_model-%s_seq-%d_opt-%s'
