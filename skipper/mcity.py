@@ -94,7 +94,7 @@ class CommandParser(object):
     def docker_build_all(self, args):
         """Build docker environment image and push."""
         self._docker_build_push(DOCKER_ENV_TAG, DOCKER_ENV_FILE)
-        self.build()
+        self.docker_build()
 
     def docker_build(self, args):
         """Build and push deployment docker image."""
