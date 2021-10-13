@@ -111,6 +111,8 @@ class CommandParser(object):
         self._docker_push(tag)
 
     def _docker_build(self, tag, file):
+        script_path = self._get_script_path()
+        file = os.path.realpath(os.path.join(script_path, file))
         subprocess.run(
             [
                 "docker",
@@ -119,7 +121,7 @@ class CommandParser(object):
                 tag,
                 "-f",
                 file,
-                ".",
+                os.path.realpath(os.path.join(script_path, "..")),
             ]
         )
 
