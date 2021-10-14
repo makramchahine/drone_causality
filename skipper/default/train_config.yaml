@@ -7,4 +7,4 @@ opt: adam
 lr: 0.0008
 data_shift: 16
 data_stride: 1
-batch_size: 32
+batch_size: 16
