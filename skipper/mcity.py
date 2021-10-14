@@ -84,6 +84,15 @@ class CommandParser(object):
             dest="seq_len",
         )
 
+        args_deploy.add_argument(
+            "--data-shift",
+            "-s",
+            default=None,
+            type=int,
+            help="Modify the data shift for the run.",
+            dest="data_shift",
+        )
+
         # parse_args defaults to [1:] for args, but you need to
         # exclude the rest of the args too, or validation will fail
         args = parser.parse_args(sys.argv[1:])
@@ -132,7 +141,7 @@ class CommandParser(object):
         """Now deploy to skipper."""
 
         # parse train args.
-        train_args = self._parse_train_config(args.config_file, args.seq_len)
+        train_args = self._parse_train_config(args.config_file, args)
 
         # get path to skipper config file
         skipper_file = os.path.join(
@@ -166,7 +175,7 @@ class CommandParser(object):
         ]
         subprocess.run(deploy_cmd)
 
-    def _parse_train_config(self, config_file, seq_len):
+    def _parse_train_config(self, config_file, args):
         """Build up training configuration from standard yaml + custom."""
         # get script path and assume everything is relative to script path
         script_path = self._get_script_path()
@@ -186,7 +195,11 @@ class CommandParser(object):
         _fill_config(config_file)
 
         # also make sure seq_len corresponds to provided arg
-        config_train["seq_len"] = seq_len
+        config_train["seq_len"] = args.seq_len
+
+        # check for data shift as well
+        if args.data_shift is not None:
+            config_train["data_shift"] = args.data_shift
 
         # now convert from dictionary format (key: value) to args format, which
         # is a list of ["--key1", "value1", "--key2", "value2", ...]
