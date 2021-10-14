@@ -5,9 +5,9 @@ FROM mitdrl/ubuntu:20.04_cuda11.0
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install development and runtime libraries (~4GB)
-RUN apt-get install --no-install-recommends \
-    libcudnn8=8.0.5.39-1+cuda11.0  \
-    libcudnn8-dev=8.0.5.39-1+cuda11.0
+RUN apt-get update && apt-get install --no-install-recommends \
+    libcudnn8=8.1.0.77-1+cuda11.2  \
+    libcudnn8-dev=8.1.0.77-1+cuda11.2
 
 # For CUDA profiling, TensorFlow requires CUPTI.
 ENV LD_LIBRARY_PATH /usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
