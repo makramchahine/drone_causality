@@ -1,3 +1,5 @@
+#%%
+
 #!/usr/bin/python3
 
 import tensorflow as tf
@@ -8,24 +10,24 @@ from keras_models import generate_lstm_model
 import glob
 import os
 import numpy as np
-import matplotlib
+#import matplotlib
 from node_cell import *
 from tf_cfc import CfcCell, MixedCfcCell
 
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from PIL import Image
 from kerasncp.tf import LTCCell
 
-model_name = 'ncp'
 rnn_size = 128
 
 IMAGE_SHAPE = (144, 256, 3)
 DROPOUT = 0.1
-training_root = '/home/ramin/devens_drone_data/devens_2021-08-04_corrected'
+training_root = '/home/ramin/devens_drone_data/devens_12102021_sliced/1628106866.84_1'
 output_means, output_std = get_output_normalization(training_root)
-test_root = '/home/ramin/devens_drone_data/devens_2021-08-04_corrected_test/1628106965.56'
-#test_root = '/home/ramin/devens_drone_data/devens_2021-08-04_corrected/1628106140.64/'
+test_root = '/home/ramin/devens_drone_data/devens_12102021_sliced/1628106866.84'
+#test_root = '/home/ramin/devens_drone_data/devens_2021-08-04_corrected_test/1628114177.28/'
+#test_root = '/home/ramin/devens_drone_data/october_devens/1635524963.70/'
 # test_root = '/home/ramin/devens_drone_data/october_devens/1635523982.23'
 print('Loading data for run: %s' % test_root)
 
@@ -39,19 +41,40 @@ frame_stack_np = np.expand_dims(frame_stack_np, 0)
 evaluation_data = frame_stack_np
 
 
-test_model_names = [
-    #'rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-020_val_loss:0.2127_mse:0.1679_2021:09:20:02:24:31']
-    #'rev-0_model-lstm_seq-64_opt-adam_lr-0.001000_crop-0.000000_epoch-046_val_loss:0.2867_mse:0.0046_2021:09:09:02:33:09']
-    'rev-0_model-ctrnn_ct_type-mixedcfc_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-023_val_loss:0.2439_mse:0.0607_2021:09:19:11:25:20']
+#test_model_names = [
+#    #'rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-047_val_loss:0.2574_mse:0.0683_2021:09:24:09:22:31.hdf5']
+#    #'models-from-server/rev-0_model-ncp_seq-64_opt-adam_lr-0.000800_crop-0.000000_epoch-049_val_loss:0.2528_mse:0.2151_2021:11:10:19:28:04.hdf5']
+#    'models-from-server/rev-0_model-lstm_seq-256_opt-adam_lr-0.000800_crop-0.000000_epoch-036_val_loss:0.2496_mse:0.0147_2021:11:11:11:10:54.hdf5']
+#    #'models-from-server/rev-0_model-ctrnn_ctt-mixedcfc_cn-1.000000_bba-silu_bb-dr-0.100000_fb-1.600000_bbu-128_bbl-1_wd-0.000001_mixed-0_seq-128_opt-adam_lr-0.000800_crop-0.000000_epoch-039_val-loss:0.3340_mse:0.0866_2021:11:10:20:29:31.hdf5']
+#
+
+# test_model_names = ['models-from-server/rev-0_model-ncp_seq-64_opt-adam_lr-0.000800_crop-0.000000_epoch-049_val_loss:0.2528_mse:0.2151_2021:11:10:19:28:04.hdf5']
+# test_model_names = ['models-from-server/rev-0_model-ctrnn_ctt-mixedcfc_cn-1.000000_bba-silu_bb-dr-0.100000_fb-1.600000_bbu-128_bbl-1_wd-0.000001_mixed-0_seq-128_opt-adam_lr-0.000800_crop-0.000000_epoch-039_val-loss:0.3340_mse:0.0866_2021:11:10:20:29:31.hdf5']
+# test_model_names = ['models-from-server/rev-0_model-lstm_seq-256_opt-adam_lr-0.000800_crop-0.000000_epoch-036_val_loss:0.2496_mse:0.0147_2021:11:11:11:10:54.hdf5']
+# test_model_names = ['rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-047_val_loss:0.2574_mse:0.0683_2021:09:24:09:22:31.hdf5']
+
+#test_model_names = ['rev-0_model-ctrnn_ctt-mixedcfc_cn-1.000000_bba-silu_bb-dr-0.100000_fb-1.600000_bbu-128_bbl-1_wd-0.000001_mixed-0_seq-68_opt-adam_lr-0.000900_crop-0.000000_epoch-099_val-loss:0.2612_mse:0.0076_2021:12:10:18:32:23.hdf5']
+test_model_names = ['rev-0_model-ctrnn_ctt-mixedcfc_cn-1.000000_bba-silu_bb-dr-0.100000_fb-1.600000_bbu-128_bbl-1_wd-0.000001_mixed-0_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-097_val-loss:0.3013_mse:0.0213_2021:12:11:19:15:47.hdf5']
+
+#test_model_names = ['rev-0_model-lstm_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-099_val_loss:0.2741_mse:0.0130_2021:12:12:13:27:59.hdf5']
+
+test_model_names = ['rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-063_val_loss:0.2497_mse:0.0999_2021:12:11:16:22:54.hdf5']
+test_model_names = ['rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-029_val_loss:0.2241_mse:0.2651_2021:12:13:10:59:52.hdf5']
 
 checkpoint = ['./model-checkpoints/' + n for n in test_model_names]
+checkpoint = checkpoint[0]
 
 
-if 'ctrnn' in checkpoint:
-    pass
+if 'ncp' in test_model_names[0]:
+    model_name = 'ncp'
+elif 'mixedcfc' in test_model_names[0]:
+    model_name = 'mixedcfc'
+elif 'lstm' in test_model_names[0]:
+    model_name = 'lstm'
 else:
-    last_model = tf.keras.models.load_model(checkpoint)
-    weights_list = last_model.get_weights()
+    print('You shall not pass!')
+
+weights_file_name = checkpoint
 
 #layers = [l for l in last_model.layers]
 
@@ -67,11 +90,19 @@ x = normalization_layer(x)
 
 # model = keras.models.Sequential()
 # model.add(my_input_model)
-# Conv Layers
-x = keras.layers.Conv2D(filters=16, kernel_size=(5, 5), strides=(3, 3), activation='relu')(x)
-x = keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
-x = keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
-x = keras.layers.Conv2D(filters=8, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
+
+# # Conv Layers for 'rev-0_model-ncp_seq-64_opt-adam_lr-0.000900_crop-0.000000_epoch-047_val_loss:0.2574_mse:0.0683_2021:09:24:09:22:31.hdf5'
+# x = keras.layers.Conv2D(filters=16, kernel_size=(5, 5), strides=(3, 3), activation='relu')(x)
+# x = keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
+# x = keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
+# x = keras.layers.Conv2D(filters=8, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
+
+x = keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')(x)
+x = keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu')(x)
+x = keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu')(x)
+x = keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')(x)
+x = keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
+
 # fully connected layers
 x = keras.layers.Flatten()(x)
 x = keras.layers.Dense(units=128, activation='linear')(x)
@@ -83,20 +114,21 @@ if model_name == 'ncp':
         inter_neurons=18,  # Number of inter neurons
         command_neurons=12,  # Number of command neurons
         motor_neurons=4,  # Number of motor neurons
-        sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
+        sensory_fanout=8,  # How many outgoing synapses has each sensory neuron
         inter_fanout=4,  # How many outgoing synapses has each inter neuron
         recurrent_command_synapses=4,  # Now many recurrent synapses are in the
         # command neuron layer
         motor_fanin=6,  # How many incoming synapses has each motor neuron
-    )
-    rnn_cell = LTCCell(wiring)
+        seed = 5555
+        )
+    rnn_cell = LTCCell(wiring, ode_unfolds=6)
     inputs_state = tf.keras.Input(shape=(rnn_cell.state_size,))
 
     motor_out, output_states = rnn_cell(pre_recurrent_layer, inputs_state)
     single_step_model = tf.keras.Model([inputs, inputs_state], [motor_out, output_states])
 
-    # single_step_model.load_weights(checkpoint)
-    single_step_model.set_weights(weights_list)
+    single_step_model.load_weights(weights_file_name)
+    #single_step_model.set_weights(weights_list)
 
 
     def infer_hidden_states(single_step_model, state_size, data_x):
@@ -117,10 +149,10 @@ if model_name == 'ncp':
         outputs = []
         for t in range(seq_len):
             # Compute new hidden state from old hidden state + input at time t
-            print("hidden.shape", hidden)
+            #print("hidden.shape", hidden)
             motor_out, hidden = single_step_model([data_x[:, t], hidden])
-            print("all", hidden)
-            print("all", len(hidden))
+            #print("all", hidden)
+            #print("all", len(hidden))
             hidden_states.append(np.reshape(hidden, (1, state_size))) ## @Ramin please confirm hidden[0] vs hidden
             outputs.append(motor_out)
         return tf.stack(outputs, axis=1), tf.stack(hidden_states, axis=1)
@@ -133,27 +165,123 @@ if model_name == 'ncp':
     for i in range(wiring.units):
         print("Neuron {:0d} is a {:} neuron".format(i, wiring.get_type_of_neuron(i)))
 
-# elif model_name == 'lstm':
-#     rnn_cell = keras.layers.LSTMCell(rnn_size)
-#     c_state = tf.keras.Input(shape=(rnn_cell.state_size[0]))
-#     h_state = tf.keras.Input(shape=(rnn_cell.state_size[1]))
-#
-#     output, [next_c, next_h] = rnn_cell(pre_recurrent_layer, [c_state, h_state])
-#     single_step_model = tf.keras.Model([inputs, c_state, h_state], [next_c, next_h, output])
-#
-#     single_step_model.set_weights(weights_list)
-#
-# elif model_name == 'mmrnn':
-#     rnn_cell = mmRNN(units=rnn_size)
-#     c_state = tf.keras.Input(shape=(rnn_cell.state_size[0]))
-#     h_state = tf.keras.Input(shape=(rnn_cell.state_size[1]))
-#
-#     output, [next_c, next_h] = rnn_cell(pre_recurrent_layer, [c_state, h_state])
-#     single_step_model = tf.keras.Model([inputs, c_state, h_state], [next_c, next_h, output])
-#
-#     single_step_model.set_weights(weights_list)
+elif model_name == 'lstm':
+    rnn_cell = tf.keras.layers.LSTMCell(rnn_size)
+    c_state = tf.keras.Input(shape=(rnn_cell.state_size[0]))
+    h_state = tf.keras.Input(shape=(rnn_cell.state_size[1]))
 
-print(np.shape(outputs))
-plt.plot(labels[:,1])
-plt.plot(outputs[0,:,1])
+    output, [next_c, next_h] = rnn_cell(pre_recurrent_layer, [c_state, h_state])
+    output = tf.keras.layers.Dense(units=4, activation='linear')(output)
+    single_step_model = tf.keras.Model([inputs, c_state, h_state], [next_c, next_h, output])
+
+    single_step_model.load_weights(weights_file_name)
+
+    def infer_hidden_states(single_step_model, state_size, data_x):
+
+        batch_size = data_x.shape[0]
+        seq_len = data_x.shape[1]
+        hidden_c = tf.zeros((batch_size, state_size[0]))
+        hidden_h = tf.zeros((batch_size, state_size[1]))
+        hidden_state_c = [hidden_c]
+        hidden_state_h = [hidden_h]
+        outputs = []
+        for t in range(seq_len):
+            # Compute new hidden state from old hidden state + input at time t
+            #print("hidden.shape", hidden_c)
+            hidden_c, hidden_h, motor_out= single_step_model([data_x[:, t], hidden_c, hidden_h])
+            #print("all", hidden)
+            #print("all", len(hidden))
+            hidden_state_c.append(hidden_c[0])
+            hidden_state_h.append(hidden_h[0])
+            outputs.append(motor_out)
+        return tf.stack(outputs, axis=1), tf.stack(hidden_c, axis=1), tf.stack(hidden_h, axis=1)
+
+    # Now we can infer the hidden state
+    outputs, states_c, states_h = infer_hidden_states(single_step_model, rnn_cell.state_size, evaluation_data)
+    #print("Hidden states of first example ", states[0])
+
+elif model_name == 'mixedcfc':
+    # CONFIG = {
+    #     "clipnorm": 1,
+    #     "size": 128,
+    #     "backbone_activation": "silu",
+    #     "backbone_dr": 0.1,
+    #     "forget_bias": 1.6,
+    #     "backbone_units": 128,
+    #     "backbone_layers": 1,
+    #     "weight_decay": 1e-06,
+    #     "use_mixed": False,
+    # }
+
+    CONFIG = {
+        "clipnorm": 1,
+        "size": rnn_size,
+        "backbone_activation": "silu",
+        "backbone_dr": 0.1,
+        "forget_bias": 1.6,
+        "backbone_units": 128,
+        "backbone_layers": 1,
+        "weight_decay": 1e-06,
+        "use_mixed": True,
+    }
+
+    rnn_cell = MixedCfcCell(units=rnn_size, hparams=CONFIG)
+
+    c_state = tf.keras.Input(shape=(rnn_cell.state_size[0]))
+    h_state = tf.keras.Input(shape=(rnn_cell.state_size[1]))
+
+    output, [next_c, next_h] = rnn_cell(pre_recurrent_layer, [c_state, h_state])
+    output = tf.keras.layers.Dense(units=4, activation='linear')(output)
+    single_step_model = tf.keras.Model([inputs, c_state, h_state], [next_c, next_h, output])
+
+    single_step_model.load_weights(weights_file_name)
+
+    def infer_hidden_states(single_step_model, state_size, data_x):
+
+        batch_size = data_x.shape[0]
+        seq_len = data_x.shape[1]
+        hidden_c = tf.zeros((batch_size, state_size[0]))
+        hidden_h = tf.zeros((batch_size, state_size[1]))
+        hidden_state_c = [hidden_c]
+        hidden_state_h = [hidden_h]
+        outputs = []
+        for t in range(seq_len):
+            # Compute new hidden state from old hidden state + input at time t
+            #print("hidden.shape", hidden_c)
+            hidden_c, hidden_h, motor_out= single_step_model([data_x[:, t], hidden_c, hidden_h])
+            #print("all", hidden)
+            #print("all", len(hidden))
+            hidden_state_c.append(hidden_c[0])
+            hidden_state_h.append(hidden_h[0])
+            outputs.append(motor_out)
+        return tf.stack(outputs, axis=1), tf.stack(hidden_c, axis=1), tf.stack(hidden_h, axis=1)
+
+    # Now we can infer the hidden state
+    outputs, states_c, states_h = infer_hidden_states(single_step_model, rnn_cell.state_size, evaluation_data)
+
+
+# print(np.shape(outputs))
+# plt.plot(labels[:,1])
+# plt.plot(outputs[0,:,1])
+# plt.show()
+
+fig, axs = plt.subplots(2, 2)
+axs[0, 0].plot(labels[:,0])
+axs[0, 0].plot(outputs[0,:,0])
+axs[0, 0].set_title('V_X')
+
+axs[0, 1].plot(labels[:,1])
+axs[0, 1].plot(outputs[0,:,1])
+axs[0, 1].set_title('V_Y')
+
+axs[1, 0].plot(labels[:,2])
+axs[1, 0].plot(outputs[0,:,2])
+axs[1, 0].set_title('V_Z')
+
+axs[1, 1].plot(labels[:,3])
+axs[1, 1].plot(outputs[0,:,3])
+axs[1, 1].set_title('W')
+
 plt.show()
+
+
