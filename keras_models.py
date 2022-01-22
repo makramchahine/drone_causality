@@ -1,8 +1,5 @@
-<< << << < HEAD
-== == == =
 import os
 
->> >> >> > minicity_training
 import kerasncp as kncp
 from kerasncp.tf import LTCCell
 from tensorflow import keras
