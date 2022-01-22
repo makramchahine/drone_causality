@@ -1,14 +1,15 @@
+<< << << < HEAD
+== == == =
 import os
 
-import tensorflow as tf
-from tensorflow import keras
-from kerasncp.tf import LTCCell
+>> >> >> > minicity_training
 import kerasncp as kncp
+from kerasncp.tf import LTCCell
+from tensorflow import keras
+
 from node_cell import *
 from tf_cfc import CfcCell, MixedCfcCell
 
-LSTM_DROPOUT = 0.1
-LSTM_RECURRENT_DROPOUT = 0.1
 DROPOUT = 0.1
 
 DEFAULT_CONFIG = {
@@ -30,7 +31,10 @@ def generate_lstm_model(rnn_sizes,
                         image_shape,
                         do_normalization,
                         do_augmentation,
-                        data, augmentation_params=None,
+                        data,
+                        dropout=0.1,
+                        recurrent_dropout=0.1,
+                        augmentation_params=None,
                         rnn_stateful=False,
                         batch_size=None
                         ):
@@ -55,11 +59,11 @@ def generate_lstm_model(rnn_sizes,
                                                             ),
                                          return_sequences=True,
                                          stateful=rnn_stateful,
-                                         dropout=LSTM_DROPOUT,
-                                         recurrent_dropout=LSTM_RECURRENT_DROPOUT))
+                                         dropout=dropout,
+                                         recurrent_dropout=recurrent_dropout))
         # if ix < len(rnn_sizes) - 1:
         #    lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.1)))
-    
+
     # lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.05)))
     lstm_model.add(keras.layers.Dense(units=4, activation='linear'))
     # print(lstm_model.summary())
@@ -73,9 +77,9 @@ def generate_ncp_model(seq_len,
                        data,
                        augmentation_params=None,
                        rnn_stateful=False,
-                       batch_size=None
+                       batch_size=None,
+                       seed=2222
                        ):
-
     ncp_model = generate_network_trunk(seq_len,
                                        image_shape,
                                        do_normalization,
@@ -92,8 +96,9 @@ def generate_ncp_model(seq_len,
         sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
         inter_fanout=4,  # How many outgoing synapses has each inter neuron
         recurrent_command_synapses=4,  # Now many recurrent synapses are in the
-                                       # command neuron layer
-        motor_fanin=6,  # How many incoming syanpses has each motor neuron
+        # command neuron layer
+        motor_fanin=6,  # How many incoming syanpses has each motor neuron,
+        seed=seed,  # random seed to generate connections between nodes
     )
 
     rnnCell = LTCCell(wiring)
@@ -116,10 +121,9 @@ def generate_ctrnn_model(rnn_sizes,
                          augmentation_params=None,
                          rnn_stateful=False,
                          batch_size=None,
-                         ct_network_type = 'ctrnn',
-                         config =DEFAULT_CONFIG
+                         ct_network_type='ctrnn',
+                         config=DEFAULT_CONFIG
                          ):
-
     ctrnn_model = generate_network_trunk(seq_len, image_shape,
                                          do_normalization,
                                          do_augmentation,
@@ -173,24 +177,22 @@ def generate_ctrnn_model(rnn_sizes,
 
 
 def generate_convolutional_layers(model):
+    model.add(keras.layers.TimeDistributed(
+        keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(
+        keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(
+        keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    model.add(keras.layers.TimeDistributed(
+        keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
+    model.add(keras.layers.TimeDistributed(
+        keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(3, 3), activation='relu')))
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=24, kernel_size=(5,5), strides=(2,2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=36, kernel_size=(5,5), strides=(2,2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=48, kernel_size=(5,5), strides=(2,2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(1,1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3,3), strides=(3,3), activation='relu')))
-    
     return model
 
 
 def generate_normalization_layers(model, data=None):
-
-    model.add(keras.layers.experimental.preprocessing.Rescaling(1./255))
+    model.add(keras.layers.experimental.preprocessing.Rescaling(1. / 255))
 
     if data is not None:
 
@@ -232,6 +234,7 @@ def generate_augmentation_layers(model, augmentation_params):
 
     return model
 
+
 def generate_network_trunk(seq_len,
                            image_shape,
                            do_normalization,
@@ -240,7 +243,6 @@ def generate_network_trunk(seq_len,
                            augmentation_params=None,
                            rnn_stateful=False,
                            batch_size=None):
-
     # model.add(keras.layers.InputLayer(input_shape=(seq_len, *image_shape), batch_size=batch_size))
     # model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, *image_shape)))
     # inputs = keras.Input(batch_input_shape=(batch_size,seq_len,*image_shape))
@@ -273,19 +275,19 @@ def generate_network_trunk(seq_len,
     # model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
     # model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1024,   activation='linear')))
     # model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=DROPOUT)))
-    
-    #x = model.layers[0].output
-    #x = keras.layers.experimental.preprocessing.Rescaling(1./255)(x)
-     
+
+    # x = model.layers[0].output
+    # x = keras.layers.experimental.preprocessing.Rescaling(1./255)(x)
+
     model_vgg = keras.applications.VGG16(include_top=False,
                                          weights='imagenet',
                                          input_shape=image_shape)
 
     layers = [l for l in model_vgg.layers]
 
-    inputs = keras.Input(batch_input_shape=(batch_size,seq_len,*image_shape))
+    inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
 
-    rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1./255)
+    rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1. / 255)
 
     # normalization_layer = keras.layers.experimental.preprocessing.Normalization(
     #     mean=[0.41718618, 0.48529191, 0.38133072],
@@ -293,7 +295,7 @@ def generate_network_trunk(seq_len,
 
     normalization_layer = keras.layers.experimental.preprocessing.Normalization(
         mean=[0.41718618, 0.48529191, 0.38133072],
-        variance=[.057,.05,.061])
+        variance=[.057, .05, .061])
 
     layers[0] = inputs
 
@@ -311,16 +313,15 @@ def generate_network_trunk(seq_len,
             layers[i].trainable = False
             layers[i] = keras.layers.TimeDistributed(layers[i])
             x = layers[i](x)
-    
-    my_time_model = keras.Model(inputs=inputs, outputs=x)
 
+    my_time_model = keras.Model(inputs=inputs, outputs=x)
 
     model = keras.models.Sequential()
 
     # model.add(my_time_model)
     model.add(my_input_model)
 
-    #Conv Layers
+    # Conv Layers
     model.add(keras.layers.TimeDistributed(
         keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
 
@@ -335,17 +336,17 @@ def generate_network_trunk(seq_len,
 
     model.add(keras.layers.TimeDistributed(
         keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu')))
-    
 
-    #fully connected layers
+    # fully connected layers
 
     model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
     model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=128, activation='linear')))
     model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=DROPOUT)))
 
-    #print(model.summary())
+    # print(model.summary())
 
     return model
+
 
 # function taken from https://github.com/GoldenZephyr/rosetta_drone/blob/main/rnn_control/src/rnn_control_node.py
 def load_model_from_weights(model_name: str, checkpoint_name: str):

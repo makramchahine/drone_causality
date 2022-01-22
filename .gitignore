@@ -14,7 +14,7 @@ __pycache__
 
 # Data
 data/*
-model-checkpoints/*
+**/model_checkpoints/*
 processed-data/*
 training-histories/*
 model-piloted-runs/*
@@ -27,6 +27,7 @@ airsim/*
 visualbackprop/*
 setup_path.py
 *~
+*.db
 
 # pyenv
 .python-version
@@ -46,3 +47,9 @@ tuner_tests/
 # visual backprop results
 *.png
 *.mp4
+
+# tuning results
+*.err
+*.log
+*.out
+*.pkl

@@ -1,0 +1,4 @@
+tensorflow
+keras-ncp
+tqdm
+optuna
