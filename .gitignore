@@ -42,3 +42,7 @@ aaron*
 *_logs
 tuner_tests/
 *.vscode
+
+# visual backprop results
+*.png
+*.mp4
