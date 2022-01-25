@@ -78,7 +78,7 @@ COMMON_PARAMS = {
 # optuna objetive functions
 def ncp_objective(trial: Trial, data_dir: str, batch_size: int):
     # get trial params from bayesian optimization
-    seeds_to_try = list(range(2221, 2230)) + [5555]
+    seeds_to_try = list(range(22221, 22230)) + [55555]
     ncp_seed = trial.suggest_categorical("ncp_seed", seeds_to_try)
 
     lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
@@ -91,8 +91,9 @@ def ncp_objective(trial: Trial, data_dir: str, batch_size: int):
 
     model_params = NCPParams(seq_len=64, seed=ncp_seed)
     # note rnn_size not needed for ncp
-    history = train_model(model_type="ncp", lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
                           model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_PARAMS)
+    trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
 
@@ -121,14 +122,14 @@ def ctrnn_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batc
         "forget_bias": forget_bias,
         "backbone_units": backbone_units,
         "backbone_layers": backbone_layers,
-        "weight_decay": weight_decay,
-        "use_mixed": False,
+        "weight_decay": weight_decay
     }
 
     model_params = CTRNNParams(seq_len=64, rnn_sizes=[rnn_size], ct_network_type=ct_network_type, config=cfc_config)
     # note rnn_size not needed for ncp
-    history = train_model(model_type="ctrnn", lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
                           model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_PARAMS)
+    trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
 
@@ -156,8 +157,9 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int):
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
     model_params = LSTMParams(seq_len=64, rnn_sizes=[rnn_size], dropout=dropout, recurrent_dropout=dropout)
-    history = train_model(model_type="lstm", lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
                           model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_PARAMS)
+    trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
 

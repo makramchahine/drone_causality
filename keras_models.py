@@ -1,24 +1,84 @@
+import copy
 import os
+from dataclasses import asdict, dataclass, field
+from typing import Tuple, Iterable, Optional, Dict, List
 
 import kerasncp as kncp
 from kerasncp.tf import LTCCell
+from tf_cfc import LTCCell as CFCLTCCell
 from tensorflow import keras
+from tensorflow.python.keras.layers import Conv2D, Dense
 
 from node_cell import *
 from tf_cfc import CfcCell, MixedCfcCell
 
+IMAGE_SHAPE = (144, 256, 3)
+
+
+# helper classes that contain all the parameters in the generate_*_model functions
+@dataclass
+class ModelParams:
+    # dataclasses can't have non-default follow default
+    seq_len: int = field(default=False, init=True)
+    image_shape: Tuple[int, int, int] = IMAGE_SHAPE
+    do_normalization: bool = False
+    do_augmentation: bool = False
+    data: Optional[Iterable] = None
+    augmentation_params: Dict = None
+    rnn_stateful: bool = False
+    batch_size: Optional[int] = None
+    single_step: bool = False
+
+
+@dataclass
+class NCPParams(ModelParams):
+    seed: int = 22222
+
+
+@dataclass
+class LSTMParams(ModelParams):
+    rnn_sizes: List[int] = field(default=False, init=True)
+    dropout: float = 0.1
+    recurrent_dropout: float = 0.1
+
+
+@dataclass
+class CTRNNParams(ModelParams):
+    rnn_sizes: List[int] = field(default=False, init=True)
+    ct_network_type: str = 'ctrnn',
+    config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
+
+
+def get_readable_name(params: ModelParams):
+    """
+    Extracts the model name from the class of params
+    """
+    class_name = str(params.__class__.__name__)
+    return class_name.replace("Params", "").lower()
+
+
 DROPOUT = 0.1
 
-DEFAULT_CONFIG = {
+# TODO: are these params relevant?
+# DEFAULT_CONFIG = {
+#     "clipnorm": 1,
+#     "size": 128,
+#     "backbone_activation": "tanh",
+#     "backbone_dr": 0.1,
+#     "forget_bias": 1.6,
+#     "backbone_units": 256,
+#     "backbone_layers": 2,
+#     "weight_decay": 1e-06,
+#     "use_mixed": False,
+# }
+DEFAULT_CFC_CONFIG = {
     "clipnorm": 1,
-    "size": 128,
-    "backbone_activation": "tanh",
+    "backbone_activation": "silu",
     "backbone_dr": 0.1,
     "forget_bias": 1.6,
-    "backbone_units": 256,
-    "backbone_layers": 2,
-    "weight_decay": 1e-06,
-    "use_mixed": False,
+    "backbone_units": 128,
+    "backbone_layers": 1,
+    "weight_decay": 1e-06
 }
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -33,37 +93,63 @@ def generate_lstm_model(rnn_sizes,
                         recurrent_dropout=0.1,
                         augmentation_params=None,
                         rnn_stateful=False,
-                        batch_size=None
+                        batch_size=None,
+                        single_step: bool = False,
                         ):
-    lstm_model = generate_network_trunk(seq_len,
-                                        image_shape,
-                                        do_normalization,
-                                        do_augmentation,
-                                        data,
-                                        augmentation_params,
-                                        rnn_stateful=rnn_stateful,
-                                        batch_size=batch_size
-                                        )
+    inputs_image, x = generate_network_trunk(seq_len,
+                                             image_shape,
+                                             do_normalization,
+                                             do_augmentation,
+                                             data,
+                                             augmentation_params,
+                                             rnn_stateful=rnn_stateful,
+                                             batch_size=batch_size,
+                                             single_step=single_step
+                                             )
 
     # print(lstm_model.layers[-1].output_shape)
     # print(batch_size, seq_len, lstm_model.layers[-1].output_shape[-1])
 
+    # vars for single step model
+    c_inputs = []
+    h_inputs = []
+    c_outputs = []
+    h_outputs = []
     for (ix, s) in enumerate(rnn_sizes):
-        lstm_model.add(keras.layers.LSTM(s,
-                                         batch_input_shape=(batch_size,
-                                                            seq_len,
-                                                            lstm_model.layers[-1].output_shape[-1]
-                                                            ),
-                                         return_sequences=True,
-                                         stateful=rnn_stateful,
-                                         dropout=dropout,
-                                         recurrent_dropout=recurrent_dropout))
+        if single_step:
+            rnn_cell = tf.keras.layers.LSTMCell(s)
+            # keep track of input for each layer of rnn
+            c_input = tf.keras.Input(shape=(rnn_cell.state_size[0]))
+            h_input = tf.keras.Input(shape=(rnn_cell.state_size[1]))
+
+            x, [c_state, h_state] = rnn_cell(x, [c_input, h_input])
+            c_inputs.append(c_input)
+            h_inputs.append(h_input)
+            c_outputs.append(c_state)
+            h_outputs.append(h_state)
+        else:
+            x = keras.layers.LSTM(
+                s,
+                batch_input_shape=(
+                    batch_size,
+                    seq_len,
+                    x.shape[-1]
+                ),
+                return_sequences=True,
+                stateful=rnn_stateful,
+                dropout=dropout,
+                recurrent_dropout=recurrent_dropout
+            )(x)
         # if ix < len(rnn_sizes) - 1:
         #    lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.1)))
 
     # lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.05)))
-    lstm_model.add(keras.layers.Dense(units=4, activation='linear'))
-    # print(lstm_model.summary())
+    x = keras.layers.Dense(units=4, activation='linear')(x)
+    if single_step:
+        lstm_model = keras.Model([inputs_image, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
+    else:
+        lstm_model = keras.Model([inputs_image], [x])
+
     return lstm_model
 
 
@@ -75,15 +161,19 @@ def generate_ncp_model(seq_len,
                        augmentation_params=None,
                        rnn_stateful=False,
                        batch_size=None,
-                       seed=2222
+                       seed=22222,
+                       single_step: bool = False,
                        ):
-    ncp_model = generate_network_trunk(seq_len,
-                                       image_shape,
-                                       do_normalization,
-                                       do_augmentation,
-                                       data, augmentation_params,
-                                       rnn_stateful=rnn_stateful,
-                                       batch_size=batch_size)
+    inputs_image, x = generate_network_trunk(
+        seq_len,
+        image_shape,
+        do_normalization,
+        do_augmentation,
+        data, augmentation_params,
+        rnn_stateful=rnn_stateful,
+        batch_size=batch_size,
+        single_step=single_step
+    )
 
     # Setup the network
     wiring = kncp.wirings.NCP(
@@ -98,13 +188,21 @@ def generate_ncp_model(seq_len,
         seed=seed,  # random seed to generate connections between nodes
     )
 
-    rnnCell = LTCCell(wiring)
-    ncp_model.add(keras.layers.RNN(rnnCell,
-                                   batch_input_shape=(batch_size,
-                                                      seq_len,
-                                                      ncp_model.layers[-1].output_shape[-1]),
-                                   return_sequences=True)
-                  )
+    rnn_cell = LTCCell(wiring)
+
+    if single_step:
+        inputs_state = tf.keras.Input(shape=(rnn_cell.state_size,))
+        # wrap output states in list since want output to just be ndarray, not list of 1 el ndarray
+        motor_out, [output_states] = rnn_cell(x, inputs_state)
+        ncp_model = keras.Model([inputs_image, inputs_state], [motor_out, output_states])
+    else:
+        x = keras.layers.RNN(rnn_cell,
+                             batch_input_shape=(batch_size,
+                                                seq_len,
+                                                x.shape[-1]),
+                             return_sequences=True)(x)
+
+        ncp_model = keras.Model([inputs_image], [x])
 
     return ncp_model
 
@@ -119,73 +217,83 @@ def generate_ctrnn_model(rnn_sizes,
                          rnn_stateful=False,
                          batch_size=None,
                          ct_network_type='ctrnn',
-                         config=DEFAULT_CONFIG
+                         config=DEFAULT_CFC_CONFIG,
+                         single_step: bool = False,
                          ):
-    ctrnn_model = generate_network_trunk(seq_len, image_shape,
-                                         do_normalization,
-                                         do_augmentation,
-                                         data,
-                                         augmentation_params,
-                                         rnn_stateful=rnn_stateful,
-                                         batch_size=batch_size
-                                         )
+    inputs_image, x = generate_network_trunk(
+        seq_len, image_shape,
+        do_normalization,
+        do_augmentation,
+        data,
+        augmentation_params,
+        rnn_stateful=rnn_stateful,
+        batch_size=batch_size,
+        single_step=single_step
+    )
 
+    # vars for single step model
+    all_hidden_inputs = []  # shape: num layers x num hidden x hidden size
+    all_hidden_outputs = []
     for (ix, s) in enumerate(rnn_sizes):
         if ct_network_type == 'ctrnn':
-            Cell = CTRNNCell(units=s, method='dopri5')
+            rnn_cell = CTRNNCell(units=s, method='dopri5')
         elif ct_network_type == "node":
-            Cell = CTRNNCell(units=s, method="dopri5", tau=0)
+            rnn_cell = CTRNNCell(units=s, method="dopri5", tau=0)
         elif ct_network_type == "mmrnn":
-            Cell = mmRNN(units=s)
+            rnn_cell = mmRNN(units=s)
         elif ct_network_type == "ctgru":
-            Cell = CTGRU(units=s)
+            rnn_cell = CTGRU(units=s)
         elif ct_network_type == "vanilla":
-            Cell = VanillaRNN(units=s)
+            rnn_cell = VanillaRNN(units=s)
         elif ct_network_type == "bidirect":
-            Cell = BidirectionalRNN(units=s)
+            rnn_cell = BidirectionalRNN(units=s)
         elif ct_network_type == "grud":
-            Cell = GRUD(units=s)
+            rnn_cell = GRUD(units=s)
         elif ct_network_type == "phased":
-            Cell = PhasedLSTM(units=s)
+            rnn_cell = PhasedLSTM(units=s)
         elif ct_network_type == "gruode":
-            Cell = GRUODE(units=s)
+            rnn_cell = GRUODE(units=s)
         elif ct_network_type == "hawk":
-            Cell = HawkLSTMCell(units=s)
+            rnn_cell = HawkLSTMCell(units=s)
         elif ct_network_type == "ltc":
-            Cell = LTCCell(units=s)
+            rnn_cell = CFCLTCCell(units=s)
         elif ct_network_type == "cfc":
-            Cell = CfcCell(units=s, hparams=config)
+            rnn_cell = CfcCell(units=s, hparams=config)
         elif ct_network_type == "mixedcfc":
-            Cell = MixedCfcCell(units=s, hparams=config)
+            rnn_cell = MixedCfcCell(units=s, hparams=config)
         else:
             raise ValueError("Unknown model type '{}'".format(ct_network_type))
-        ctrnn_model.add(
-            keras.layers.RNN(Cell,
-                             batch_input_shape=(batch_size, seq_len,
-                                                ctrnn_model.layers[-1].output_shape[-1]),
-                             return_sequences=True,
-                             stateful=rnn_stateful,
-                             time_major=False)
-        )
 
-    ctrnn_model.add(keras.layers.Dense(units=4, activation='linear'))
+        if single_step:
+            # keep track of input for each layer of rnn
+            if isinstance(rnn_cell.state_size, int):
+                # only 1 hidden state
+                hidden_inputs = [tf.keras.Input(shape=rnn_cell.state_size)]
+                x, hidden = rnn_cell(x, hidden_inputs)  # assume hidden is list of length 1 with tensor
+                all_hidden_inputs.extend(hidden_inputs)
+                all_hidden_outputs.extend(hidden)
+            else:
+                # multiple hiddens
+                hidden_inputs = [tf.keras.Input(shape=size) for size in rnn_cell.state_size]
+                x, hidden_outputs = rnn_cell(x, hidden_inputs)
+                all_hidden_inputs.extend(hidden_inputs)
+                all_hidden_outputs.extend(hidden_outputs)
+
+        else:
+            x = keras.layers.RNN(rnn_cell,
+                                 batch_input_shape=(batch_size, seq_len,
+                                                    x.shape[-1]),
+                                 return_sequences=True,
+                                 stateful=rnn_stateful,
+                                 time_major=False)(x)
+
+    x = keras.layers.Dense(units=4, activation='linear')(x)
+    if single_step:
+        ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [x, *all_hidden_outputs])
+    else:
+        ctrnn_model = keras.Model([inputs_image], [x])
 
     return ctrnn_model
-
-
-def generate_convolutional_layers(model):
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(3, 3), activation='relu')))
-
-    return model
 
 
 def generate_normalization_layers(model, data=None):
@@ -239,7 +347,8 @@ def generate_network_trunk(seq_len,
                            data=None,
                            augmentation_params=None,
                            rnn_stateful=False,
-                           batch_size=None):
+                           batch_size=None,
+                           single_step: bool = False):
     # model.add(keras.layers.InputLayer(input_shape=(seq_len, *image_shape), batch_size=batch_size))
     # model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, *image_shape)))
     # inputs = keras.Input(batch_input_shape=(batch_size,seq_len,*image_shape))
@@ -275,6 +384,14 @@ def generate_network_trunk(seq_len,
 
     # x = model.layers[0].output
     # x = keras.layers.experimental.preprocessing.Rescaling(1./255)(x)
+    def wrap_time(layer):
+        """
+        Helper function that wraps layer in a timedistributed or not depending on the arguments of this function
+        """
+        if not single_step:
+            return keras.layers.TimeDistributed(layer)
+        else:
+            return layer
 
     model_vgg = keras.applications.VGG16(include_top=False,
                                          weights='imagenet',
@@ -282,7 +399,10 @@ def generate_network_trunk(seq_len,
 
     layers = [l for l in model_vgg.layers]
 
-    inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
+    if single_step:
+        inputs = keras.Input(shape=image_shape)
+    else:
+        inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
 
     rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1. / 255)
 
@@ -299,138 +419,92 @@ def generate_network_trunk(seq_len,
     # x = layers[0] # test network without normalization
 
     x = rescaling_layer(layers[0])
-    x = keras.layers.TimeDistributed(normalization_layer)(x)
+    x = wrap_time(normalization_layer)(x)
 
-    my_input_model = keras.Model(inputs=inputs, outputs=x)
+    # for i in range(len(layers)):
+    #     if i == 0:
+    #         continue
+    #     else:
+    #         layers[i].trainable = False
+    #         layers[i] = keras.layers.TimeDistributed(layers[i])
+    #         x = layers[i](x)
 
-    for i in range(len(layers)):
-        if i == 0:
-            continue
-        else:
-            layers[i].trainable = False
-            layers[i] = keras.layers.TimeDistributed(layers[i])
-            x = layers[i](x)
-
-    my_time_model = keras.Model(inputs=inputs, outputs=x)
-
-    model = keras.models.Sequential()
-
-    # model.add(my_time_model)
-    model.add(my_input_model)
+    # my_time_model = keras.Model(inputs=inputs, outputs=x)
 
     # Conv Layers
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    x = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'))(x)
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    x = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'))(x)
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu')))
+    x = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'))(x)
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')))
+    x = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'))(x)
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu')))
+    x = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'))(x)
 
     # fully connected layers
 
-    model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-    model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=128, activation='linear')))
-    model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=DROPOUT)))
+    x = wrap_time(keras.layers.Flatten())(x)
+    x = wrap_time(keras.layers.Dense(units=128, activation='linear'))(x)
+    x = wrap_time(keras.layers.Dropout(rate=DROPOUT))(x)
 
     # print(model.summary())
 
-    return model
+    return inputs, x
 
 
-# function taken from https://github.com/GoldenZephyr/rosetta_drone/blob/main/rnn_control/src/rnn_control_node.py
-def load_model_from_weights(model_name: str, checkpoint_name: str):
-    # make sure checkpoint includes script dir so script can be run from any file
-    checkpoint_path = os.path.join(SCRIPT_DIR, checkpoint_name)
-    RNN_SIZE = 128
-    IMAGE_SHAPE = (144, 256, 3)
-    inputs = keras.Input(shape=IMAGE_SHAPE)
-    # normalization layer unssupported by version of tensorflow on drone. Data instead normalized in callback
-    if model_name == "ncp_old":
-        # old ncp cnn
-        x = keras.layers.Conv2D(filters=16, kernel_size=(5, 5), strides=(3, 3), activation='relu')(inputs)
-        x = keras.layers.Conv2D(filters=32, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
-        x = keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
-        x = keras.layers.Conv2D(filters=8, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
+def get_skeleton(params: ModelParams, single_step: bool = False):
+    """
+    Returns a new model with randomized weights according to the parameters in params
+    """
+    params.single_step = single_step
+    if isinstance(params, NCPParams):
+        model_skeleton = generate_ncp_model(**asdict(params))
+    elif isinstance(params, CTRNNParams):
+        model_skeleton = generate_ctrnn_model(**asdict(params))
+    elif isinstance(params, LSTMParams):
+        model_skeleton = generate_lstm_model(**asdict(params))
     else:
-        # new ncp cnn
-        x = keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu')(inputs)
-        x = keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu')(x)
-        x = keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu')(x)
-        x = keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu')(x)
-        x = keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu')(x)
-    # fully connected layers
-    x = keras.layers.Flatten()(x)
-    x = keras.layers.Dense(units=128, activation='linear')(x)
-    DROPOUT = 0.0
-    pre_recurrent_layer = keras.layers.Dropout(rate=DROPOUT)(x)
+        raise ValueError(f"Could not parse param type {params.__class__}")
+    return model_skeleton
 
-    if model_name.startswith("ncp"):
-        assert model_name == "ncp" or model_name == "ncp_old", \
-            f"Only legal ncp model names are 'ncp' and 'ncp_old', got {model_name}"
-        wiring = kncp.wirings.NCP(
-            inter_neurons=18,  # Number of inter neurons
-            command_neurons=12,  # Number of command neurons
-            motor_neurons=4,  # Number of motor neurons
-            sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
-            inter_fanout=4,  # How many outgoing synapses has each inter neuron
-            recurrent_command_synapses=4,  # Now many recurrent synapses are in the
-            # command neuron layer
-            motor_fanin=6,  # How many incoming synapses has each motor neuron
-        )
-        rnn_cell = LTCCell(wiring, ode_unfolds=6)
-        inputs_state = tf.keras.Input(shape=(rnn_cell.state_size,))
 
-        motor_out, output_states = rnn_cell(pre_recurrent_layer, inputs_state)
-        single_step_model = tf.keras.Model([inputs, inputs_state], [motor_out, output_states])
+def load_model_from_weights(params: ModelParams, checkpoint_path: str, single_step: bool = False):
+    """
+    Convenience function that loads weights from checkpoint_path into model_skeleton
+    """
+    model_skeleton = get_skeleton(params, single_step=single_step)
+    try:
+        model_skeleton.load_weights(checkpoint_path)
+    except ValueError:
+        # TODO: investiagte why saved models have diff names
+        # different number of weights from file and model. Assume normalization layer in model but not file
+        # rename conv layers starting at 5
+        conv_index = 5
+        dense_index = 1
+        for layer in model_skeleton.layers:
+            if isinstance(layer, Conv2D):
+                layer._name = f"conv2d_{conv_index}"
+                conv_index += 1
+            elif isinstance(layer, Dense):
+                layer._name = f"dense_{dense_index}"
+                dense_index += 1
+        model_skeleton.load_weights(checkpoint_path, by_name=True)
+    return model_skeleton
 
-        single_step_model.load_weights(checkpoint_path)
-        hidden_state = (tf.zeros((1, rnn_cell.state_size)))
-    elif model_name == 'lstm':
-        rnn_cell = tf.keras.layers.LSTMCell(RNN_SIZE)
-        c_state = tf.keras.Input(shape=(rnn_cell.state_size[0]))
-        h_state = tf.keras.Input(shape=(rnn_cell.state_size[1]))
 
-        output, [next_c, next_h] = rnn_cell(pre_recurrent_layer, [c_state, h_state])
-        output = tf.keras.layers.Dense(units=4, activation='linear')(output)
-        single_step_model = tf.keras.Model([inputs, c_state, h_state], [next_c, next_h, output])
-
-        single_step_model.load_weights(checkpoint_path)
-        # hidden c, hidden h
-        hidden_state = (tf.zeros((1, rnn_cell.state_size[0])), tf.zeros((1, rnn_cell.state_size[1])))
-    elif model_name == 'mixedcfc':
-        CONFIG = {
-            "clipnorm": 1,
-            "size": 128,
-            "backbone_activation": "silu",
-            "backbone_dr": 0.1,
-            "forget_bias": 1.6,
-            "backbone_units": 128,
-            "backbone_layers": 1,
-            "weight_decay": 1e-06,
-            "use_mixed": True,
-        }
-
-        rnn_cell = MixedCfcCell(units=RNN_SIZE, hparams=CONFIG)
-
-        c_state = tf.keras.Input(shape=(rnn_cell.state_size[0]))
-        h_state = tf.keras.Input(shape=(rnn_cell.state_size[1]))
-
-        output, [next_c, next_h] = rnn_cell(pre_recurrent_layer, [c_state, h_state])
-        output = tf.keras.layers.Dense(units=4, activation='linear')(output)
-        single_step_model = tf.keras.Model([inputs, c_state, h_state], [next_c, next_h, output])
-
-        single_step_model.load_weights(checkpoint_path)
-        # hidden c, hidden h
-        hidden_state = (tf.zeros((1, rnn_cell.state_size[0])), tf.zeros((1, rnn_cell.state_size[1])))
+def load_model_no_params(checkpoint_path: str, single_step: bool = False):
+    """
+    Convenience function that calls load_model_from weights as above but tries to infer reasonable default params if not
+    known
+    """
+    if 'ncp' in checkpoint_path:
+        params = NCPParams(seq_len=64)
+    elif 'mixedcfc' in checkpoint_path:
+        params = CTRNNParams(seq_len=64, rnn_sizes=[128], ct_network_type="mixedcfc")
+    elif 'lstm' in checkpoint_path:
+        params = LSTMParams(seq_len=64, rnn_sizes=[128])
     else:
-        raise ValueError(f"Illegal model name {model_name}")
+        raise ValueError(f"Unable to infer model name from path {checkpoint_path}")
 
-    return single_step_model, hidden_state
+    return load_model_from_weights(params, checkpoint_path, single_step)

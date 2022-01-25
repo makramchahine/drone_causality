@@ -1,5 +1,5 @@
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 
 class CTRNNCell(tf.keras.layers.Layer):
@@ -86,7 +86,7 @@ class CTRNNCell(tf.keras.layers.Layer):
                 idx = tf.argsort(elapsed)
                 solution_times = tf.gather(elapsed, idx)
             else:
-                solution_times = elapsed
+                solution_times = tf.constant([elapsed])
             hidden_state = states[0]
             res = self.solver.solve(
                 ode_fn=self.dfdt_wrapped,
@@ -159,20 +159,21 @@ class LSTMCell(tf.keras.layers.Layer):
             # Nested tuple
             input_shape = (input_shape[0][-1] + input_shape[1][-1],)
 
+        # name weights with _lstm suffix so parents with this and other rnns can save weights and not have name collide
         self.input_kernel = self.add_weight(
             shape=(input_shape[-1], 4 * self.units),
             initializer=self.initializer,
-            name="input_kernel",
+            name="input_kernel_lstm",
         )
         self.recurrent_kernel = self.add_weight(
             shape=(self.units, 4 * self.units),
             initializer=self.recurrent_initializer,
-            name="recurrent_kernel",
+            name="recurrent_kernel_lstm",
         )
         self.bias = self.add_weight(
             shape=(4 * self.units),
             initializer=tf.keras.initializers.Zeros(),
-            name="bias",
+            name="bias_lstm",
         )
 
         self.built = True
@@ -180,12 +181,19 @@ class LSTMCell(tf.keras.layers.Layer):
     def call(self, inputs, states):
         cell_state, output_state = states
         if (isinstance(inputs, tuple) or isinstance(inputs, list)) and len(inputs) > 1:
-            inputs = tf.concat([inputs[0], inputs[1]], axis=-1)
+            elapsed = inputs[1]
+            if isinstance(elapsed, float):
+                # tensors should be same shape to concat
+                elapsed = tf.constant(elapsed)
+                batch_dim = tf.shape(inputs[0])[0]  # can't use .shape, need to use tf.shape()
+                elapsed = tf.reshape(elapsed, (1, 1))
+                elapsed = tf.repeat(elapsed, repeats=batch_dim, axis=0)
+            inputs = tf.concat([inputs[0], elapsed], axis=-1)
 
         z = (
-            tf.matmul(inputs, self.input_kernel)
-            + tf.matmul(output_state, self.recurrent_kernel)
-            + self.bias
+                tf.matmul(inputs, self.input_kernel)
+                + tf.matmul(output_state, self.recurrent_kernel)
+                + self.bias
         )
         i, ig, fg, og = tf.split(z, 4, axis=-1)
 
@@ -223,20 +231,21 @@ class mmRNN(tf.keras.layers.Layer):
             input_dim = input_shape[0][-1]
 
         self.ctrnn.build([self.units])
+        # name weights with _mmrnn suffix so don't have same weight names as child CTRNNCell which also has same weights
         self.input_kernel = self.add_weight(
             shape=(input_dim, 4 * self.units),
             initializer=self.initializer,
-            name="input_kernel",
+            name="input_kernel_mmrnn",
         )
         self.recurrent_kernel = self.add_weight(
             shape=(self.units, 4 * self.units),
             initializer=self.recurrent_initializer,
-            name="recurrent_kernel",
+            name="recurrent_kernel_mmrnn",
         )
         self.bias = self.add_weight(
             shape=(4 * self.units),
             initializer=tf.keras.initializers.Zeros(),
-            name="bias",
+            name="bias_mmrn",
         )
 
         self.built = True
@@ -249,9 +258,9 @@ class mmRNN(tf.keras.layers.Layer):
             inputs = inputs[0]
 
         z = (
-            tf.matmul(inputs, self.input_kernel)
-            + tf.matmul(ode_state, self.recurrent_kernel)
-            + self.bias
+                tf.matmul(inputs, self.input_kernel)
+                + tf.matmul(ode_state, self.recurrent_kernel)
+                + self.bias
         )
         i, ig, fg, og = tf.split(z, 4, axis=-1)
 
@@ -334,8 +343,9 @@ class CTGRU(tf.keras.layers.Layer):
         # Now the elapsed time enters the state update
         base_term = (1 - ski) * h_hat + ski * qk
         exp_term = tf.exp(-elapsed / self.tau_table)
-        exp_term = tf.reshape(exp_term, [batch_dim, 1, self.M])
-        h_hat_next = base_term * exp_term
+        exp_term = tf.reshape(exp_term, [1, 1, self.M])  # reshape to add batch dim
+        exp_term = tf.repeat(exp_term, repeats=[batch_dim], axis=0)  # repeat for each element of batch
+        h_hat_next = base_term * tf.cast(exp_term, dtype=tf.float32)
 
         # Compute new state
         h_next = tf.reduce_sum(h_hat_next, axis=2)
@@ -452,7 +462,9 @@ class GRUD(tf.keras.layers.Layer):
         self.built = True
 
     def call(self, inputs, states):
-        elapsed = 1.0
+        # d_gate needs elapsed to have 2 dims
+        batch_dim = tf.shape(inputs)[0]
+        elapsed = tf.ones((batch_dim, 1))
         if (isinstance(inputs, tuple) or isinstance(inputs, list)) and len(inputs) > 1:
             elapsed = inputs[1]
             inputs = inputs[0]
@@ -546,9 +558,9 @@ class PhasedLSTM(tf.keras.layers.Layer):
         )
 
         z = (
-            tf.matmul(inputs, self.input_kernel)
-            + tf.matmul(hidden_state, self.recurrent_kernel)
-            + self.bias
+                tf.matmul(inputs, self.input_kernel)
+                + tf.matmul(hidden_state, self.recurrent_kernel)
+                + self.bias
         )
         i, ig, fg, og = tf.split(z, 4, axis=-1)
 
@@ -664,13 +676,15 @@ class HawkLSTMCell(tf.keras.layers.Layer):
 
     def call(self, inputs, states):
         c, c_bar, h = states
-        k = inputs[0]  # Is the input
-        delta_t = inputs[1]  # is the elapsed time
-
+        # assume that input is k and that elapsed is always 1
+        # k = inputs[0]  # Is the input
+        # delta_t = inputs[1]  # is the elapsed time
+        k = inputs
+        delta_t = 1.0
         z = (
-            tf.matmul(k, self.input_kernel)
-            + tf.matmul(h, self.recurrent_kernel)
-            + self.bias
+                tf.matmul(k, self.input_kernel)
+                + tf.matmul(h, self.recurrent_kernel)
+                + self.bias
         )
         i, ig, fg, og, ig_bar, fg_bar, d = tf.split(z, 7, axis=-1)
 

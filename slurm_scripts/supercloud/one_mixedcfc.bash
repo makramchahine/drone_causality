@@ -3,6 +3,8 @@
 #SBATCH -o one_mixedcfc.log-%j
 #SBATCH -c 40
 #SBATCH --gres=gpu:volta:2
+#SBATCH --mail-user=pdkao@mit.edu
+#SBATCH --mail-type=FAIL
 
 source /etc/profile
 module load anaconda/2020a

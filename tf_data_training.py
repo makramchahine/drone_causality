@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-import copy
-import dataclasses
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Iterable
+from typing import List
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -15,7 +12,8 @@ import tensorflow as tf
 from tensorflow import keras
 
 from tf_data_loader import get_dataset_multi
-from keras_models import generate_ncp_model, generate_lstm_model, generate_ctrnn_model
+from keras_models import ModelParams, NCPParams, \
+    LSTMParams, CTRNNParams, IMAGE_SHAPE, get_readable_name, get_skeleton
 
 
 def tlen(dataset):
@@ -24,60 +22,11 @@ def tlen(dataset):
     return ix
 
 
-DEFAULT_CFC_CONFIG = {
-    "clipnorm": 1,
-    "backbone_activation": "silu",
-    "backbone_dr": 0.1,
-    "forget_bias": 1.6,
-    "backbone_units": 128,
-    "backbone_layers": 1,
-    "weight_decay": 1e-06,
-    "use_mixed": False,
-}
-IMAGE_SHAPE = (144, 256, 3)
-
-
-@dataclass
-class ModelParams:
-    # dataclasses can't have non-default follow default
-    seq_len: int = field(default=False, init=True)
-    image_shape: Tuple[int, int, int] = IMAGE_SHAPE
-    do_normalization: bool = False
-    do_augmentation: bool = False
-    data: Optional[Iterable] = None
-    augmentation_params: Dict = None
-    rnn_stateful: bool = False
-    batch_size: Optional[int] = None
-
-
-@dataclass
-class NCPParams(ModelParams):
-    seed: int = 2222
-
-
-@dataclass
-class LSTMParams(ModelParams):
-    rnn_sizes: List[int] = field(default=False, init=True)
-    dropout: float = 0.1
-    recurrent_dropout: float = 0.1
-
-
-@dataclass
-class CTRNNParams(ModelParams):
-    rnn_sizes: List[int] = field(default=False, init=True)
-    ct_network_type: str = 'ctrnn',
-    config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
-
-
-# todo: define class for model hyperparameters
-def train_model(model_type: str, model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,
+def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,
                 extra_data_dir: str = None, save_dir: str = "./model_checkpoints", batch_size: int = 32,
                 epochs: int = 30, val_split: float = 0.1, hotstart: str = None, lr: float = 0.001, momentum: float = 0,
                 opt: str = "adam", label_scale: float = 1, data_shift: int = 1, data_stride: int = 1,
                 top_crop: float = 0.0, decay_rate: float = 0.95, callbacks: List = None):
-    # todo: remove
-    start = time.time()
-
     # create model checkpoint directory if doesn't exist
     Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -128,20 +77,20 @@ def train_model(model_type: str, model_params: ModelParams, data_dir: str = "./d
 
     time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
     REV = 0
-    if model_type == 'ctrnn':
+    if isinstance(model_params, CTRNNParams):
         dc = model_params.config  # for abbreviated writing
         file_path = os.path.join(save_dir,
-                                 'rev-%d' % REV + '_model-%s' % model_type + '_ctt-%s' % model_params.ct_network_type + '_cn-%f' %
+                                 'rev-%d' % REV + '_model-ctrnn' + '_ctt-%s' % model_params.ct_network_type + '_cn-%f' %
                                  dc['clipnorm'] + '_bba-%s' % dc['backbone_activation'] + '_bb-dr-%f' % dc[
                                      'backbone_dr'] + '_fb-%f' % dc['forget_bias'] + '_bbu-%d' % dc[
                                      'backbone_units'] + '_bbl-%d' % dc['backbone_layers'] + '_wd-%f' % dc[
-                                     'weight_decay'] + '_mixed-%d' % dc[
-                                     'use_mixed'] + '_seq-%d' % model_params.seq_len + '_opt-%s' % opt + '_lr-%f' % lr + '_crop-%f' % top_crop + '_epoch-{epoch:03d}' + '_val-loss:{val_loss:.4f}' + '_mse:{mse:.4f}' + '_%s.hdf5' % time_str)
+                                     'weight_decay'] + '_seq-%d' % model_params.seq_len + '_opt-%s' % opt + '_lr-%f' % lr + '_crop-%f' % top_crop + '_epoch-{epoch:03d}' + '_val-loss:{val_loss:.4f}' + '_mse:{mse:.4f}' + '_%s.hdf5' % time_str)
     else:
         file_path = os.path.join(save_dir, 'rev-%d_model-%s_seq-%d_opt-%s'
                                            '_lr-%f_crop-%f_epoch-{epoch:03d}'
                                            '_val_loss:{val_loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
-                                     REV, model_type, model_params.seq_len, opt, lr, top_crop, time_str))
+                                     REV, get_readable_name(model_params), model_params.seq_len, opt, lr, top_crop,
+                                     time_str))
 
     checkpoint_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True,
                                                           save_best_only=False, save_freq='epoch')
@@ -156,18 +105,8 @@ def train_model(model_type: str, model_params: ModelParams, data_dir: str = "./d
     gpus = tf.config.list_logical_devices('GPU')
     strategy = tf.distribute.MirroredStrategy(gpus)
     with strategy.scope():
-        # load model
-        if model_type == 'ncp':
-            model = generate_ncp_model(**dataclasses.asdict(model_params))
-        elif model_type == 'lstm':
-            model = generate_lstm_model(**dataclasses.asdict(model_params))
-        elif model_type == 'ctrnn':
-            model = generate_ctrnn_model(**dataclasses.asdict(model_params))
-        else:
-            raise Exception('Unsupported model type: %s' % model_type)
-
+        model = get_skeleton(params=model_params, single_step=False)
         model.compile(optimizer=optimizer, loss="mean_squared_error", metrics=['mse'])
-
         # Load pretrained weights
         if hotstart is not None:
             model.load_weights(hotstart)
@@ -177,7 +116,6 @@ def train_model(model_type: str, model_params: ModelParams, data_dir: str = "./d
     # Train
     history = model.fit(x=training_dataset, validation_data=validation_dataset, epochs=epochs,
                         use_multiprocessing=False, workers=1, max_queue_size=5, verbose=1, callbacks=callbacks)
-    print(f"Elapsed time: {time.time() - start}")
     return history
 
 
@@ -232,20 +170,20 @@ if __name__ == "__main__":
                            "zoom_factor": args.zoom_factor}
 
     if args.model == "ncp":
-        model_params = NCPParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
-                                 augmentation_params=augmentation_params, seed=args.ncp_seed)
+        model_params_constructed = NCPParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
+                                             augmentation_params=augmentation_params, seed=args.ncp_seed)
     elif args.model == "lstm":
-        model_params = LSTMParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
-                                  augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes, )
+        model_params_constructed = LSTMParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
+                                              augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes, )
     elif args.model == "ctrnn":
-        model_params = CTRNNParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
-                                   augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes,
-                                   ct_network_type=args.ct_type)
+        model_params_constructed = CTRNNParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
+                                               augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes,
+                                               ct_network_type=args.ct_type)
     else:
         raise ValueError(f"Passed in illegal model type {args.model_type}")
 
-    train_model(model_type=args.model, data_dir=args.data_dir, epochs=args.epochs, val_split=args.val_split,
+    train_model(data_dir=args.data_dir, epochs=args.epochs, val_split=args.val_split,
                 opt=args.opt, lr=args.lr, data_shift=args.data_shift, data_stride=args.data_stride,
                 batch_size=args.batch_size, save_dir=args.save_dir, hotstart=args.hotstart, momentum=args.momentum,
                 cached_data_dir=args.cached_data_dir, label_scale=args.label_scale,
-                top_crop=args.top_crop, model_params=model_params, decay_rate=args.decay_rate)
+                top_crop=args.top_crop, model_params=model_params_constructed, decay_rate=args.decay_rate)

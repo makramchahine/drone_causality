@@ -1,18 +1,16 @@
-import os
+import copy
 from pathlib import Path
 from typing import List, Iterable, Optional
 
-import PIL.Image
 import cv2
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras, Tensor
 from tensorflow.keras.layers import Conv2D
-from tensorflow.python.keras.models import Functional
+from tensorflow.python.keras.models import Model
 
-from keras_models import load_model_from_weights
-
-IMAGE_SHAPE = (256, 144, 3)
+from keras_models import load_model_no_params, IMAGE_SHAPE
+from utils.data_utils import image_dir_generator
 
 
 def convert_to_color_frame(saliency_map: Tensor):
@@ -25,23 +23,7 @@ def convert_to_color_frame(saliency_map: Tensor):
     return int_image
 
 
-def image_dir_generator(data_path: str):
-    """
-    Iterates through all of the pngs in the data_path folder, loads them as numpy array, and resizes them
-    to IMAGE_SHAPE. Yields the images using a generator for iteration
-    """
-    contents = os.listdir(data_path)
-    contents = [os.path.join(data_path, c) for c in contents if 'png' in c]
-    contents.sort()
-    for path in contents:
-        img = PIL.Image.open(path)
-        if img is not None:
-            resized = img.resize(IMAGE_SHAPE[:2], PIL.Image.BILINEAR)
-            img_numpy = tf.keras.preprocessing.image.img_to_array(resized)
-            yield img_numpy
-
-
-def visualbackprop_activations(activation_model: Functional,
+def visualbackprop_activations(activation_model: Model,
                                activations: List[Tensor],
                                kernels: List[Iterable] = None,
                                strides: List[Iterable] = None):
@@ -54,9 +36,9 @@ def visualbackprop_activations(activation_model: Functional,
         kernels, strides = [], []
         # don't infer form initial input layer so start at 1
         for layer in activation_model.layers[1:]:
-            assert isinstance(layer, Conv2D), "Expect model to have only convolutional layers"
-            kernels.append(layer.kernel_size)
-            strides.append(layer.strides)
+            if isinstance(layer, Conv2D):
+                kernels.append(layer.kernel_size)
+                strides.append(layer.strides)
 
     average_layer_maps = []
     for layer_activation in activations:  # Only the convolutional layers
@@ -80,15 +62,14 @@ def visualbackprop_activations(activation_model: Functional,
         if l > 0:
             output_shape = average_layer_maps[l - 1].shape
         else:
-            # TODO for some reason, the layer maps are transposed compared to the images (short dimension first)
             # therefore, the height and width in the image shape need to be reversed
-            output_shape = (1, *(IMAGE_SHAPE[:2][::-1]), 1)
+            output_shape = (1, *(IMAGE_SHAPE[:2]), 1)
 
         saliency_mask = tf.nn.conv2d_transpose(saliency_mask, kernel, output_shape, strides[l], padding='VALID')
         if l > 0:
             saliency_mask = tf.multiply(saliency_mask, average_layer_maps[l - 1])
 
-    saliency_mask = saliency_mask[0]  # remove batch dimension
+    saliency_mask = tf.squeeze(saliency_mask, axis=0)  # remove batch dimension
     return saliency_mask
 
 
@@ -97,13 +78,13 @@ def get_conv_head(model_path: str, model_type: str):
     Loads the model at model_path from weights and extracts only the convolutional
     pre-processing layers in a new Tensorflow model
     """
-    # TODO: investigate single step vs sequence input types
     # don't care about loading initial hidden states, use _ to not worry about type of hidden state returned
-    vis_model, _ = load_model_from_weights(model_type, model_path)
+    vis_model = load_model_no_params(model_path, single_step=True)
     # cleave off only convolutional head
     num_conv_layers = 4 if model_type == "ncp_old" else 5
+    num_utility_layers = 3  # input, rescaling and normalization
     # slice at 1 to throw away first input layer
-    conv_layers = vis_model.layers[1:num_conv_layers + 1]
+    conv_layers = vis_model.layers[num_utility_layers:num_conv_layers + num_utility_layers]
 
     act_model_inputs = vis_model.input[0]  # don't want to take in hidden state, just image
     activation_model = keras.models.Model(inputs=act_model_inputs,
@@ -112,7 +93,7 @@ def get_conv_head(model_path: str, model_type: str):
 
 
 def run_visualbackprop(model_path: str, model_type: str, data_path: str, image_output_path: Optional[str] = None,
-                       video_output_path: Optional[str] = None):
+                       video_output_path: Optional[str] = None, reverse_channels: bool = True):
     """
     Runner script that loads images, runs VisualBackProp, and saves saliency maps
     """
@@ -122,17 +103,20 @@ def run_visualbackprop(model_path: str, model_type: str, data_path: str, image_o
     Path(image_output_path).mkdir(parents=True, exist_ok=True)
     activation_model = get_conv_head(model_path, model_type)
     if video_output_path:
-        image_shape = list(IMAGE_SHAPE[:2])
+        image_shape = list(copy.deepcopy(IMAGE_SHAPE)[:2])
         # assume og and saliency shapes the same, and stacked vertically
-        image_shape[1] *= 2  # opencv wants frame size as width, height, so don't reverse
-        writer = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"mp4v"), 10, image_shape)
+        image_shape[0] *= 2  # opencv wants frame size as width, height, so don't reverse
+        # videowriter takes width, height, image_shape is height, width
+        writer = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc('m', 'p', '4', 'v'), 10, image_shape[::-1],
+                                 True)  # true means write color frames
 
-    for i, img in enumerate(image_dir_generator(data_path)):
+    for i, img in enumerate(image_dir_generator(data_path, IMAGE_SHAPE)):
         # comptute saliency map
         img_batched_tensor = tf.expand_dims(img, axis=0)
-        # reverse channels of image to match training
-        img_batched_tensor_reversed = img_batched_tensor[..., ::-1]
-        activations = activation_model(img_batched_tensor_reversed)
+        if reverse_channels:
+            # reverse channels of image to match training
+            img_batched_tensor = img_batched_tensor[..., ::-1]
+        activations = activation_model(img_batched_tensor)
         saliency = visualbackprop_activations(activation_model, activations)
         # save saliency map
         saliency_writeable = convert_to_color_frame(saliency)
