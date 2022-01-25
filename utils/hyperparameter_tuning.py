@@ -55,12 +55,13 @@ def calculate_objective(trial: Trial, history):
     @param history: Tensorflow history object returned by trainer
     @return: objective value
     """
-    losses = np.array([[epoch_train_loss, epoch_val_loss] for epoch_val_loss, epoch_train_loss in
+    losses = np.array([[epoch_train_loss, epoch_val_loss] for epoch_train_loss, epoch_val_loss in
                        zip(history.history["loss"], history.history["val_loss"])])
     loss_sums = losses.sum(axis=1)
     best_epoch = np.argmin(loss_sums)
     trial.set_user_attr("train_loss", losses[best_epoch, 0])
-    trial.set_user_attr("val_loss_loss", losses[best_epoch, 1])
+    trial.set_user_attr("val_loss", losses[best_epoch, 1])
+    trial.set_user_attr("best_epoch", best_epoch)
     objective = loss_sums[best_epoch]
     return objective
 
