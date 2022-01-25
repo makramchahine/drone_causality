@@ -61,7 +61,7 @@ def calculate_objective(trial: Trial, history):
     best_epoch = np.argmin(loss_sums)
     trial.set_user_attr("train_loss", losses[best_epoch, 0])
     trial.set_user_attr("val_loss", losses[best_epoch, 1])
-    trial.set_user_attr("best_epoch", best_epoch)
+    trial.set_user_attr("best_epoch", int(best_epoch))
     objective = loss_sums[best_epoch]
     return objective
 
