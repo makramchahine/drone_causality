@@ -13,5 +13,5 @@ module load cuda/10.2
 eval "$(conda shell.bash hook)"
 conda activate ramin
 
-cd ~/deepdrone
-python hyperparameter_tuning.py mixedcfc_objective /home/gridsan/pdkao/data/devens_12102021_sliced --n_trials 20 --batch_size 128 --storage_name mixedcfc.pkl --save_pkl
+cd ~/deepdrone/utils
+python train_multiple.py ncp_objective /home/gridsan/pdkao/data/devens_12102021_sliced --num_trains 5 --batch_size 128 --storage_name sqlite:///ncp.db

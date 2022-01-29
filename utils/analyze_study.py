@@ -30,6 +30,6 @@ def analyze_local(file_path: str):
 
 
 if __name__ == "__main__":
-    analyze_study("hyperparam_tuning_lstm_objective", "sqlite:////home/dolphonie/Desktop/hyperparam_tuning.db")
-    # analyze_local("test.pkl")
+    # analyze_study("hyperparam_tuning_lstm_objective", "sqlite:////home/dolphonie/Desktop/hyperparam_tuning.db")
+    analyze_local("/home/dolphonie/Desktop/studies/mixedcfc.pkl")
     # analyze_study("hyperparam_tuning_mixedcfc_objective", "sqlite:///hyperparam_tuning.db")

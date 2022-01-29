@@ -15,9 +15,9 @@ from optuna.integration import TFKerasPruningCallback
 # add directory up to path to get main naming script
 from optuna.pruners import MedianPruner
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from tf_data_training import train_model, NCPParams, LSTMParams, CTRNNParams
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class KerasPruningCallbackFunction(TFKerasPruningCallback):
@@ -61,18 +61,31 @@ def calculate_objective(trial: Trial, history):
     best_epoch = np.argmin(loss_sums)
     trial.set_user_attr("train_loss", losses[best_epoch, 0])
     trial.set_user_attr("val_loss", losses[best_epoch, 1])
-    trial.set_user_attr("best_epoch", int(best_epoch))
+    trial.set_user_attr("best_sum_epoch", int(best_epoch))
+
+    # calculate best train and val epochs
+    best_train = np.argmin(losses[:, 0])
+    trial.set_user_attr("best_train_epoch", int(best_train))
+    best_val = np.argmin(losses[:, 1])
+    trial.set_user_attr("best_val_epoch", int(best_val))
+
     objective = loss_sums[best_epoch]
     return objective
 
 
 # args to train_model that are shared between all objective function types
-COMMON_PARAMS = {
+COMMON_TRAIN_PARAMS = {
     "epochs": 100,
     "val_split": 0.05,
     "opt": "adam",
     "data_shift": 16,
     "data_stride": 1
+}
+
+COMMON_MODEL_PARAMS = {
+    "seq_len": 64,
+    "single_step": False,
+    "no_norm_layer": False,
 }
 
 
@@ -90,16 +103,16 @@ def ncp_objective(trial: Trial, data_dir: str, batch_size: int):
 
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
-    model_params = NCPParams(seq_len=64, seed=ncp_seed)
+    model_params = NCPParams(seed=ncp_seed, **COMMON_MODEL_PARAMS)
     # note rnn_size not needed for ncp
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_PARAMS)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
 
 
-def ctrnn_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batch_size: int):
+def cfc_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batch_size: int):
     # get trial params from bayesian optimization
     # note: could also do backbone_dr but probably not as important
     forget_bias = trial.suggest_float("forget_bias", low=.8, high=3.2)
@@ -126,10 +139,11 @@ def ctrnn_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batc
         "weight_decay": weight_decay
     }
 
-    model_params = CTRNNParams(seq_len=64, rnn_sizes=[rnn_size], ct_network_type=ct_network_type, config=cfc_config)
+    model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type=ct_network_type, config=cfc_config,
+                               **COMMON_MODEL_PARAMS)
     # note rnn_size not needed for ncp
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_PARAMS)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
@@ -137,11 +151,76 @@ def ctrnn_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batc
 
 # define in global scope for command line calls
 def cfc_objective(trial: Trial, data_dir: str, batch_size: int):
-    return ctrnn_objective_base(trial, ct_network_type="cfc", data_dir=data_dir, batch_size=batch_size, )
+    return cfc_objective_base(trial, ct_network_type="cfc", data_dir=data_dir, batch_size=batch_size, )
 
 
 def mixedcfc_objective(trial: Trial, data_dir: str, batch_size: int):
-    return ctrnn_objective_base(trial, ct_network_type="mixedcfc", data_dir=data_dir, batch_size=batch_size, )
+    return cfc_objective_base(trial, ct_network_type="mixedcfc", data_dir=data_dir, batch_size=batch_size, )
+
+
+def ctrnn_objective_base(trial: Trial, data_dir: str, batch_size: int, ct_network_type: str):
+    rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
+
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
+
+    def sum_val_train_loss(logs):
+        return logs["loss"] + logs["val_loss"]
+
+    prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
+
+    model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type=ct_network_type, **COMMON_MODEL_PARAMS)
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
+    trial.set_user_attr("model_params", repr(model_params))
+
+    return calculate_objective(trial, history)
+
+
+# lots of convenience functions that call ctrnn_objective_base but have diff function names so
+# they are saved in different otptuna trials
+def ctrnn_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="ctrnn")
+
+
+def node_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="node")
+
+
+def mmrnn_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="mmrnn")
+
+
+def ctgru_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="ctgru")
+
+
+def vanilla_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="vanilla")
+
+
+def bidirect_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="bidirect")
+
+
+def grud_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="grud")
+
+
+def phased_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="phased")
+
+
+def gruode_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="gruode")
+
+
+def hawk_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="hawk")
+
+
+def ltc_objective(trial: Trial, data_dir: str, batch_size: int):
+    return ctrnn_objective_base(trial=trial, data_dir=data_dir, batch_size=batch_size, ct_network_type="ltc")
 
 
 def lstm_objective(trial: Trial, data_dir: str, batch_size: int):
@@ -157,9 +236,10 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int):
 
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
-    model_params = LSTMParams(seq_len=64, rnn_sizes=[rnn_size], dropout=dropout, recurrent_dropout=dropout)
+    model_params = LSTMParams(rnn_sizes=[rnn_size], dropout=dropout, recurrent_dropout=dropout,
+                              rnn_stateful=False, **COMMON_MODEL_PARAMS)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_PARAMS)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)

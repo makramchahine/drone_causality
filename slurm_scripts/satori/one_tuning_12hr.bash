@@ -1,7 +1,6 @@
 #!/bin/bash
-#SBATCH -J one_cfc
-#SBATCH -o one_cfc%j.out
-#SBATCH -e one_cfc%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH --mail-user=pdkao@mit.edu
 #SBATCH --mail-type=FAIL
 #SBATCH --gres=gpu:4
@@ -18,10 +17,10 @@ PYTHON_VIRTUAL_ENVIRONMENT=ramin
 CONDA_ROOT=$HOME2/anaconda3
 
 ## Activate WMLCE virtual environment
-source ${CONDA_ROOT}/etc/profile.d/conda.sh
+source "${CONDA_ROOT}"/etc/profile.d/conda.sh
 conda activate $PYTHON_VIRTUAL_ENVIRONMENT
 ulimit -s unlimited
 
 ## Creating SLURM nodes list
-cd ~/deepdrone/utils
-python hyperparameter_tuning.py cfc_objective /nobackup/users/pdkao/data/devens_12102021_sliced --n_trials 20 --timeout 28800 --batch_size 300
+cd ~/deepdrone
+python hyperparameter_tuning.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_12102021_sliced --n_trials 20 --timeout 28800 --batch_size 300

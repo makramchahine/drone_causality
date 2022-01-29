@@ -5,12 +5,12 @@ from typing import Tuple, Iterable, Optional, Dict, List
 
 import kerasncp as kncp
 from kerasncp.tf import LTCCell
-from tf_cfc import LTCCell as CFCLTCCell
 from tensorflow import keras
 from tensorflow.python.keras.layers import Conv2D, Dense
 
 from node_cell import *
 from tf_cfc import CfcCell, MixedCfcCell
+from tf_cfc import LTCCell as CFCLTCCell
 
 IMAGE_SHAPE = (144, 256, 3)
 
@@ -28,6 +28,7 @@ class ModelParams:
     rnn_stateful: bool = False
     batch_size: Optional[int] = None
     single_step: bool = False
+    no_norm_layer: bool = False
 
 
 @dataclass
@@ -45,7 +46,7 @@ class LSTMParams(ModelParams):
 @dataclass
 class CTRNNParams(ModelParams):
     rnn_sizes: List[int] = field(default=False, init=True)
-    ct_network_type: str = 'ctrnn',
+    ct_network_type: str = 'ctrnn'
     config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
 
 
@@ -95,6 +96,7 @@ def generate_lstm_model(rnn_sizes,
                         rnn_stateful=False,
                         batch_size=None,
                         single_step: bool = False,
+                        no_norm_layer: bool = False,
                         ):
     inputs_image, x = generate_network_trunk(seq_len,
                                              image_shape,
@@ -104,7 +106,8 @@ def generate_lstm_model(rnn_sizes,
                                              augmentation_params,
                                              rnn_stateful=rnn_stateful,
                                              batch_size=batch_size,
-                                             single_step=single_step
+                                             single_step=single_step,
+                                             no_norm_layer=no_norm_layer,
                                              )
 
     # print(lstm_model.layers[-1].output_shape)
@@ -163,6 +166,7 @@ def generate_ncp_model(seq_len,
                        batch_size=None,
                        seed=22222,
                        single_step: bool = False,
+                       no_norm_layer: bool = False,
                        ):
     inputs_image, x = generate_network_trunk(
         seq_len,
@@ -172,7 +176,8 @@ def generate_ncp_model(seq_len,
         data, augmentation_params,
         rnn_stateful=rnn_stateful,
         batch_size=batch_size,
-        single_step=single_step
+        single_step=single_step,
+        no_norm_layer=no_norm_layer,
     )
 
     # Setup the network
@@ -219,6 +224,7 @@ def generate_ctrnn_model(rnn_sizes,
                          ct_network_type='ctrnn',
                          config=DEFAULT_CFC_CONFIG,
                          single_step: bool = False,
+                         no_norm_layer: bool = False,
                          ):
     inputs_image, x = generate_network_trunk(
         seq_len, image_shape,
@@ -228,7 +234,8 @@ def generate_ctrnn_model(rnn_sizes,
         augmentation_params,
         rnn_stateful=rnn_stateful,
         batch_size=batch_size,
-        single_step=single_step
+        single_step=single_step,
+        no_norm_layer=no_norm_layer,
     )
 
     # vars for single step model
@@ -348,7 +355,8 @@ def generate_network_trunk(seq_len,
                            augmentation_params=None,
                            rnn_stateful=False,
                            batch_size=None,
-                           single_step: bool = False):
+                           single_step: bool = False,
+                           no_norm_layer: bool = False, ):
     # model.add(keras.layers.InputLayer(input_shape=(seq_len, *image_shape), batch_size=batch_size))
     # model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, *image_shape)))
     # inputs = keras.Input(batch_input_shape=(batch_size,seq_len,*image_shape))
@@ -404,22 +412,25 @@ def generate_network_trunk(seq_len,
     else:
         inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
 
-    rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1. / 255)
-
-    # normalization_layer = keras.layers.experimental.preprocessing.Normalization(
-    #     mean=[0.41718618, 0.48529191, 0.38133072],
-    #     variance=[0.19504249, 0.18745404, 0.20891384])
-
-    normalization_layer = keras.layers.experimental.preprocessing.Normalization(
-        mean=[0.41718618, 0.48529191, 0.38133072],
-        variance=[.057, .05, .061])
-
     layers[0] = inputs
 
-    # x = layers[0] # test network without normalization
+    if not no_norm_layer:
+        rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1. / 255)
 
-    x = rescaling_layer(layers[0])
-    x = wrap_time(normalization_layer)(x)
+        # normalization_layer = keras.layers.experimental.preprocessing.Normalization(
+        #     mean=[0.41718618, 0.48529191, 0.38133072],
+        #     variance=[0.19504249, 0.18745404, 0.20891384])
+
+        normalization_layer = keras.layers.experimental.preprocessing.Normalization(
+            mean=[0.41718618, 0.48529191, 0.38133072],
+            variance=[.057, .05, .061])
+
+        # x = layers[0] # test network without normalization
+
+        x = rescaling_layer(layers[0])
+        x = wrap_time(normalization_layer)(x)
+    else:
+        x = layers[0]
 
     # for i in range(len(layers)):
     #     if i == 0:
@@ -453,11 +464,10 @@ def generate_network_trunk(seq_len,
     return inputs, x
 
 
-def get_skeleton(params: ModelParams, single_step: bool = False):
+def get_skeleton(params: ModelParams):
     """
     Returns a new model with randomized weights according to the parameters in params
     """
-    params.single_step = single_step
     if isinstance(params, NCPParams):
         model_skeleton = generate_ncp_model(**asdict(params))
     elif isinstance(params, CTRNNParams):
@@ -469,42 +479,46 @@ def get_skeleton(params: ModelParams, single_step: bool = False):
     return model_skeleton
 
 
-def load_model_from_weights(params: ModelParams, checkpoint_path: str, single_step: bool = False):
+def load_model_from_weights(params: ModelParams, checkpoint_path: str, load_name_ok: bool = False):
     """
     Convenience function that loads weights from checkpoint_path into model_skeleton
     """
-    model_skeleton = get_skeleton(params, single_step=single_step)
-    try:
+    model_skeleton = get_skeleton(params)
+    if load_name_ok:
+        try:
+            model_skeleton.load_weights(checkpoint_path)
+        except TypeError:
+            # different number of weights from file and model. Assume normalization layer in model but not file
+            # rename conv layers starting at 5
+            print("Model had incorrect number of layers. Attempting to load from layer names")
+            conv_index = 5
+            dense_index = 1
+            for layer in model_skeleton.layers:
+                if isinstance(layer, Conv2D):
+                    layer._name = f"conv2d_{conv_index}"
+                    conv_index += 1
+                elif isinstance(layer, Dense):
+                    layer._name = f"dense_{dense_index}"
+                    dense_index += 1
+            model_skeleton.load_weights(checkpoint_path, by_name=True)
+    else:
         model_skeleton.load_weights(checkpoint_path)
-    except ValueError:
-        # TODO: investiagte why saved models have diff names
-        # different number of weights from file and model. Assume normalization layer in model but not file
-        # rename conv layers starting at 5
-        conv_index = 5
-        dense_index = 1
-        for layer in model_skeleton.layers:
-            if isinstance(layer, Conv2D):
-                layer._name = f"conv2d_{conv_index}"
-                conv_index += 1
-            elif isinstance(layer, Dense):
-                layer._name = f"dense_{dense_index}"
-                dense_index += 1
-        model_skeleton.load_weights(checkpoint_path, by_name=True)
+
     return model_skeleton
 
 
-def load_model_no_params(checkpoint_path: str, single_step: bool = False):
+def load_model_no_params(checkpoint_path: str, single_step: bool):
     """
     Convenience function that calls load_model_from weights as above but tries to infer reasonable default params if not
     known
     """
     if 'ncp' in checkpoint_path:
-        params = NCPParams(seq_len=64)
+        params = NCPParams(seq_len=64, single_step=single_step)
     elif 'mixedcfc' in checkpoint_path:
-        params = CTRNNParams(seq_len=64, rnn_sizes=[128], ct_network_type="mixedcfc")
+        params = CTRNNParams(seq_len=64, rnn_sizes=[128], ct_network_type="mixedcfc", single_step=single_step)
     elif 'lstm' in checkpoint_path:
-        params = LSTMParams(seq_len=64, rnn_sizes=[128])
+        params = LSTMParams(seq_len=64, rnn_sizes=[128], single_step=single_step)
     else:
         raise ValueError(f"Unable to infer model name from path {checkpoint_path}")
 
-    return load_model_from_weights(params, checkpoint_path, single_step)
+    return load_model_from_weights(params, checkpoint_path)

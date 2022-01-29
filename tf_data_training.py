@@ -105,7 +105,7 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     gpus = tf.config.list_logical_devices('GPU')
     strategy = tf.distribute.MirroredStrategy(gpus)
     with strategy.scope():
-        model = get_skeleton(params=model_params, single_step=False)
+        model = get_skeleton(params=model_params)
         model.compile(optimizer=optimizer, loss="mean_squared_error", metrics=['mse'])
         # Load pretrained weights
         if hotstart is not None:

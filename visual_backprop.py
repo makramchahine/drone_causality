@@ -9,7 +9,7 @@ from tensorflow import keras, Tensor
 from tensorflow.keras.layers import Conv2D
 from tensorflow.python.keras.models import Model
 
-from keras_models import load_model_no_params, IMAGE_SHAPE
+from keras_models import load_model_no_params, IMAGE_SHAPE, ModelParams, load_model_from_weights
 from utils.data_utils import image_dir_generator
 
 
@@ -73,15 +73,18 @@ def visualbackprop_activations(activation_model: Model,
     return saliency_mask
 
 
-def get_conv_head(model_path: str, model_type: str):
+def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
     """
     Loads the model at model_path from weights and extracts only the convolutional
     pre-processing layers in a new Tensorflow model
     """
     # don't care about loading initial hidden states, use _ to not worry about type of hidden state returned
-    vis_model = load_model_no_params(model_path, single_step=True)
+    if model_params is not None:
+        vis_model = load_model_from_weights(model_params, checkpoint_path=model_path)
+    else:
+        vis_model = load_model_no_params(model_path, single_step=True)
     # cleave off only convolutional head
-    num_conv_layers = 4 if model_type == "ncp_old" else 5
+    num_conv_layers = 4  # doesn't currently support ncp old, which only has 4 layers
     num_utility_layers = 3  # input, rescaling and normalization
     # slice at 1 to throw away first input layer
     conv_layers = vis_model.layers[num_utility_layers:num_conv_layers + num_utility_layers]
@@ -92,16 +95,16 @@ def get_conv_head(model_path: str, model_type: str):
     return activation_model
 
 
-def run_visualbackprop(model_path: str, model_type: str, data_path: str, image_output_path: Optional[str] = None,
+def run_visualbackprop(model_path: str, data_path: str,
+                       model_params: Optional[ModelParams] = None, image_output_path: Optional[str] = None,
                        video_output_path: Optional[str] = None, reverse_channels: bool = True):
     """
     Runner script that loads images, runs VisualBackProp, and saves saliency maps
     """
     assert image_output_path or video_output_path, "No output creation set"
-
     # create output_dir if not present
     Path(image_output_path).mkdir(parents=True, exist_ok=True)
-    activation_model = get_conv_head(model_path, model_type)
+    activation_model = get_conv_head(model_path, model_params)
     if video_output_path:
         image_shape = list(copy.deepcopy(IMAGE_SHAPE)[:2])
         # assume og and saliency shapes the same, and stacked vertically
