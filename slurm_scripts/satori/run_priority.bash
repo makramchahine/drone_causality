@@ -1,8 +1,8 @@
 #!/bin/bash
 
-sbatch -J ctrnn_objective one_tuning.bash
+sbatch -J gruode_objective one_tuning.bash
 sleep 10
-sbatch -J node_objective one_tuning.bash
+sbatch -J hawk_objective one_tuning.bash
 sleep 10
 sbatch -J mmrnn_objective one_tuning.bash
 sleep 10
