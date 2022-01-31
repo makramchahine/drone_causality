@@ -1,0 +1,3 @@
+model: ctrnn
+ct_type: mixedcfc
+rnn_sizes: 128
