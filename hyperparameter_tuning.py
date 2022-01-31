@@ -15,6 +15,7 @@ from optuna.integration import TFKerasPruningCallback
 # add directory up to path to get main naming script
 from optuna.pruners import MedianPruner
 
+from keras_models import TCNParams
 from tf_data_training import train_model, NCPParams, LSTMParams, CTRNNParams
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -238,6 +239,36 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int):
 
     model_params = LSTMParams(rnn_sizes=[rnn_size], dropout=dropout, recurrent_dropout=dropout,
                               rnn_stateful=False, **COMMON_MODEL_PARAMS)
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
+    trial.set_user_attr("model_params", repr(model_params))
+
+    return calculate_objective(trial, history)
+
+
+def tcn_objective(trial: Trial, data_dir: str, batch_size: int):
+    KERNEL_DILATION_CONFIGS = [
+        {"kernel_size": 2, "dilations": [1, 2, 4, 8, 16]},
+        {"kernel_size": 3, "dilations": [1, 2, 4, 8]},
+        {"kernel_size": 5, "dilations": [1, 2, 4]},
+    ]
+    nb_filters = trial.suggest_int("nb_filters", low=64, high=256)
+    config_number = trial.suggest_categorical("kernel_dilation_config", range(3))
+    kernel_dilation_config = KERNEL_DILATION_CONFIGS[config_number]
+    kernel_size = kernel_dilation_config["kernel_size"]
+    dilations = kernel_dilation_config["dilations"]
+    dropout = trial.suggest_float("dropout", low=0.0, high=0.3)
+
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
+
+    def sum_val_train_loss(logs):
+        return logs["loss"] + logs["val_loss"]
+
+    prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
+
+    model_params = TCNParams(nb_filters=nb_filters, kernel_size=kernel_size, dilations=dilations, dropout=dropout,
+                             **COMMON_MODEL_PARAMS)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
                           model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
     trial.set_user_attr("model_params", repr(model_params))

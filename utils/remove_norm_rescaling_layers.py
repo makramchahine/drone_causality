@@ -7,7 +7,7 @@ from typing import Optional, Union
 from tensorflow import keras
 from tensorflow.python.keras.layers import Normalization, Rescaling
 
-from keras_models import load_model_from_weights, NCPParams, LSTMParams, CTRNNParams
+from keras_models import load_model_from_weights, NCPParams, LSTMParams, CTRNNParams, TCNParams
 
 
 def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_path: Optional[str] = None):
@@ -21,11 +21,12 @@ def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_pa
     # get model params and load model
     with open(params_path, "r") as f:
         data = json.loads(f.read())
-        model_params: Union[NCPParams, LSTMParams, CTRNNParams] = eval(data[os.path.basename(checkpoint_path)])
+        model_params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams] = eval(data[os.path.basename(checkpoint_path)])
+        model_params.single_step = False
 
     # even though will be used in single-step mode, easier to recreate in sequential mode and weights are the same
     # either way
-    model = load_model_from_weights(model_params, checkpoint_path, single_step=False)
+    model = load_model_from_weights(model_params, checkpoint_path)
 
     # remove rescaling, normalization layers
     input_layer = model.input

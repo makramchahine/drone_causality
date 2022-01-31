@@ -50,6 +50,14 @@ class CTRNNParams(ModelParams):
     config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
 
 
+@dataclass
+class TCNParams(ModelParams):
+    nb_filters: int = field(default=False, init=True)
+    kernel_size: int = field(default=False, init=True)
+    dilations: Iterable[int] = field(default=False, init=True)
+    dropout: float = 0.1
+
+
 def get_readable_name(params: ModelParams):
     """
     Extracts the model name from the class of params
@@ -83,6 +91,14 @@ DEFAULT_CFC_CONFIG = {
 }
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+# Shapes for generate_*_model:
+# if single_step, input is tuple of image input (batch [usually 1], h, w, c), and hiddens (batch, hidden_dim)
+# if not single step, is just sequence of images with shape (batch, seq_len, h, w, c) otherwise
+# output is control output for not single step, for single step it is list of tensors where first element is control
+# output and other outputs are any hidden states required
+# if single_step, control output is (batch, 4), otherwise (batch, seq_len, 4)
+# if single_step, hidden outputs typically have shape (batch, hidden_dimension)
 
 def generate_lstm_model(rnn_sizes,
                         seq_len,
@@ -303,6 +319,89 @@ def generate_ctrnn_model(rnn_sizes,
     return ctrnn_model
 
 
+def generate_tcn_model(
+        nb_filters: int,
+        kernel_size: int,
+        dilations: Iterable[int],
+        seq_len,
+        image_shape,
+        do_normalization,
+        do_augmentation,
+        data,
+        dropout=0.1,
+        augmentation_params=None,
+        rnn_stateful=False,
+        batch_size=None,
+        single_step: bool = False,
+        no_norm_layer: bool = False,
+):
+    """
+    Temporal Convolutional Network as recurrent architecture
+    https://link.springer.com/content/pdf/10.1007/978-3-319-49409-8_7.pdf
+
+    Note that because the TCN has no hidden state (operates on entire sequence), the hidden state returned by this model
+    is the entire sequence of CNN embeddings, which is automatically outputted (and truncated to the receptive field
+    size of the TCN). The "hidden state" therefore has an additional dimension in single step mode, and is of shape
+    (batch, seq, nb_units)
+    """
+    from tcn import TCN  # only import keras_tcn library if needed
+
+    inputs_image, x = generate_network_trunk(
+        seq_len,
+        image_shape,
+        do_normalization,
+        do_augmentation,
+        data, augmentation_params,
+        rnn_stateful=rnn_stateful,
+        batch_size=batch_size,
+        single_step=single_step,
+        no_norm_layer=no_norm_layer,
+    )
+    # Setup TCN
+    rnn_cell = TCN(
+        nb_filters=nb_filters,
+        kernel_size=kernel_size,
+        dilations=dilations,
+        padding="causal",
+        use_skip_connections=True,
+        dropout_rate=dropout,
+        return_sequences=not single_step,
+        # following 3 params could be adjustable
+        use_batch_norm=False,
+        use_layer_norm=True,
+        use_weight_norm=False,
+    )
+
+    # vars for single step
+    inputs_sequence, combined_sequence = None, None
+    if single_step:
+        # current x shape: (batch [None=1], num_units)
+        # append current embedding to previous embedding sequence
+        inputs_sequence = tf.keras.Input(shape=(None, nb_filters))  # None is seq len, assume batch size 1 prepended
+        x = tf.expand_dims(x, axis=1)  # add seq_len dim to x
+        combined_sequence = tf.concat((inputs_sequence, x), axis=1)  # add x to end of sequence, shape: batch, seq, unit
+        # don't keep entries farther back than receptive field length
+        receptive_slicing_layer = keras.layers.Lambda(lambda y: y[:, :rnn_cell.receptive_field, :],
+                                                      name="receptive_slice")
+        combined_sequence = receptive_slicing_layer(combined_sequence)
+        x = rnn_cell(combined_sequence)
+        # output x shape: (batch, nb_filters)
+    else:
+        # current x shape (batch, seq, num_units)
+        x = rnn_cell(x)
+        # output x shape: (batch, seq, nb_filters)
+
+    # reduce dims of control signal to size 4
+    x = keras.layers.Dense(units=4, activation='linear')(x)
+
+    if single_step:
+        tcn_model = keras.Model([inputs_image, inputs_sequence], [x, combined_sequence])
+    else:
+        tcn_model = keras.Model([inputs_image], [x])
+
+    return tcn_model
+
+
 def generate_normalization_layers(model, data=None):
     model.add(keras.layers.experimental.preprocessing.Rescaling(1. / 255))
 
@@ -357,6 +456,15 @@ def generate_network_trunk(seq_len,
                            batch_size=None,
                            single_step: bool = False,
                            no_norm_layer: bool = False, ):
+    """
+    Generates CNN image processing backbone used in all recurrent models. Uses Keras.Functional API
+
+    returns input to be used in Keras.Model and x, a tensor that represents the output of the network that has shape
+    (batch [None], seq_len, num_units) if single step is false and (batch [None], num_units) if single step is true.
+    Input has shape (batch, h, w, c) if single step is True and (batch, seq, h, w, c) otherwise
+
+    """
+
     # model.add(keras.layers.InputLayer(input_shape=(seq_len, *image_shape), batch_size=batch_size))
     # model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, *image_shape)))
     # inputs = keras.Input(batch_input_shape=(batch_size,seq_len,*image_shape))
@@ -474,6 +582,8 @@ def get_skeleton(params: ModelParams):
         model_skeleton = generate_ctrnn_model(**asdict(params))
     elif isinstance(params, LSTMParams):
         model_skeleton = generate_lstm_model(**asdict(params))
+    elif isinstance(params, TCNParams):
+        model_skeleton = generate_tcn_model(**asdict(params))
     else:
         raise ValueError(f"Could not parse param type {params.__class__}")
     return model_skeleton
@@ -518,6 +628,8 @@ def load_model_no_params(checkpoint_path: str, single_step: bool):
         params = CTRNNParams(seq_len=64, rnn_sizes=[128], ct_network_type="mixedcfc", single_step=single_step)
     elif 'lstm' in checkpoint_path:
         params = LSTMParams(seq_len=64, rnn_sizes=[128], single_step=single_step)
+    elif "tcn" in checkpoint_path:
+        params = TCNParams(seq_len=64, nb_filters=128, kernel_size=2, dilations=[1, 2, 4, 8, 16, 32])
     else:
         raise ValueError(f"Unable to infer model name from path {checkpoint_path}")
 

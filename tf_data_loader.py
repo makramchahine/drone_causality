@@ -101,7 +101,7 @@ def get_dataset_multi(root, image_size, seq_len, shift, stride, validation_ratio
     for d in ds:
         for (ix, _) in enumerate(d):
             pass
-        cnt += ix
+            cnt += ix
     print('n windows: %d' % cnt)
 
     if extra_data_root is not None:

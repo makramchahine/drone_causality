@@ -10,3 +10,4 @@ matplotlib~=3.5.1
 opencv-python~=4.5.5.62
 scipy~=1.7.3
 tensorflow_probability==0.12.2
+keras-tcn

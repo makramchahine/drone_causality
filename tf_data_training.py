@@ -13,7 +13,7 @@ from tensorflow import keras
 
 from tf_data_loader import get_dataset_multi
 from keras_models import ModelParams, NCPParams, \
-    LSTMParams, CTRNNParams, IMAGE_SHAPE, get_readable_name, get_skeleton
+    LSTMParams, CTRNNParams, IMAGE_SHAPE, get_readable_name, get_skeleton, TCNParams
 
 
 def tlen(dataset):
@@ -163,6 +163,10 @@ if __name__ == "__main__":
     parser.add_argument('--top_crop', type=float, default=0.0, help='Proportion of height to clip from image')
     parser.add_argument('--decay_rate', type=float, default=0.95, help="Exponential decay rate of the lr scheduler")
     parser.add_argument("--ncp_seed", type=int, default=2222, help="Seed for ncp")
+    parser.add_argument("--tcn_nb_filters", type=int, default=128, help="Number of tcn filters")
+    parser.add_argument("-t", "--tcn_dilations", action='append', help='tcn dilations, use flag multiple times',
+                        default=[1, 2, 4, 8, 16])
+    parser.add_argument("--tcn_kernel", type=int, default=2, help="Size of tcn kernel")
     parser.set_defaults(gps_signal=False)
     args = parser.parse_args()
     # setup model params and augment params dataclasses
@@ -179,6 +183,9 @@ if __name__ == "__main__":
         model_params_constructed = CTRNNParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
                                                augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes,
                                                ct_network_type=args.ct_type)
+    elif args.model == "tcn":
+        model_params_constructed = TCNParams(seq_len=args.seq_len, nb_filters=args.tcn_nb_filters,
+                                             kernel_size=args.tcn_kernel, dilations=args.tcn_dilations)
     else:
         raise ValueError(f"Passed in illegal model type {args.model_type}")
 
