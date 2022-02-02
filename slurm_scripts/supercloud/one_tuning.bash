@@ -13,5 +13,5 @@ module load cuda/10.2
 eval "$(conda shell.bash hook)"
 conda activate ramin
 
-cd ~/deepdrone
+cd ~/drone-causality
 python hyperparameter_tuning.py "${SLURM_JOB_NAME}" /home/gridsan/pdkao/data/devens_12102021_sliced --n_trials 20 --batch_size 128 --storage_name "${SLURM_JOB_NAME}".pkl --save_pkl

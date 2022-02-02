@@ -1,5 +1,8 @@
+import argparse
+
 import joblib
 import optuna
+from optuna import Study
 from optuna.visualization import plot_optimization_history, plot_intermediate_values, plot_parallel_coordinate, \
     plot_contour, plot_param_importances, plot_slice
 
@@ -7,6 +10,15 @@ from optuna.visualization import plot_optimization_history, plot_intermediate_va
 def analyze_study(study_name: str, storage_name: str):
     study = optuna.create_study(study_name=study_name, storage=storage_name, load_if_exists=True,
                                 direction="minimize")
+    graph_study(study)
+
+
+def analyze_local(file_path: str):
+    study = joblib.load(file_path)
+    graph_study(study)
+
+
+def graph_study(study: Study):
     fig = plot_optimization_history(study)
     fig.show()
     fig2 = plot_intermediate_values(study)
@@ -24,12 +36,12 @@ def analyze_study(study_name: str, storage_name: str):
     print(study.best_value)
 
 
-def analyze_local(file_path: str):
-    study = joblib.load(file_path)
-    print(study.best_params)
-
-
 if __name__ == "__main__":
-    # analyze_study("hyperparam_tuning_lstm_objective", "sqlite:////home/dolphonie/Desktop/hyperparam_tuning.db")
-    analyze_local("/home/dolphonie/Desktop/studies/mixedcfc.pkl")
-    # analyze_study("hyperparam_tuning_mixedcfc_objective", "sqlite:///hyperparam_tuning.db")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("storage_path", type=str)
+    parser.add_argument("--study_name", type=str, default=None)
+    args = parser.parse_args()
+    if args.study_name is not None:
+        analyze_study(args.study_name, args.storage_path)
+    else:
+        analyze_local(args.storage_path)

@@ -28,6 +28,9 @@ visualbackprop/*
 setup_path.py
 *~
 *.db
+*.tf
+*spec.txt
+cached_data/
 
 # pyenv
 .python-version
@@ -50,7 +53,7 @@ tuner_tests/
 
 # tuning results
 *.err
-*.log
+*.log*
 *.out
 *.pkl
 **/*train_results.json

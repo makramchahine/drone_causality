@@ -22,5 +22,5 @@ conda activate $PYTHON_VIRTUAL_ENVIRONMENT
 ulimit -s unlimited
 
 ## Creating SLURM nodes list
-cd ~/deepdrone
+cd ~/drone-causality
 python hyperparameter_tuning.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_12102021_sliced --n_trials 20 --timeout 64800 --batch_size 300

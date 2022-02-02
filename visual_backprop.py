@@ -9,7 +9,8 @@ from tensorflow import keras, Tensor
 from tensorflow.keras.layers import Conv2D
 from tensorflow.python.keras.models import Model
 
-from keras_models import load_model_no_params, IMAGE_SHAPE, ModelParams, load_model_from_weights
+from keras_models import IMAGE_SHAPE
+from utils.model_utils import ModelParams, load_model_from_weights, load_model_no_params
 from utils.data_utils import image_dir_generator
 
 

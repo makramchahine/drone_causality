@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 # import matplotlib
 from tqdm import tqdm
 
-from keras_models import NCPParams, CTRNNParams, LSTMParams, load_model_from_weights, load_model_no_params
+from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, load_model_from_weights, load_model_no_params
 from node_cell import *
 from utils.data_utils import image_dir_generator
 

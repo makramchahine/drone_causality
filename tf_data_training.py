@@ -9,11 +9,12 @@ import argparse
 import time
 
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow import keras, TensorSpec
 
 from tf_data_loader import get_dataset_multi
-from keras_models import ModelParams, NCPParams, \
-    LSTMParams, CTRNNParams, IMAGE_SHAPE, get_readable_name, get_skeleton, TCNParams
+from keras_models import IMAGE_SHAPE
+from utils.model_utils import ModelParams, NCPParams, LSTMParams, CTRNNParams, TCNParams, get_skeleton, \
+    get_readable_name
 
 
 def tlen(dataset):
@@ -30,40 +31,53 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     # create model checkpoint directory if doesn't exist
     Path(save_dir).mkdir(parents=True, exist_ok=True)
 
-    # IMAGE_SHAPE = (256 - int(top_crop * 256), 256, 3)
-    # POSITION_SHAPE = (4,)
+    # make sure data loading happens on CPU
+    with tf.device('/cpu:0'):
+        if cached_data_dir is not None:
+            Path(cached_data_dir).mkdir(parents=True, exist_ok=True)
+            data_folder = os.path.basename(data_dir)
+            cached_training_fn = os.path.join(cached_data_dir, 'cached_dataset_%s_%d_%d_%d.tf' % (
+                data_folder, model_params.seq_len, data_stride, data_shift))
+            cached_validation_fn = os.path.join(cached_data_dir, 'cached_dataset_%s_validation_%d_%d_%d.tf' % (
+                data_folder, model_params.seq_len, data_stride, data_shift))
+            dataset_spec = os.path.join(cached_data_dir,
+                                        f"cached_{data_folder}_{model_params.seq_len}_{data_stride}_{data_shift}_spec.txt")
 
-    if cached_data_dir is not None:
-        cached_training_fn = os.path.join(cached_data_dir, 'cached_dataset_%d_%d_%d.tf' % (
-            model_params.seq_len, data_stride, data_shift))
-        cached_validation_fn = os.path.join(cached_data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (
-            model_params.seq_len, data_stride, data_shift))
+        if cached_data_dir is not None and os.path.exists(cached_training_fn) and os.path.exists(
+                cached_validation_fn) and os.path.exists(dataset_spec):
+            # loading datasets in older versions of tensorflow requires a TensorSpec to describe
+            with open(dataset_spec, "r") as f:
+                spec_str = f.readlines()[0]
+            spec: TensorSpec = eval(spec_str)
+            print('Loading cached dataset from %s' % cached_training_fn)
+            training_dataset = tf.data.experimental.load(cached_training_fn, spec)
+            print('Loading cached dataset from %s' % cached_validation_fn)
+            validation_dataset = tf.data.experimental.load(cached_validation_fn, spec)
+        else:
+            print('Loading data from: ' + data_dir)
+            training_dataset, validation_dataset = get_dataset_multi(data_dir, IMAGE_SHAPE, model_params.seq_len,
+                                                                     data_shift,
+                                                                     data_stride, val_split, label_scale,
+                                                                     extra_data_dir)
+            if cached_data_dir is not None:
+                print('Saving cached training data at %s' % cached_training_fn)
+                tf.data.experimental.save(training_dataset, cached_training_fn)
+                print('Saving cached validation data at %s' % cached_validation_fn)
+                tf.data.experimental.save(validation_dataset, cached_validation_fn)
+                with open(dataset_spec, "w") as f:
+                    f.write(repr(training_dataset.element_spec))
 
-    if cached_data_dir is not None and os.path.exists(cached_training_fn) and os.path.exists(cached_validation_fn):
-
-        print('Loading cached dataset from %s' % cached_training_fn)
-        training_dataset = tf.data.experimental.load(cached_training_fn)
-        print('Loading cached dataset from %s' % cached_validation_fn)
-        validation_dataset = tf.data.experimental.load(cached_validation_fn)
-
-    else:
-
-        print('Loading data from: ' + data_dir)
-        training_dataset, validation_dataset = get_dataset_multi(data_dir, IMAGE_SHAPE, model_params.seq_len,
-                                                                 data_shift,
-                                                                 data_stride, val_split, label_scale, extra_data_dir)
-        cached_training_fn = os.path.join(data_dir, 'cached_dataset_%d_%d_%d.tf' % (
-            model_params.seq_len, data_stride, data_shift))
-        cached_validation_fn = os.path.join(data_dir, 'cached_dataset_validation_%d_%d_%d.tf' % (
-            model_params.seq_len, data_stride,
-            data_shift))  # print('Saving cached training data at %s' % cached_training_fn)  # tf.data.experimental.save(training_dataset, cached_training_fn)
-
-        # print('Saving cached validation data at %s' % cached_validation_fn)  # tf.data.experimental.save(validation_dataset, cached_validation_fn)
-
-    print('\n\nTraining Dataset Size: %d\n\n' % tlen(training_dataset))
-    training_dataset = training_dataset.shuffle(100).batch(batch_size)
-
-    validation_dataset = validation_dataset.batch(batch_size)
+        print('\n\nTraining Dataset Size: %d\n\n' % tlen(training_dataset))
+        training_dataset = training_dataset.shuffle(100).batch(batch_size)
+        validation_dataset = validation_dataset.batch(batch_size)
+        # remove annoying TF warning about dataset sharding across multiple GPUs
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+        training_dataset = training_dataset.with_options(options)
+        validation_dataset = validation_dataset.with_options(options)
+        # Have GPU prefetch next training batch while first one runs
+        training_dataset = training_dataset.prefetch(1)
+        validation_dataset = validation_dataset.prefetch(1)
 
     lr_schedule = keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr, decay_steps=500,
                                                               decay_rate=decay_rate, staircase=True)
@@ -171,21 +185,22 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # setup model params and augment params dataclasses
     augmentation_params = {"translation_factor": args.translation_factor, "rotation_factor": args.rotation_factor,
-                           "zoom_factor": args.zoom_factor}
+                           "zoom_factor": args.zoom_factor} if args.augmentation else None
 
     if args.model == "ncp":
-        model_params_constructed = NCPParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
+        model_params_constructed = NCPParams(seq_len=args.seq_len,
                                              augmentation_params=augmentation_params, seed=args.ncp_seed)
     elif args.model == "lstm":
-        model_params_constructed = LSTMParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
+        model_params_constructed = LSTMParams(seq_len=args.seq_len,
                                               augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes, )
     elif args.model == "ctrnn":
-        model_params_constructed = CTRNNParams(seq_len=args.seq_len, do_augmentation=args.augmentation,
+        model_params_constructed = CTRNNParams(seq_len=args.seq_len,
                                                augmentation_params=augmentation_params, rnn_sizes=args.rnn_sizes,
                                                ct_network_type=args.ct_type)
     elif args.model == "tcn":
         model_params_constructed = TCNParams(seq_len=args.seq_len, nb_filters=args.tcn_nb_filters,
-                                             kernel_size=args.tcn_kernel, dilations=args.tcn_dilations)
+                                             augmentation_params=augmentation_params, kernel_size=args.tcn_kernel,
+                                             dilations=args.tcn_dilations)
     else:
         raise ValueError(f"Passed in illegal model type {args.model_type}")
 

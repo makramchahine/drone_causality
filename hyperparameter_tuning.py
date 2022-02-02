@@ -15,8 +15,8 @@ from optuna.integration import TFKerasPruningCallback
 # add directory up to path to get main naming script
 from optuna.pruners import MedianPruner
 
-from keras_models import TCNParams
-from tf_data_training import train_model, NCPParams, LSTMParams, CTRNNParams
+from tf_data_training import train_model
+from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, TCNParams
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -42,6 +42,11 @@ class KerasPruningCallbackFunction(TFKerasPruningCallback):
             )
             warnings.warn(message)
             return
+        # logging a nan obj leads to crash
+        if np.isnan(current_score):
+            message = f"Trial was pruned at epoch {epoch} because objective value was NaN"
+            raise optuna.TrialPruned(message)
+
         self._trial.report(float(current_score), step=epoch)
         if self._trial.should_prune():
             message = "Trial was pruned at epoch {}.".format(epoch)
@@ -80,7 +85,8 @@ COMMON_TRAIN_PARAMS = {
     "val_split": 0.05,
     "opt": "adam",
     "data_shift": 16,
-    "data_stride": 1
+    "data_stride": 1,
+    "cached_data_dir": "cached_data"
 }
 
 COMMON_MODEL_PARAMS = {

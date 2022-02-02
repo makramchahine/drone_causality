@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -o %x-%j.out
-#SBATCH -e %x-%j.err
+#SBATCH -o train_cfc-%j.out
+#SBATCH -e train_cfc-%j.err
 #SBATCH --mail-user=pdkao@mit.edu
 #SBATCH --mail-type=FAIL
 #SBATCH --gres=gpu:4
@@ -23,5 +23,5 @@ conda activate $PYTHON_VIRTUAL_ENVIRONMENT
 ulimit -s unlimited
 
 ## Creating SLURM nodes list
-cd ~/drone-causality
-python hyperparameter_tuning.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_12102021_sliced --n_trials 20 --timeout 64800 --batch_size 300
+cd ~/drone-causality/utils
+python train_multiple.py cfc_objective /home/gridsan/pdkao/data/devens_12102021_sliced --num_trains 5 --batch_size 128 --storage_name sqlite:///old_db/cfc.db

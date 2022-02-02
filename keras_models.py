@@ -1,12 +1,9 @@
-import copy
 import os
-from dataclasses import asdict, dataclass, field
-from typing import Tuple, Iterable, Optional, Dict, List
+from typing import Iterable, Dict
 
 import kerasncp as kncp
 from kerasncp.tf import LTCCell
 from tensorflow import keras
-from tensorflow.python.keras.layers import Conv2D, Dense
 
 from node_cell import *
 from tf_cfc import CfcCell, MixedCfcCell
@@ -14,72 +11,7 @@ from tf_cfc import LTCCell as CFCLTCCell
 
 IMAGE_SHAPE = (144, 256, 3)
 
-
-# helper classes that contain all the parameters in the generate_*_model functions
-@dataclass
-class ModelParams:
-    # dataclasses can't have non-default follow default
-    seq_len: int = field(default=False, init=True)
-    image_shape: Tuple[int, int, int] = IMAGE_SHAPE
-    do_normalization: bool = False
-    do_augmentation: bool = False
-    data: Optional[Iterable] = None
-    augmentation_params: Dict = None
-    rnn_stateful: bool = False
-    batch_size: Optional[int] = None
-    single_step: bool = False
-    no_norm_layer: bool = False
-
-
-@dataclass
-class NCPParams(ModelParams):
-    seed: int = 22222
-
-
-@dataclass
-class LSTMParams(ModelParams):
-    rnn_sizes: List[int] = field(default=False, init=True)
-    dropout: float = 0.1
-    recurrent_dropout: float = 0.1
-
-
-@dataclass
-class CTRNNParams(ModelParams):
-    rnn_sizes: List[int] = field(default=False, init=True)
-    ct_network_type: str = 'ctrnn'
-    config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
-
-
-@dataclass
-class TCNParams(ModelParams):
-    nb_filters: int = field(default=False, init=True)
-    kernel_size: int = field(default=False, init=True)
-    dilations: Iterable[int] = field(default=False, init=True)
-    dropout: float = 0.1
-
-
-def get_readable_name(params: ModelParams):
-    """
-    Extracts the model name from the class of params
-    """
-    class_name = str(params.__class__.__name__)
-    return class_name.replace("Params", "").lower()
-
-
 DROPOUT = 0.1
-
-# TODO: are these params relevant?
-# DEFAULT_CONFIG = {
-#     "clipnorm": 1,
-#     "size": 128,
-#     "backbone_activation": "tanh",
-#     "backbone_dr": 0.1,
-#     "forget_bias": 1.6,
-#     "backbone_units": 256,
-#     "backbone_layers": 2,
-#     "weight_decay": 1e-06,
-#     "use_mixed": False,
-# }
 DEFAULT_CFC_CONFIG = {
     "clipnorm": 1,
     "backbone_activation": "silu",
@@ -100,34 +32,26 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # if single_step, control output is (batch, 4), otherwise (batch, seq_len, 4)
 # if single_step, hidden outputs typically have shape (batch, hidden_dimension)
 
-def generate_lstm_model(rnn_sizes,
-                        seq_len,
-                        image_shape,
-                        do_normalization,
-                        do_augmentation,
-                        data,
-                        dropout=0.1,
-                        recurrent_dropout=0.1,
-                        augmentation_params=None,
-                        rnn_stateful=False,
-                        batch_size=None,
-                        single_step: bool = False,
-                        no_norm_layer: bool = False,
-                        ):
-    inputs_image, x = generate_network_trunk(seq_len,
-                                             image_shape,
-                                             do_normalization,
-                                             do_augmentation,
-                                             data,
-                                             augmentation_params,
-                                             rnn_stateful=rnn_stateful,
-                                             batch_size=batch_size,
-                                             single_step=single_step,
-                                             no_norm_layer=no_norm_layer,
-                                             )
-
-    # print(lstm_model.layers[-1].output_shape)
-    # print(batch_size, seq_len, lstm_model.layers[-1].output_shape[-1])
+def generate_lstm_model(
+        rnn_sizes,
+        seq_len,
+        image_shape,
+        dropout=0.1,
+        recurrent_dropout=0.1,
+        rnn_stateful=False,
+        batch_size=None,
+        augmentation_params=None,
+        single_step: bool = False,
+        no_norm_layer: bool = False,
+):
+    inputs_image, x = generate_network_trunk(
+        seq_len,
+        image_shape,
+        augmentation_params=augmentation_params,
+        batch_size=batch_size,
+        single_step=single_step,
+        no_norm_layer=no_norm_layer,
+    )
 
     # vars for single step model
     c_inputs = []
@@ -159,10 +83,7 @@ def generate_lstm_model(rnn_sizes,
                 dropout=dropout,
                 recurrent_dropout=recurrent_dropout
             )(x)
-        # if ix < len(rnn_sizes) - 1:
-        #    lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.1)))
 
-    # lstm_model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=0.05)))
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
         lstm_model = keras.Model([inputs_image, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
@@ -174,11 +95,7 @@ def generate_lstm_model(rnn_sizes,
 
 def generate_ncp_model(seq_len,
                        image_shape,
-                       do_normalization,
-                       do_augmentation,
-                       data,
                        augmentation_params=None,
-                       rnn_stateful=False,
                        batch_size=None,
                        seed=22222,
                        single_step: bool = False,
@@ -187,10 +104,7 @@ def generate_ncp_model(seq_len,
     inputs_image, x = generate_network_trunk(
         seq_len,
         image_shape,
-        do_normalization,
-        do_augmentation,
-        data, augmentation_params,
-        rnn_stateful=rnn_stateful,
+        augmentation_params=augmentation_params,
         batch_size=batch_size,
         single_step=single_step,
         no_norm_layer=no_norm_layer,
@@ -231,9 +145,6 @@ def generate_ncp_model(seq_len,
 def generate_ctrnn_model(rnn_sizes,
                          seq_len,
                          image_shape,
-                         do_normalization,
-                         do_augmentation,
-                         data,
                          augmentation_params=None,
                          rnn_stateful=False,
                          batch_size=None,
@@ -243,12 +154,9 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          ):
     inputs_image, x = generate_network_trunk(
-        seq_len, image_shape,
-        do_normalization,
-        do_augmentation,
-        data,
-        augmentation_params,
-        rnn_stateful=rnn_stateful,
+        seq_len,
+        image_shape,
+        augmentation_params=augmentation_params,
         batch_size=batch_size,
         single_step=single_step,
         no_norm_layer=no_norm_layer,
@@ -325,12 +233,8 @@ def generate_tcn_model(
         dilations: Iterable[int],
         seq_len,
         image_shape,
-        do_normalization,
-        do_augmentation,
-        data,
         dropout=0.1,
         augmentation_params=None,
-        rnn_stateful=False,
         batch_size=None,
         single_step: bool = False,
         no_norm_layer: bool = False,
@@ -349,14 +253,12 @@ def generate_tcn_model(
     inputs_image, x = generate_network_trunk(
         seq_len,
         image_shape,
-        do_normalization,
-        do_augmentation,
-        data, augmentation_params,
-        rnn_stateful=rnn_stateful,
+        augmentation_params=augmentation_params,
         batch_size=batch_size,
         single_step=single_step,
         no_norm_layer=no_norm_layer,
     )
+
     # Setup TCN
     rnn_cell = TCN(
         nb_filters=nb_filters,
@@ -402,57 +304,48 @@ def generate_tcn_model(
     return tcn_model
 
 
-def generate_normalization_layers(model, data=None):
-    model.add(keras.layers.experimental.preprocessing.Rescaling(1. / 255))
-
-    if data is not None:
-
-        normalization_layer = keras.layers.TimeDistributed(
-            keras.layers.experimental.preprocessing.Normalization())
-
-        normalization_layer.adapt(data)
-        # DATA is all the data after loading into RAM (single array)
-    else:
-        # normalization_layer = keras.layers.TimeDistributed(
-        #   keras.layers.experimental.preprocessing.Normalization(mean=0.5, variance=0.03))
-
-        normalization_layer = keras.layers.TimeDistributed(
-            keras.layers.experimental.preprocessing.Normalization(
-                mean=[0.41718618, 0.48529191, 0.38133072],
-                variance=[0.19504249, 0.18745404, 0.20891384]))
-
-    model.add(normalization_layer)
-
-    return model
-
-
-def generate_augmentation_layers(model, augmentation_params):
+def generate_augmentation_layers(x, augmentation_params: Dict, single_step: bool):
     # translate -> rotate -> zoom
     trans = augmentation_params['translation']
     rot = augmentation_params['rotation']
     zoom = augmentation_params['zoom']
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.experimental.preprocessing.RandomTranslation(
-            height_factor=trans, width_factor=trans)))
+    x = wrap_time(keras.layers.experimental.preprocessing.RandomTranslation(
+        height_factor=trans, width_factor=trans), single_step)(x)
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.experimental.preprocessing.RandomRotation(rot)))
+    x = wrap_time(keras.layers.experimental.preprocessing.RandomRotation(rot), single_step)(x)
 
-    model.add(keras.layers.TimeDistributed(
-        keras.layers.experimental.preprocessing.RandomZoom(
-            height_factor=zoom, width_factor=zoom)))
+    x = wrap_time(keras.layers.experimental.preprocessing.RandomZoom(
+            height_factor=zoom, width_factor=zoom), single_step)(x)
 
-    return model
+    return x
+
+
+def generate_normalization_layers(x, single_step: bool):
+    rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1. / 255)
+
+    normalization_layer = keras.layers.experimental.preprocessing.Normalization(
+        mean=[0.41718618, 0.48529191, 0.38133072],
+        variance=[.057, .05, .061])
+
+    x = rescaling_layer(x)
+    x = wrap_time(normalization_layer, single_step)(x)
+    return x
+
+
+def wrap_time(layer, single_step: bool):
+    """
+    Helper function that wraps layer in a timedistributed or not depending on the arguments of this function
+    """
+    if not single_step:
+        return keras.layers.TimeDistributed(layer)
+    else:
+        return layer
 
 
 def generate_network_trunk(seq_len,
                            image_shape,
-                           do_normalization,
-                           do_augmentation,
-                           data=None,
-                           augmentation_params=None,
-                           rnn_stateful=False,
+                           augmentation_params: Dict = None,
                            batch_size=None,
                            single_step: bool = False,
                            no_norm_layer: bool = False, ):
@@ -465,172 +358,37 @@ def generate_network_trunk(seq_len,
 
     """
 
-    # model.add(keras.layers.InputLayer(input_shape=(seq_len, *image_shape), batch_size=batch_size))
-    # model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, *image_shape)))
-    # inputs = keras.Input(batch_input_shape=(batch_size,seq_len,*image_shape))
-    # rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1./255)
-    # normalization_layer = keras.layers.experimental.preprocessing.Normalization(mean=[0.41718618, 0.48529191, 0.38133072], variance=[0.19504249, 0.18745404, 0.20891384])
-    # inputs = rescaling_layer(inputs)
-    # inputs = normalization_layer(inputs)
-    # #inputs =keras.layers.experimental.preprocessing.Normalization(mean=[0.41718618, 0.48529191, 0.38133072], variance=[0.19504249, 0.18745404, 0.20891384])(inputs)
-    # #model.add(keras.layers.InputLayer(batch_input_shape=(batch_size, seq_len, 144, 256, 3)))
-    # #model.add(keras.Input(batch_shape=(6, seq_len, *image_shape)))
-
-    # #if do_normalization:
-    # #    model = generate_normalization_layers(model)
-    # #
-    # # if do_augmentation:
-    # #     model = generate_augmentation_layers(model, augmentation_params)
-
-    # model_vgg = keras.applications.VGG16(include_top=False, weights='imagenet',input_shape=image_shape)
-    # model_vgg.trainable = False
-    # intermediate_model = keras.Model(inputs=model_vgg.input, outputs=model_vgg.get_layer('block5_pool').output)
-    # time_dist_layers = keras.layers.TimellayerDistributed(intermediate_model)(inputs)
-    # my_time_model = keras.Model(inputs=inputs, outputs=time_dist_layers)
-
-    # model = keras.models.Sequential()
-
-    # model.add(my_time_model)
-
-    # #model = generate_convolutional_layers(model)
-    # print(model.summary())
-    # model.add(keras.layers.TimeDistributed(keras.layers.Flatten()))
-    # model.add(keras.layers.TimeDistributed(keras.layers.Dense(units=1024,   activation='linear')))
-    # model.add(keras.layers.TimeDistributed(keras.layers.Dropout(rate=DROPOUT)))
-
-    # x = model.layers[0].output
-    # x = keras.layers.experimental.preprocessing.Rescaling(1./255)(x)
-    def wrap_time(layer):
-        """
-        Helper function that wraps layer in a timedistributed or not depending on the arguments of this function
-        """
-        if not single_step:
-            return keras.layers.TimeDistributed(layer)
-        else:
-            return layer
-
-    model_vgg = keras.applications.VGG16(include_top=False,
-                                         weights='imagenet',
-                                         input_shape=image_shape)
-
-    layers = [l for l in model_vgg.layers]
-
     if single_step:
         inputs = keras.Input(shape=image_shape)
     else:
         inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
 
-    layers[0] = inputs
+    x = inputs
 
     if not no_norm_layer:
-        rescaling_layer = keras.layers.experimental.preprocessing.Rescaling(1. / 255)
+        x = generate_normalization_layers(x, single_step)
 
-        # normalization_layer = keras.layers.experimental.preprocessing.Normalization(
-        #     mean=[0.41718618, 0.48529191, 0.38133072],
-        #     variance=[0.19504249, 0.18745404, 0.20891384])
-
-        normalization_layer = keras.layers.experimental.preprocessing.Normalization(
-            mean=[0.41718618, 0.48529191, 0.38133072],
-            variance=[.057, .05, .061])
-
-        # x = layers[0] # test network without normalization
-
-        x = rescaling_layer(layers[0])
-        x = wrap_time(normalization_layer)(x)
-    else:
-        x = layers[0]
-
-    # for i in range(len(layers)):
-    #     if i == 0:
-    #         continue
-    #     else:
-    #         layers[i].trainable = False
-    #         layers[i] = keras.layers.TimeDistributed(layers[i])
-    #         x = layers[i](x)
-
-    # my_time_model = keras.Model(inputs=inputs, outputs=x)
+    if augmentation_params is not None:
+        print("Generating augmentation layers")
+        x = generate_augmentation_layers(x, augmentation_params, single_step)
 
     # Conv Layers
-    x = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'))(x)
-
-    x = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'))(x)
-
-    x = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'))(x)
-
-    x = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'))(x)
-
-    x = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'))(x)
+    x = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+        x)
+    x = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+        x)
+    x = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+        x)
+    x = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step)(
+        x)
+    x = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step)(
+        x)
 
     # fully connected layers
-
-    x = wrap_time(keras.layers.Flatten())(x)
-    x = wrap_time(keras.layers.Dense(units=128, activation='linear'))(x)
-    x = wrap_time(keras.layers.Dropout(rate=DROPOUT))(x)
-
-    # print(model.summary())
+    x = wrap_time(keras.layers.Flatten(), single_step)(x)
+    x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
+    x = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(x)
 
     return inputs, x
 
 
-def get_skeleton(params: ModelParams):
-    """
-    Returns a new model with randomized weights according to the parameters in params
-    """
-    if isinstance(params, NCPParams):
-        model_skeleton = generate_ncp_model(**asdict(params))
-    elif isinstance(params, CTRNNParams):
-        model_skeleton = generate_ctrnn_model(**asdict(params))
-    elif isinstance(params, LSTMParams):
-        model_skeleton = generate_lstm_model(**asdict(params))
-    elif isinstance(params, TCNParams):
-        model_skeleton = generate_tcn_model(**asdict(params))
-    else:
-        raise ValueError(f"Could not parse param type {params.__class__}")
-    return model_skeleton
-
-
-def load_model_from_weights(params: ModelParams, checkpoint_path: str, load_name_ok: bool = False):
-    """
-    Convenience function that loads weights from checkpoint_path into model_skeleton
-    """
-    model_skeleton = get_skeleton(params)
-    if load_name_ok:
-        try:
-            model_skeleton.load_weights(checkpoint_path)
-        except TypeError:
-            # different number of weights from file and model. Assume normalization layer in model but not file
-            # rename conv layers starting at 5
-            print("Model had incorrect number of layers. Attempting to load from layer names")
-            conv_index = 5
-            dense_index = 1
-            for layer in model_skeleton.layers:
-                if isinstance(layer, Conv2D):
-                    layer._name = f"conv2d_{conv_index}"
-                    conv_index += 1
-                elif isinstance(layer, Dense):
-                    layer._name = f"dense_{dense_index}"
-                    dense_index += 1
-            model_skeleton.load_weights(checkpoint_path, by_name=True)
-    else:
-        model_skeleton.load_weights(checkpoint_path)
-
-    return model_skeleton
-
-
-def load_model_no_params(checkpoint_path: str, single_step: bool):
-    """
-    Convenience function that calls load_model_from weights as above but tries to infer reasonable default params if not
-    known
-    """
-    if 'ncp' in checkpoint_path:
-        params = NCPParams(seq_len=64, single_step=single_step)
-    elif 'mixedcfc' in checkpoint_path:
-        params = CTRNNParams(seq_len=64, rnn_sizes=[128], ct_network_type="mixedcfc", single_step=single_step)
-    elif 'lstm' in checkpoint_path:
-        params = LSTMParams(seq_len=64, rnn_sizes=[128], single_step=single_step)
-    elif "tcn" in checkpoint_path:
-        params = TCNParams(seq_len=64, nb_filters=128, kernel_size=2, dilations=[1, 2, 4, 8, 16, 32])
-    else:
-        raise ValueError(f"Unable to infer model name from path {checkpoint_path}")
-
-    return load_model_from_weights(params, checkpoint_path)

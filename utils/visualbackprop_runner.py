@@ -2,7 +2,7 @@ import json
 import os.path
 from typing import Dict, Tuple, Union, Optional
 
-from keras_models import NCPParams, LSTMParams, CTRNNParams
+from utils.model_utils import NCPParams, LSTMParams, CTRNNParams
 from visual_backprop import run_visualbackprop
 
 
