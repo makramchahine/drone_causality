@@ -15,7 +15,7 @@ from tf_data_loader import get_dataset_multi
 from keras_models import IMAGE_SHAPE
 from utils.model_utils import ModelParams, NCPParams, LSTMParams, CTRNNParams, TCNParams, get_skeleton, \
     get_readable_name
-
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def tlen(dataset):
     for (ix, _) in enumerate(dataset):
@@ -34,6 +34,7 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     # make sure data loading happens on CPU
     with tf.device('/cpu:0'):
         if cached_data_dir is not None:
+            cached_data_dir = os.path.join(SCRIPT_DIR, cached_data_dir)
             Path(cached_data_dir).mkdir(parents=True, exist_ok=True)
             data_folder = os.path.basename(data_dir)
             cached_training_fn = os.path.join(cached_data_dir, 'cached_dataset_%s_%d_%d_%d.tf' % (
