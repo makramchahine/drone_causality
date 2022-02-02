@@ -30,7 +30,7 @@ setup_path.py
 *.db
 *.tf
 *spec.txt
-cached_data/
+cached_data
 
 # pyenv
 .python-version
