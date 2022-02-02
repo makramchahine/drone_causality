@@ -48,7 +48,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
     while num_prev_trains < n_trains:
         trial_instance = copy.deepcopy(study.best_trial)
         obj_value = obj_filled(trial_instance)
-        out_filename = os.path.join(out_dir, f"{study_name_network}_{i}_train_results.json")
+        out_filename = os.path.join(out_dir, f"{study_name_network}_{n_trains}_train_results.json")
         run_results = copy.deepcopy(trial_instance.user_attrs)
         run_results["obj_value"] = obj_value
         with open(out_filename, "w") as outfile:
