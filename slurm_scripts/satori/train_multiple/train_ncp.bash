@@ -24,4 +24,4 @@ ulimit -s unlimited
 
 ## Creating SLURM nodes list
 cd ~/drone-causality/utils
-python train_multiple.py ncp_objective /home/gridsan/pdkao/data/devens_12102021_sliced --num_trains 5 --batch_size 128 --storage_name sqlite:///old_db/ncp.db
+python train_multiple.py ncp_objective /home/gridsan/pdkao/data/devens_12102021_sliced --n_trains 5 --batch_size 128 --storage_name sqlite:///old_db/ncp.db
