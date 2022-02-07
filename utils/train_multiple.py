@@ -29,6 +29,14 @@ def should_stop(start_time: float, timeout: Optional[float]):
     return timeout is not None and time.time() - start_time > timeout
 
 
+def get_prev_trains(out_dir: str, study_name_network: str):
+    num_prev_trains = 0
+    for file in os.listdir(out_dir):
+        if file.endswith(".json") and study_name_network in file:
+            num_prev_trains += 1
+    return num_prev_trains
+
+
 def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: int, batch_size: int,
                    storage_name: str = "sqlite:///hyperparam_tuning.db",
                    storage_type: Union[str, StorageType] = StorageType.RDB, out_prefix: str = "",
@@ -68,10 +76,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
     obj_filled = functools.partial(objective_fn, data_dir=data_dir, batch_size=batch_size)
 
     # account for previous trains in n_trains counting
-    num_prev_trains = 0
-    for file in os.listdir(out_dir):
-        if file.endswith(".json") and study_name_network in file:
-            num_prev_trains += 1
+    num_prev_trains = get_prev_trains(out_dir, study_name_network)
     print(f"Discovered {num_prev_trains} existing training runs in {out_dir}")
 
     while num_prev_trains < n_trains:
@@ -79,16 +84,16 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
             # separate clause for unique print
             print(f"Time limit reached. Script has been running for {time.time() - start_time} seconds.")
             break
-
-        print(f"Starting train {num_prev_trains}")
-        trial_instance = copy.deepcopy(best_trial)
-        obj_value = obj_filled(trial_instance)
+        # open file early to indicate to other processes training in progress
         out_filename = os.path.join(out_dir, f"{study_name_network}_{num_prev_trains}_train_results.json")
-        run_results = copy.deepcopy(trial_instance.user_attrs)
-        run_results["obj_value"] = obj_value
         with open(out_filename, "w") as outfile:
+            print(f"Starting train {num_prev_trains}")
+            trial_instance = copy.deepcopy(best_trial)
+            obj_value = obj_filled(trial_instance)
+            run_results = copy.deepcopy(trial_instance.user_attrs)
+            run_results["obj_value"] = obj_value
             json.dump(run_results, outfile)
-        num_prev_trains += 1
+        num_prev_trains = get_prev_trains(out_dir, study_name_network)
 
 
 if __name__ == "__main__":
