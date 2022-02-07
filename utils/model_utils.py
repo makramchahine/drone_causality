@@ -8,7 +8,7 @@ from tensorflow.python.keras.layers import Conv2D, Dense
 from tensorflow.python.keras.models import Functional
 
 from keras_models import IMAGE_SHAPE, DEFAULT_CFC_CONFIG, generate_ncp_model, generate_ctrnn_model, generate_lstm_model, \
-    generate_tcn_model
+    generate_tcn_model, DEFAULT_NCP_SEED
 
 
 # helper classes that contain all the parameters in the generate_*_model functions
@@ -25,7 +25,7 @@ class ModelParams:
 
 @dataclass
 class NCPParams(ModelParams):
-    seed: int = 22222
+    seed: int = DEFAULT_NCP_SEED
 
 
 @dataclass
@@ -42,6 +42,7 @@ class CTRNNParams(ModelParams):
     ct_network_type: str = 'ctrnn'
     config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
     rnn_stateful: bool = False
+    wiredcfc_seed: int = DEFAULT_NCP_SEED
 
 
 @dataclass
@@ -143,7 +144,7 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
                 if i == 0:  # batch dim
                     hidden.append(1)
                     continue
-                elif i == 1: # seq len dim
+                elif i == 1:  # seq len dim
                     hidden.append(0)
                     continue
                 else:

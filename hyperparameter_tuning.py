@@ -102,7 +102,7 @@ def ncp_objective(trial: Trial, data_dir: str, batch_size: int):
     seeds_to_try = list(range(22221, 22230)) + [55555]
     ncp_seed = trial.suggest_categorical("ncp_seed", seeds_to_try)
 
-    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 
     def sum_val_train_loss(logs):
@@ -128,7 +128,7 @@ def cfc_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batch_
     weight_decay = trial.suggest_float("weight_decay", low=1e-8, high=1e-4, log=True)
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
 
-    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 
     def sum_val_train_loss(logs):
@@ -168,7 +168,7 @@ def mixedcfc_objective(trial: Trial, data_dir: str, batch_size: int):
 def ctrnn_objective_base(trial: Trial, data_dir: str, batch_size: int, ct_network_type: str):
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
 
-    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 
     def sum_val_train_loss(logs):
@@ -235,7 +235,7 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int):
     # use same dropout for dropout and recurrent_dropout to avoid too many vars
     dropout = trial.suggest_float("dropout", low=0.0, high=0.3)
 
-    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 
     def sum_val_train_loss(logs):
@@ -265,7 +265,7 @@ def tcn_objective(trial: Trial, data_dir: str, batch_size: int):
     dilations = kernel_dilation_config["dilations"]
     dropout = trial.suggest_float("dropout", low=0.0, high=0.3)
 
-    lr = trial.suggest_float("lr", low=1e-5, high=1e-1, log=True)
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 
     def sum_val_train_loss(logs):
@@ -275,6 +275,33 @@ def tcn_objective(trial: Trial, data_dir: str, batch_size: int):
 
     model_params = TCNParams(nb_filters=nb_filters, kernel_size=kernel_size, dilations=dilations, dropout=dropout,
                              **COMMON_MODEL_PARAMS)
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
+    trial.set_user_attr("model_params", repr(model_params))
+
+    return calculate_objective(trial, history)
+
+
+def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int):
+    """
+    Even though wiredcfc is a type of ctrnn, it takes an additional parameter, wiring seed, so it gets a custom
+    objective function
+    """
+    seeds_to_try = list(range(22221, 22228)) + [55555]
+    wiredcfc_seed = trial.suggest_categorical("wiredcfc_seed", seeds_to_try)
+    rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
+
+    lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
+    decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
+
+    def sum_val_train_loss(logs):
+        return logs["loss"] + logs["val_loss"]
+
+    prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
+
+    model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type="wiredcfccell", wiredcfc_seed=wiredcfc_seed,
+                               **COMMON_MODEL_PARAMS)
+    # note rnn_size not needed for ncp
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
                           model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS)
     trial.set_user_attr("model_params", repr(model_params))

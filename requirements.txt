@@ -1,5 +1,5 @@
 tensorflow~=2.4.1
-keras-ncp
+keras-ncp==2.0.5
 tqdm~=4.62.3
 optuna~=2.10.0
 pillow~=9.0.0

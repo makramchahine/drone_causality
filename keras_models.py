@@ -2,7 +2,7 @@ import os
 from typing import Iterable, Dict
 
 import kerasncp as kncp
-from kerasncp.tf import LTCCell
+from kerasncp.tf import LTCCell, WiredCfcCell
 from tensorflow import keras
 
 from node_cell import *
@@ -21,6 +21,7 @@ DEFAULT_CFC_CONFIG = {
     "backbone_layers": 1,
     "weight_decay": 1e-06
 }
+DEFAULT_NCP_SEED = 22222
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -97,7 +98,7 @@ def generate_ncp_model(seq_len,
                        image_shape,
                        augmentation_params=None,
                        batch_size=None,
-                       seed=22222,
+                       seed=DEFAULT_NCP_SEED,
                        single_step: bool = False,
                        no_norm_layer: bool = False,
                        ):
@@ -152,6 +153,7 @@ def generate_ctrnn_model(rnn_sizes,
                          config=DEFAULT_CFC_CONFIG,
                          single_step: bool = False,
                          no_norm_layer: bool = False,
+                         **kwargs,
                          ):
     inputs_image, x = generate_network_trunk(
         seq_len,
@@ -192,6 +194,19 @@ def generate_ctrnn_model(rnn_sizes,
             rnn_cell = CfcCell(units=s, hparams=config)
         elif ct_network_type == "mixedcfc":
             rnn_cell = MixedCfcCell(units=s, hparams=config)
+        elif ct_network_type == "wiredcfccell":
+            wiring = kncp.wirings.NCP(
+                inter_neurons=18,  # Number of inter neurons
+                command_neurons=12,  # Number of command neurons
+                motor_neurons=4,  # Number of motor neurons
+                sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
+                inter_fanout=4,  # How many outgoing synapses has each inter neuron
+                recurrent_command_synapses=4,  # Now many recurrent synapses are in the
+                # command neuron layer
+                motor_fanin=6,  # How many incoming syanpses has each motor neuron,
+                seed=kwargs.get("wiredcfc_seed", DEFAULT_NCP_SEED),  # random seed to generate connections between nodes
+            )
+            rnn_cell = WiredCfcCell(wiring=wiring, mode="default")
         else:
             raise ValueError("Unknown model type '{}'".format(ct_network_type))
 
@@ -316,7 +331,7 @@ def generate_augmentation_layers(x, augmentation_params: Dict, single_step: bool
     x = wrap_time(keras.layers.experimental.preprocessing.RandomRotation(rot), single_step)(x)
 
     x = wrap_time(keras.layers.experimental.preprocessing.RandomZoom(
-            height_factor=zoom, width_factor=zoom), single_step)(x)
+        height_factor=zoom, width_factor=zoom), single_step)(x)
 
     return x
 
@@ -390,5 +405,3 @@ def generate_network_trunk(seq_len,
     x = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(x)
 
     return inputs, x
-
-

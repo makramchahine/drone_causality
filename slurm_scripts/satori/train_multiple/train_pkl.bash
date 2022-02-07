@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -o train_mixedcfc-%j.out
-#SBATCH -e train_mixedcfc-%j.err
+#SBATCH -o %x-%j.out
+#SBATCH -e %x-%j.err
 #SBATCH --mail-user=pdkao@mit.edu
 #SBATCH --mail-type=FAIL
 #SBATCH --gres=gpu:4
@@ -24,4 +24,4 @@ ulimit -s unlimited
 
 ## Creating SLURM nodes list
 cd ~/drone-causality/utils
-python train_multiple.py mixedcfc_objective /nobackup/users/pdkao/data/devens_12102021_sliced --n_trains 5 --batch_size 128 --storage_name old_db/mixedcfc.pkl --save_pkl
+python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_12102021_sliced --n_trains 5 --batch_size 300 --storage_name old_db/"${SLURM_JOB_NAME}".pkl --storage_type pkl
