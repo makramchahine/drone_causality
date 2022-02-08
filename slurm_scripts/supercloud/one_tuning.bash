@@ -11,6 +11,7 @@ module load anaconda/2020a
 module load cuda/10.2
 
 eval "$(conda shell.bash hook)"
+export PYTHONNOUSERSITE=1
 conda activate ramin
 
 cd ~/drone-causality
