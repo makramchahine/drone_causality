@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -o %x-%j.out
-#SBATCH -e %x-%j.err
+#SBATCH -o train_%x-%j.out
+#SBATCH -e train_%x-%j.err
 #SBATCH --mail-user=pdkao@mit.edu
 #SBATCH --mail-type=FAIL
 #SBATCH --gres=gpu:4
