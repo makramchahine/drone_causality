@@ -15,7 +15,9 @@ from tf_data_loader import get_dataset_multi
 from keras_models import IMAGE_SHAPE
 from utils.model_utils import ModelParams, NCPParams, LSTMParams, CTRNNParams, TCNParams, get_skeleton, \
     get_readable_name
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 
 def tlen(dataset):
     for (ix, _) in enumerate(dataset):
@@ -99,11 +101,11 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
                                  dc['clipnorm'] + '_bba-%s' % dc['backbone_activation'] + '_bb-dr-%f' % dc[
                                      'backbone_dr'] + '_fb-%f' % dc['forget_bias'] + '_bbu-%d' % dc[
                                      'backbone_units'] + '_bbl-%d' % dc['backbone_layers'] + '_wd-%f' % dc[
-                                     'weight_decay'] + '_seq-%d' % model_params.seq_len + '_opt-%s' % opt + '_lr-%f' % lr + '_crop-%f' % top_crop + '_epoch-{epoch:03d}' + '_val-loss:{val_loss:.4f}' + '_mse:{mse:.4f}' + '_%s.hdf5' % time_str)
+                                     'weight_decay'] + '_seq-%d' % model_params.seq_len + '_opt-%s' % opt + '_lr-%f' % lr + '_crop-%f' % top_crop + '_epoch-{epoch:03d}' + '_val-loss:{val_loss:.4f}' + '_train-loss:{loss:.4f}' + '_mse:{mse:.4f}' + '_%s.hdf5' % time_str)
     else:
         file_path = os.path.join(save_dir, 'rev-%d_model-%s_seq-%d_opt-%s'
                                            '_lr-%f_crop-%f_epoch-{epoch:03d}'
-                                           '_val_loss:{val_loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
+                                           '_val_loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
                                      REV, get_readable_name(model_params), model_params.seq_len, opt, lr, top_crop,
                                      time_str))
 

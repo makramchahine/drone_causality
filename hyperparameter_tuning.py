@@ -4,6 +4,7 @@ import functools
 import logging
 import os
 import sys
+import time
 import warnings
 from typing import Callable, Optional, Dict
 
@@ -65,15 +66,19 @@ def calculate_objective(trial: Trial, history):
                        zip(history.history["loss"], history.history["val_loss"])])
     loss_sums = losses.sum(axis=1)
     best_epoch = np.argmin(loss_sums)
-    trial.set_user_attr("train_loss", losses[best_epoch, 0])
-    trial.set_user_attr("val_loss", losses[best_epoch, 1])
+    trial.set_user_attr("sum_train_loss", losses[best_epoch, 0])
+    trial.set_user_attr("sum_val_loss", losses[best_epoch, 1])
     trial.set_user_attr("best_sum_epoch", int(best_epoch))
 
     # calculate best train and val epochs
     best_train = np.argmin(losses[:, 0])
     trial.set_user_attr("best_train_epoch", int(best_train))
+    trial.set_user_attr("best_train_loss", losses[best_train, 0])
     best_val = np.argmin(losses[:, 1])
     trial.set_user_attr("best_val_epoch", int(best_val))
+    trial.set_user_attr("best_val_loss", losses[best_val, 1])
+
+    trial.set_user_attr("trial_time", time.time())
 
     objective = loss_sums[best_epoch]
     return objective
