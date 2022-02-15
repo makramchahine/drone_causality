@@ -37,7 +37,11 @@ def get_best_val(checkpoint_dir: str, filter_str: str):
     for child in listdir(checkpoint_dir):
         # filter only jsons
         if isfile(os.path.join(checkpoint_dir, child)) and "hdf5" in child and filter_str in child:
-            val_index = child.index("val_loss")
+            try:
+                val_index = child.index("val")
+            except ValueError:
+                print(f"substring val not found in {child}")
+                continue
             val_loss = float(child[val_index + 9:val_index + 15])
             checkpoint_to_loss[child] = val_loss
 

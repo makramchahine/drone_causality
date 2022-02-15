@@ -105,7 +105,7 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     else:
         file_path = os.path.join(save_dir, 'rev-%d_model-%s_seq-%d_opt-%s'
                                            '_lr-%f_crop-%f_epoch-{epoch:03d}'
-                                           '_val_loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
+                                           '_val-loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
                                      REV, get_readable_name(model_params), model_params.seq_len, opt, lr, top_crop,
                                      time_str))
 
