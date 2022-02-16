@@ -293,8 +293,8 @@ def generate_tcn_model(
     inputs_sequence, combined_sequence = None, None
     if single_step:
         # current x shape: (batch [None=1], num_units)
-        # append current embedding to previous embedding sequence
-        inputs_sequence = tf.keras.Input(shape=(None, nb_filters))  # None is seq len, assume batch size 1 prepended
+        # append current embedding to previous embedding sequence (embedding dim = x.shape[-1])
+        inputs_sequence = tf.keras.Input(shape=(None, x.shape[-1]))  # None is seq len, assume batch size 1 prepended
         x = tf.expand_dims(x, axis=1)  # add seq_len dim to x
         combined_sequence = tf.concat((inputs_sequence, x), axis=1)  # add x to end of sequence, shape: batch, seq, unit
         # don't keep entries farther back than receptive field length

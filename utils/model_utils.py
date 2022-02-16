@@ -122,7 +122,11 @@ def get_readable_name(params: ModelParams):
     Extracts the model name from the class of params
     """
     class_name = str(params.__class__.__name__)
-    return class_name.replace("Params", "").lower()
+    name = class_name.replace("Params", "").lower()
+    if isinstance(params, CTRNNParams):
+        # include ctrnn type in name
+        name = f"{name}_{params.ct_network_type}"
+    return name
 
 
 def generate_hidden_list(model: Functional, return_numpy: bool = True):

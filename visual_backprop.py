@@ -81,6 +81,7 @@ def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
     """
     # don't care about loading initial hidden states, use _ to not worry about type of hidden state returned
     if model_params is not None:
+        model_params.single_step = True
         vis_model = load_model_from_weights(model_params, checkpoint_path=model_path)
     else:
         vis_model = load_model_no_params(model_path, single_step=True)
@@ -90,7 +91,7 @@ def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
     # slice at 1 to throw away first input layer
     conv_layers = vis_model.layers[num_utility_layers:num_conv_layers + num_utility_layers]
 
-    act_model_inputs = vis_model.input[0]  # don't want to take in hidden state, just image
+    act_model_inputs = vis_model.inputs[0]  # don't want to take in hidden state, just image
     activation_model = keras.models.Model(inputs=act_model_inputs,
                                           outputs=[layer.output for layer in conv_layers])
     return activation_model
