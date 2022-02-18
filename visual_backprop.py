@@ -1,4 +1,5 @@
 import copy
+import os.path
 from pathlib import Path
 from typing import List, Iterable, Optional
 
@@ -105,7 +106,11 @@ def run_visualbackprop(model_path: str, data_path: str,
     """
     assert image_output_path or video_output_path, "No output creation set"
     # create output_dir if not present
-    Path(image_output_path).mkdir(parents=True, exist_ok=True)
+    if image_output_path is not None:
+        Path(image_output_path).mkdir(parents=True, exist_ok=True)
+    if video_output_path is not None:
+        Path(os.path.dirname(video_output_path)).mkdir(parents=True, exist_ok=True)
+
     activation_model = get_conv_head(model_path, model_params)
     if video_output_path:
         image_shape = list(copy.deepcopy(IMAGE_SHAPE)[:2])

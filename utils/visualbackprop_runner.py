@@ -31,7 +31,7 @@ def visualbackprop_runner(datasets: Dict[str, Tuple[str, bool]], output_prefix: 
                 model_path=model_path,
                 data_path=data_path,
                 model_params=model_params,
-                image_output_path=output_name,
+                image_output_path=None,
                 video_output_path=os.path.join(output_name, f"{data_model_id}.mp4"),
                 reverse_channels=reverse_channels,
             )
@@ -45,7 +45,6 @@ if __name__ == "__main__":
     #     "mixedcfc": "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/mixedcfc.hdf5",
     #     "lstm": "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/lstm.hdf5",
     # }
-    #
     # datasets = {
     #     "online_ncp": ("/media/dolphonie/Data/Files/UROP/devens_data/11-18-21 online/raw_data/1637252567.166090", True),
     #     "online_cfc": ("/media/dolphonie/Data/Files/UROP/devens_data/11-18-21 online/raw_data/1637254105.961565", True),
@@ -54,20 +53,14 @@ if __name__ == "__main__":
     #     "winter": ("/media/dolphonie/Data/Files/UROP/devens_data/10-29-21 winter/1635515333.207994", True),
     #     "fall": ("/media/dolphonie/Data/Files/UROP/devens_data/8-4-21 fall/1628106140.64", False),
     # }
-    # models = {
-    #     "ncp2": "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/online_1/rev-0_model-ncp_seq-64_opt-adam_lr-0.000273_crop-0.000000_epoch-086_val_loss:0.2399_mse:0.0689_2022:01:23:13:39:23.hdf5",
-    #     "mixedcfc2": "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/online_1/rev-0_model-ctrnn_ctt-mixedcfc_cn-1.000000_bba-silu_bb-dr-0.100000_fb-3.163336_bbu-253_bbl-1_wd-0.000000_mixed-0_seq-64_opt-adam_lr-0.000087_crop-0.000000_epoch-053_val-loss:0.2110_mse:0.0929_2022:01:24:07:54:15.hdf5",
-    #     "lstm2": "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/online_1/rev-0_model-lstm_seq-64_opt-adam_lr-0.000290_crop-0.000000_epoch-090_val_loss:0.1936_mse:0.0282_2022:01:22:03:19:54.hdf5",
-    #     "cfc2": "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/online_1/rev-0_model-ctrnn_ctt-cfc_cn-1.000000_bba-silu_bb-dr-0.100000_fb-3.009269_bbu-147_bbl-2_wd-0.000000_mixed-0_seq-64_opt-adam_lr-0.000183_crop-0.000000_epoch-097_val-loss:0.2078_mse:0.0530_2022:01:23:13:51:33.hdf5"
-    # }
 
     datasets = {
-        "snow_bag": (
-            "/media/dolphonie/Data/Files/UROP/devens_data/1-26-22 online2/1643205757.184110", True),
-        "snow_chair": (
-            "/media/dolphonie/Data/Files/UROP/devens_data/1-26-22 online2/1643205847.856620", True),
+        "full_snow": ("/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645044796.388006", True),
+        "agent_collected_bag": (
+            "/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645038007.44_ncp_train", True),
+        "agent_collected_chair": (
+            "/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645038603.31_ncp_train", True)
     }
 
-    # params_path = "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/online_1/params.json"
-    params_path = "/home/dolphonie/Desktop/all_types_val/params.json"
+    params_path = "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/all_types_val/params.json"
     visualbackprop_runner(datasets, output_prefix="visualbackprop_results", params_path=params_path)

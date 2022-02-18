@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+from os import listdir
+from os.path import isfile
 from pathlib import Path
 from typing import Optional, Union
 
@@ -43,8 +45,11 @@ def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_pa
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("checkpoint_path", type=str)
+    parser.add_argument("checkpoint_dir", type=str)
     parser.add_argument("params_path", type=str)
     parser.add_argument("--dest_path", type=str, default=None)
     args = parser.parse_args()
-    remove_norm_rescaling_layers(args.checkpoint_path, args.params_path, args.dest_path)
+    for child in listdir(args.checkpoint_dir):
+        # filter only model weights
+        if isfile(os.path.join(args.checkpoint_dir, child)) and "hdf5" in child:
+            remove_norm_rescaling_layers(os.path.join(args.checkpoint_dir, child), args.params_path, args.dest_path)
