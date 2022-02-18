@@ -88,7 +88,9 @@ def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
         vis_model = load_model_no_params(model_path, single_step=True)
     # cleave off only convolutional head
     num_conv_layers = 4  # doesn't currently support ncp old, which only has 4 layers
-    num_utility_layers = 3  # input, rescaling and normalization
+
+    # input, rescaling and normalization are utility layers, if no_norm_layer just input layer
+    num_utility_layers = 1 if model_params.no_norm_layer else 3
     # slice at 1 to throw away first input layer
     conv_layers = vis_model.layers[num_utility_layers:num_conv_layers + num_utility_layers]
 
