@@ -57,13 +57,13 @@ def get_skeleton(params: ModelParams):
     """
     Returns a new model with randomized weights according to the parameters in params
     """
-    if isinstance(params, NCPParams):
+    if isinstance(params, NCPParams) or "NCPParams" in params.__class__.__name__:
         model_skeleton = generate_ncp_model(**asdict(params))
-    elif isinstance(params, CTRNNParams):
+    elif isinstance(params, CTRNNParams) or "CTRNNParams" in params.__class__.__name__:
         model_skeleton = generate_ctrnn_model(**asdict(params))
-    elif isinstance(params, LSTMParams):
+    elif isinstance(params, LSTMParams) or "LSTMParams" in params.__class__.__name__:
         model_skeleton = generate_lstm_model(**asdict(params))
-    elif isinstance(params, TCNParams):
+    elif isinstance(params, TCNParams) or "TCNParams" in params.__class__.__name__:
         model_skeleton = generate_tcn_model(**asdict(params))
     else:
         raise ValueError(f"Could not parse param type {params.__class__}")
