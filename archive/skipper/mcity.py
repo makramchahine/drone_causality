@@ -9,9 +9,9 @@ import re
 import yaml
 
 DOCKER_ENV_TAG = "mitdrl/deepdrone:env"
-DOCKER_ENV_FILE = "./DockerfileEnv"
+DOCKER_ENV_FILE = "DockerfileEnv"
 DOCKER_TAG = "mitdrl/deepdrone:minicity"
-DOCKER_FILE = "./Dockerfile"
+DOCKER_FILE = "Dockerfile"
 
 TRAIN_CONFIG_DEFAULT = "default/train_config.yaml"
 SKIPPER_CONFIG_DEFAULT = "default/pod_config.yaml"
@@ -130,7 +130,7 @@ class CommandParser(object):
                 tag,
                 "-f",
                 file,
-                os.path.realpath(os.path.join(script_path, "..")),
+                os.path.realpath(os.path.join(script_path, "../..")),
             ]
         )
 

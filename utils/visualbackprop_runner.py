@@ -54,13 +54,17 @@ if __name__ == "__main__":
     #     "fall": ("/media/dolphonie/Data/Files/UROP/devens_data/8-4-21 fall/1628106140.64", False),
     # }
 
+    # datasets = {
+    #     "full_snow": ("/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645044796.388006", True),
+    #     "agent_collected_bag": (
+    #         "/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645038007.44_ncp_train", True),
+    #     "agent_collected_chair": (
+    #         "/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645038603.31_ncp_train", True)
+    # }
+
     datasets = {
-        "full_snow": ("/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645044796.388006", True),
-        "agent_collected_bag": (
-            "/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645038007.44_ncp_train", True),
-        "agent_collected_chair": (
-            "/media/dolphonie/Data/Files/UROP/devens_data/02-16-22 all_models/1645038603.31_ncp_train", True)
+        "lab": ("/media/dolphonie/Data/Files/UROP/vbp_raw/1645485699.36", True)
     }
 
-    params_path = "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/all_types_val/params.json"
+    params_path = "/home/dolphonie/projects/catkin_ws/src/rosetta_drone/rnn_control/src/models/offline/params.json"
     visualbackprop_runner(datasets, output_prefix="visualbackprop_results", params_path=params_path)

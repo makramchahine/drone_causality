@@ -1,29 +1,14 @@
 # drone-flight  Copyright (C) 2020  Charles Vorbach
-import setup_path
 import airsim
-from airsim import Vector3r, Pose, Quaternionr, YawMode
+from airsim import Vector3r, Quaternionr
 
-import sys 
-import time 
-import random 
-import numpy as np
-import pprint
-import pickle
-import matplotlib.pyplot as plt
-import cv2
-import os
-import csv
+import time
 import re
 import argparse
 import toml
-from enum import Enum
 import traceback
 
-from scipy.spatial.transform import Rotation as R
-
-from planning import *
-from ml_models import *
-from tasks import *
+from archive.tasks import *
 
 class Empty:
     def __repr__(self):

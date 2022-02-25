@@ -15,4 +15,4 @@ export PYTHONNOUSERSITE=1
 conda activate ramin
 
 cd ~/drone-causality/utils
-python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_12102021_sliced --n_trains 5 --batch_size 128 --storage_name old_db/"${SLURM_JOB_NAME}".json --storage_type json
+python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_sliced --n_trains 5 --batch_size 128 --storage_name old_db/"${SLURM_JOB_NAME}".json --storage_type json

@@ -6,13 +6,16 @@ from typing import List, Iterable, Optional
 import cv2
 import numpy as np
 import tensorflow as tf
+from numpy import ndarray
 from tensorflow import keras, Tensor
 from tensorflow.keras.layers import Conv2D
 from tensorflow.python.keras.models import Model
 
 from keras_models import IMAGE_SHAPE
-from utils.model_utils import ModelParams, load_model_from_weights, load_model_no_params
 from utils.data_utils import image_dir_generator
+from utils.model_utils import ModelParams, load_model_from_weights, load_model_no_params, generate_hidden_list
+
+TEXT_BOX_HEIGHT = 30
 
 
 def convert_to_color_frame(saliency_map: Tensor):
@@ -25,13 +28,20 @@ def convert_to_color_frame(saliency_map: Tensor):
     return int_image
 
 
-def visualbackprop_activations(activation_model: Model,
-                               activations: List[Tensor],
-                               kernels: List[Iterable] = None,
-                               strides: List[Iterable] = None):
+def visualbackprop_activations(activations: List[ndarray],
+                               activation_model: Optional[Model] = None,
+                               kernels: Optional[List[Iterable]] = None,
+                               strides: Optional[List[Iterable]] = None) -> Tensor:
     """
     Compute the saliency maps for activation_model by running the VisualBackProp algorithm
     as described in https://arxiv.org/pdf/1611.05418.pdf
+    :param activations: List of activation layer values. Each element represents the activations of a layer and has
+    shape 1xheightxwidthxchannels (shapes are different for each layer, and are calculated according to model kernel and
+     stride)
+    :param activation_model: keras model that only has convolutional layers of model. used to infer kernels and strides
+    :param kernels: alternative to passing in model, num_conv_layers x 2 list of kernel sizes
+    :param strides: num_conv_layers long list of model strides
+    :return: keras tensor of shape hxwx1 that represents the saliency map of the given activations
     """
     # infer CNN kernels, strides, from layers
     if not (kernels and strides):
@@ -102,7 +112,8 @@ def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
 
 def run_visualbackprop(model_path: str, data_path: str,
                        model_params: Optional[ModelParams] = None, image_output_path: Optional[str] = None,
-                       video_output_path: Optional[str] = None, reverse_channels: bool = True):
+                       video_output_path: Optional[str] = None, reverse_channels: bool = True,
+                       show_control_outputs: bool = True):
     """
     Runner script that loads images, runs VisualBackProp, and saves saliency maps
     """
@@ -114,22 +125,30 @@ def run_visualbackprop(model_path: str, data_path: str,
         Path(os.path.dirname(video_output_path)).mkdir(parents=True, exist_ok=True)
 
     activation_model = get_conv_head(model_path, model_params)
+    if show_control_outputs:
+        model_params.single_step = True
+        model_params.no_norm_layer = False
+        control_model = load_model_from_weights(model_params, model_path)
+        hiddens = generate_hidden_list(control_model, True)
+
     if video_output_path:
         image_shape = list(copy.deepcopy(IMAGE_SHAPE)[:2])
         # assume og and saliency shapes the same, and stacked vertically
         image_shape[0] *= 2  # opencv wants frame size as width, height, so don't reverse
+        if show_control_outputs:
+            image_shape[0]+=TEXT_BOX_HEIGHT
         # videowriter takes width, height, image_shape is height, width
         writer = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc('m', 'p', '4', 'v'), 10, image_shape[::-1],
                                  True)  # true means write color frames
 
     for i, img in enumerate(image_dir_generator(data_path, IMAGE_SHAPE)):
-        # comptute saliency map
+        # compute saliency map
         img_batched_tensor = tf.expand_dims(img, axis=0)
         if reverse_channels:
             # reverse channels of image to match training
             img_batched_tensor = img_batched_tensor[..., ::-1]
-        activations = activation_model(img_batched_tensor)
-        saliency = visualbackprop_activations(activation_model, activations)
+        activations = activation_model.predict(img_batched_tensor)
+        saliency = visualbackprop_activations(activations=activations, activation_model=activation_model)
         # save saliency map
         saliency_writeable = convert_to_color_frame(saliency)
         if image_output_path:
@@ -137,8 +156,19 @@ def run_visualbackprop(model_path: str, data_path: str,
         if video_output_path:
             # display OG frame and saliency map stacked top and bottom
             og_int = np.uint8(img)
-            side_by_side = np.concatenate([og_int, saliency_writeable], axis=0)
-            writer.write(side_by_side)
+            img_stack = [og_int, saliency_writeable]
+            if show_control_outputs:
+                out = control_model.predict([img_batched_tensor, *hiddens])
+                vel_cmd = out[0]
+                hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
+                text_img = np.zeros((TEXT_BOX_HEIGHT, og_int.shape[1], 3), dtype=np.uint8)
+                vel_rounded = str([round(vel, 2) for vel in vel_cmd[0]])
+                cv2.putText(text_img, vel_rounded, (0, TEXT_BOX_HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, .5,
+                            (255, 255, 255), 1, cv2.LINE_AA)
+                img_stack.append(text_img)
+
+            stacked_imgs = np.concatenate(img_stack, axis=0)
+            writer.write(stacked_imgs)
 
     if video_output_path:
         writer.release()

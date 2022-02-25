@@ -1,6 +1,8 @@
 import copy
+import json
+import os
 from dataclasses import dataclass, field, asdict
-from typing import Tuple, Dict, Optional, List, Iterable
+from typing import Tuple, Dict, Optional, List, Iterable, Union
 
 import numpy as np
 import tensorflow as tf
@@ -78,7 +80,7 @@ def load_model_from_weights(params: ModelParams, checkpoint_path: str, load_name
     if load_name_ok:
         try:
             model_skeleton.load_weights(checkpoint_path)
-        except TypeError:
+        except ValueError:
             # different number of weights from file and model. Assume normalization layer in model but not file
             # rename conv layers starting at 5
             print("Model had incorrect number of layers. Attempting to load from layer names")
@@ -156,3 +158,11 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
             hidden.append(shape)
         hiddens.append(constructor(hidden))
     return hiddens
+
+
+def get_params_from_json(params_path: str, checkpoint_path: str):
+    with open(params_path, "r") as f:
+        data = json.loads(f.read())
+        model_params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams] = eval(
+            data[os.path.basename(checkpoint_path)])
+        return model_params
