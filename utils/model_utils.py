@@ -19,7 +19,7 @@ class ModelParams:
     # dataclasses can't have non-default follow default
     seq_len: int = field(default=False, init=True)
     image_shape: Tuple[int, int, int] = IMAGE_SHAPE
-    augmentation_params: Dict = None
+    augmentation_params: Optional[Dict] = None
     batch_size: Optional[int] = None
     single_step: bool = False
     no_norm_layer: bool = False

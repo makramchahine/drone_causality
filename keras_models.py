@@ -320,18 +320,25 @@ def generate_tcn_model(
 
 
 def generate_augmentation_layers(x, augmentation_params: Dict, single_step: bool):
-    # translate -> rotate -> zoom
-    trans = augmentation_params['translation']
-    rot = augmentation_params['rotation']
-    zoom = augmentation_params['zoom']
+    # translate -> rotate -> zoom -> noise
+    trans = augmentation_params.get('translation', None)
+    rot = augmentation_params.get('rotation', None)
+    zoom = augmentation_params.get('zoom', None)
+    noise = augmentation_params.get('noise', None)
 
-    x = wrap_time(keras.layers.experimental.preprocessing.RandomTranslation(
-        height_factor=trans, width_factor=trans), single_step)(x)
+    if trans is not None:
+        x = wrap_time(keras.layers.experimental.preprocessing.RandomTranslation(
+            height_factor=trans, width_factor=trans), single_step)(x)
 
-    x = wrap_time(keras.layers.experimental.preprocessing.RandomRotation(rot), single_step)(x)
+    if rot is not None:
+        x = wrap_time(keras.layers.experimental.preprocessing.RandomRotation(rot), single_step)(x)
 
-    x = wrap_time(keras.layers.experimental.preprocessing.RandomZoom(
-        height_factor=zoom, width_factor=zoom), single_step)(x)
+    if zoom is not None:
+        x = wrap_time(keras.layers.experimental.preprocessing.RandomZoom(
+            height_factor=zoom, width_factor=zoom), single_step)(x)
+
+    if noise:
+        x = wrap_time(keras.layers.GaussianNoise(stddev=noise), single_step)(x)
 
     return x
 

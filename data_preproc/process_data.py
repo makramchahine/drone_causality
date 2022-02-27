@@ -35,6 +35,12 @@ from keras_models import IMAGE_SHAPE
 #        bad_runs.append(d)
 
 def process_csv(df: DataFrame) -> DataFrame:
+    """
+    Applies relative heading transformation to csv file of sensor readings and saves relevant cols for training
+
+    :param df: pandas df containing sensor readings collected during logging
+    :return: Transformed dataframe
+    """
     yaws = np.zeros(len(df))
     for ix in range(len(yaws)):
         quat = [df['att_x'][ix], df['att_y'][ix], df['att_z'][ix], df['att_w'][ix]]
@@ -50,7 +56,7 @@ def process_csv(df: DataFrame) -> DataFrame:
     return df_training
 
 
-def process_image(img: Image) -> Image:
+def process_image(img: Image.Image) -> Image.Image:
     """
     Applies image transformations to training Data. Resizes to IMAGE_SIZE
     :param img:
@@ -61,6 +67,9 @@ def process_image(img: Image) -> Image:
 
 
 def process_data(data_dir: str, out_dir: str) -> None:
+    """
+    Processes all runs collected in the session by data_dir and saves to out_dir
+    """
     dirs = os.listdir(data_dir)
     dirs = sorted([d for d in dirs if 'csv' not in d])
 

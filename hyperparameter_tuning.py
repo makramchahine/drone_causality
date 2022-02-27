@@ -98,6 +98,9 @@ COMMON_MODEL_PARAMS = {
     "seq_len": 64,
     "single_step": False,
     "no_norm_layer": False,
+    "augmentation_params": {
+        "noise": 0.2,
+    },
 }
 
 

@@ -14,8 +14,7 @@ from tensorflow.python.keras.models import Model
 from keras_models import IMAGE_SHAPE
 from utils.data_utils import image_dir_generator
 from utils.model_utils import ModelParams, load_model_from_weights, load_model_no_params, generate_hidden_list
-
-TEXT_BOX_HEIGHT = 30
+from utils.vis_utils import show_vel_cmd, TEXT_BOX_HEIGHT
 
 
 def convert_to_color_frame(saliency_map: Tensor):
@@ -96,7 +95,8 @@ def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
         vis_model = load_model_from_weights(model_params, checkpoint_path=model_path)
     else:
         vis_model = load_model_no_params(model_path, single_step=True)
-    # cleave off only convolutional head
+    # cleave off only convolutional
+    # head
     num_conv_layers = 4  # doesn't currently support ncp old, which only has 4 layers
 
     # input, rescaling and normalization are utility layers, if no_norm_layer just input layer
@@ -136,7 +136,7 @@ def run_visualbackprop(model_path: str, data_path: str,
         # assume og and saliency shapes the same, and stacked vertically
         image_shape[0] *= 2  # opencv wants frame size as width, height, so don't reverse
         if show_control_outputs:
-            image_shape[0]+=TEXT_BOX_HEIGHT
+            image_shape[0] += TEXT_BOX_HEIGHT
         # videowriter takes width, height, image_shape is height, width
         writer = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc('m', 'p', '4', 'v'), 10, image_shape[::-1],
                                  True)  # true means write color frames
@@ -161,10 +161,7 @@ def run_visualbackprop(model_path: str, data_path: str,
                 out = control_model.predict([img_batched_tensor, *hiddens])
                 vel_cmd = out[0]
                 hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
-                text_img = np.zeros((TEXT_BOX_HEIGHT, og_int.shape[1], 3), dtype=np.uint8)
-                vel_rounded = str([round(vel, 2) for vel in vel_cmd[0]])
-                cv2.putText(text_img, vel_rounded, (0, TEXT_BOX_HEIGHT//2), cv2.FONT_HERSHEY_SIMPLEX, .5,
-                            (255, 255, 255), 1, cv2.LINE_AA)
+                text_img = show_vel_cmd(vel_cmd, og_int.shape[1])
                 img_stack.append(text_img)
 
             stacked_imgs = np.concatenate(img_stack, axis=0)
