@@ -1,58 +1,103 @@
 import argparse
+import itertools
 import json
 import os
 from pathlib import Path
-from typing import Sequence, Tuple, Optional
+from typing import Sequence, Tuple, Optional, Callable
 
-import numpy as np
 import pandas as pd
 from PIL import Image
+from joblib import Parallel, delayed
 from pandas import DataFrame
 from simple_pid import PID
+from tqdm import tqdm
 
-from data_preproc.process_data import process_image
+from data_preproc.aug_utils import generate_aug_params, compute_crop_offsets, save_processsed_seq, zoom_at
+from data_preproc.process_data import process_csv
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# num times to retry generating offsets
-NUM_RNG_ATTEMPTS = 100
-
 # PID gains for privileged controller
-YAW_P = 0.01
+
+# full image gains
+# YAW_P = 0.01
+# YAW_I = 0  # no actual feedback, so I should be 0
+# YAW_D = 0
+#
+# THROT_P = 0.01
+# THROT_I = 0
+# THROT_D = 0
+#
+# FORWARD_P = 0.4
+# FORWARD_I = 0
+# FORWARD_D = 0
+
+# processed (cropped) image gains
+YAW_P = 0.03
 YAW_I = 0  # no actual feedback, so I should be 0
 YAW_D = 0
 
-THROT_P = 0.01
+THROT_P = 0.04
 THROT_I = 0
 THROT_D = 0
 
-FORWARD_P = 0.4
+FORWARD_P = 0.4  # these shouldn't change
 FORWARD_I = 0
 FORWARD_D = 0
 
 
-def random_sign():
-    return np.random.choice([-1, 1])
-
-
-# from https://stackoverflow.com/questions/46149003/pil-zoom-into-image-at-a-particular-point
-def zoom_at(img: Image.Image, x: int, y: int, zoom: float) -> Image.Image:
+def generate_mixed_sequence(
+        img_sequence: Sequence[Image.Image],
+        control_df: DataFrame,
+        crop_size: Sequence[int],
+        start_offset: Sequence[int],
+) -> Tuple[Sequence[Image.Image], DataFrame]:
     """
-    PIL helper that combines crop and resize to zooom into an image at a point
-    :param img: image to transform
-    :param x: x coord to zoom into
-    :param y: y coord to zoom into
-    :param zoom: zoom factor
-    :return: zoomed in image
+    Generates augmented sequence by taking entire input sequence
+
+    :param img_sequence:
+    :param control_df:
+    :param target_location:
+    :param crop_size:
+    :param start_offset:
+    :return:
     """
-    w, h = img.size
-    zoom2 = zoom * 2
-    img = img.crop((int(x - w / zoom2), int(y - h / zoom2),
-                    int(x + w / zoom2), int(y + h / zoom2)))
-    return img.resize((w, h), Image.LANCZOS)
+    if len(control_df.columns) > 4:
+        control_df = process_csv(control_df)
+    yaw_pid = PID(Kp=YAW_P, Ki=YAW_I, Kd=YAW_D)
+    throt_pid = PID(Kp=THROT_P, Ki=THROT_I, Kd=THROT_D)
+    seq_len = len(img_sequence)
+
+    out_seq = []
+    # in order, controls are forward, left, up, and yaw counterclockwise (rad/s)
+    control_outputs = pd.DataFrame(columns=["vx", "vy", "vz", "omega_z"])
+    for cur_index in range(seq_len):
+        pitch_command = 0
+        roll_command = 0
+
+        # augment image
+        aug_img = img_sequence[cur_index]
+        seq_frac = (seq_len - cur_index) / seq_len  # goes down linearly from 1 to 0 as cur_index increases
+        # compute crop linearly based on offset
+        x_offset = int(start_offset[0] * seq_frac)
+        y_offset = int(start_offset[1] * seq_frac)
+        crop_tuple = compute_crop_offsets(frame_center=(aug_img.width // 2, aug_img.height // 2), crop_size=crop_size,
+                                          offset=(x_offset, y_offset))
+        aug_img = aug_img.crop(crop_tuple)
+        yaw_command = yaw_pid(x_offset)
+        throt_command = throt_pid(y_offset)
+
+        out_seq.append(aug_img)
+        # calculate control signal
+        control_outputs.loc[cur_index, "vx"] = control_df.loc[cur_index, "vx"] + pitch_command
+        control_outputs.loc[cur_index, "vy"] = control_df.loc[cur_index, "vy"] + roll_command  # always 0 for now
+        control_outputs.loc[cur_index, "vz"] = control_df.loc[cur_index, "vz"] + throt_command
+        control_outputs.loc[cur_index, "omega_z"] = control_df.loc[cur_index, "omega_z"] + yaw_command
+
+    return out_seq, control_outputs
 
 
-def generate_sequence(
+def generate_synthetic_sequence(
         image: Image.Image,
         target_location: Sequence[int],
         crop_size: Sequence[int],
@@ -74,15 +119,12 @@ def generate_sequence(
     :param max_zoom: How much to zoom in at
     :return:
     """
-    x_target, y_target = target_location
-    x_size, y_size = crop_size
-
     yaw_pid = PID(Kp=YAW_P, Ki=YAW_I, Kd=YAW_D)
     throt_pid = PID(Kp=THROT_P, Ki=THROT_I, Kd=THROT_D)
     pitch_pid = PID(Kp=FORWARD_P, Ki=FORWARD_I, Kd=FORWARD_D)
 
     out_seq = []
-    # in order, controls are forward, right, up, and yaw clockwise (rad/s)
+    # in order, controls are forward, left, up, and yaw counterclockwise (rad/s)
     control_outputs = pd.DataFrame(columns=["vx", "vy", "vz", "omega_z"])
     for cur_index in range(seq_len):
         yaw_command = 0
@@ -95,16 +137,14 @@ def generate_sequence(
         seq_frac = (seq_len - cur_index) / seq_len  # goes down linearly from 1 to 0 as cur_index increases
         if lateral_motion:
             # compute crop linearly based on offset
-            x_offset = start_offset[0] * seq_frac
-            y_offset = start_offset[1] * seq_frac
-            frame_x_center = x_target - x_offset
-            frame_y_center = y_target - y_offset
-            left_crop = frame_x_center - x_size // 2
-            right_crop = frame_x_center + x_size // 2
-            top_crop = frame_y_center - y_size // 2
-            bot_crop = frame_y_center + y_size // 2
-            aug_img = aug_img.crop((left_crop, top_crop, right_crop, bot_crop))
-            yaw_command = yaw_pid(-x_offset)
+            x_offset = int(start_offset[0] * seq_frac)
+            y_offset = int(start_offset[1] * seq_frac)
+            # Coords move target in direction of PIL axes (ex +x moves target right, +y moves target down). Note this
+            # moves the crop borders in the opposite direction
+            crop_tuple = compute_crop_offsets(frame_center=target_location, crop_size=crop_size,
+                                              offset=(x_offset, y_offset))
+            aug_img = aug_img.crop(crop_tuple)
+            yaw_command = yaw_pid(x_offset)
             throt_command = throt_pid(y_offset)
 
         # zoom image
@@ -125,77 +165,154 @@ def generate_sequence(
     return out_seq, control_outputs
 
 
-def augment_image(image_path: str, target_location: Sequence[int], out_path: str, seq_len: int,
-                  min_x_offset: int, max_x_offset: int, min_y_offset: int, max_y_offset: int,
-                  frame_size_padding: Optional[int] = None, max_zoom: Optional[float] = None):
+def augment_image_synthetic(image_path: str, target_location: Sequence[int], out_path: str, seq_len: int,
+                            min_x_offset: int, max_x_offset: int, min_y_offset: int, max_y_offset: int,
+                            frame_size_padding: Optional[int] = None, max_zoom: Optional[float] = None) -> bool:
     """
     Calculates random offsets and good frame size for augmentations. For param meanings, see generate_sequence
     """
     assert min_x_offset < max_x_offset and min_y_offset < max_y_offset, "min should be less than max"
-    # automatically calculate average frame size padding if not provided
-    if frame_size_padding is None:
-        frame_size_padding = np.mean([min_x_offset, max_x_offset, min_y_offset, max_y_offset])
 
     img = Image.open(image_path)
-    Path(out_path).mkdir(parents=True, exist_ok=True)
+
+    def valid_fn(target_location: int, crop_size: int, candidate_coord: int, img_dim: int) -> bool:
+        end_lower = target_location - crop_size // 2
+        end_upper = target_location + crop_size // 2
+        last_frame_ok = end_lower >= 0 and end_upper < img_dim
+        start_lower = end_lower - candidate_coord  # minus because offset should shift target, not borders, in +x, +y d
+        start_upper = end_upper - candidate_coord
+        first_frame_ok = start_lower >= 0 and start_upper < img_dim
+        return last_frame_ok and first_frame_ok
 
     # generate params
-    aspect_ratio = img.height / img.width
-    crop_width = img.width - 2.2 * frame_size_padding  # if max is selected, 2 would fill if obj was in middle. ALlow some leeway
-    crop_size = (crop_width, crop_width * aspect_ratio)
-    # generate sequence offsets
-    x_offset = None
-    y_offset = None
-    for _ in range(NUM_RNG_ATTEMPTS):
-        candidate_x = np.random.uniform(min_x_offset, max_x_offset) * random_sign()
-        candidate_y = np.random.uniform(min_y_offset, max_y_offset) * random_sign()
-        # check validity
-        x_valid = target_location[0] - crop_size[0] // 2 + candidate_x > 0 and target_location[0] + crop_size[
-            0] // 2 + candidate_x < img.width
-        y_valid = target_location[1] - crop_size[1] // 2 + candidate_y > 0 and target_location[1] + crop_size[
-            1] // 2 + candidate_y < img.height
-        if x_valid and y_valid:
-            x_offset = candidate_x
-            y_offset = candidate_y
-            break
-
-    if x_offset is None:
+    params = generate_aug_params(target_location=target_location, min_x_offset=min_x_offset,
+                                 max_x_offset=max_x_offset, min_y_offset=min_y_offset,
+                                 max_y_offset=max_y_offset,
+                                 frame_size_padding=frame_size_padding,
+                                 img_width=img.width, img_height=img.height, valid_fn=valid_fn)
+    if params is None:
         print(f"Could not find valid augmentations for image {image_path}")
-        return
+        return False
+
+    crop_size, start_offset = params
     # augment and save result
-    out_seq, control_inputs = generate_sequence(image=img, target_location=target_location, crop_size=crop_size,
-                                                seq_len=seq_len, start_offset=(x_offset, y_offset), lateral_motion=True,
-                                                max_zoom=max_zoom)
-    for i, aug_img in enumerate(out_seq):
-        processed = process_image(aug_img)
-        processed.save(os.path.join(out_path, f"{str(i).zfill(6)}.png"))
+    out_seq, control_inputs = generate_synthetic_sequence(image=img, target_location=target_location,
+                                                          crop_size=crop_size,
+                                                          seq_len=seq_len, start_offset=start_offset,
+                                                          lateral_motion=True,
+                                                          max_zoom=max_zoom)
 
-    control_inputs.to_csv(os.path.join(out_path, "data_out.csv"), index=False)
+    save_processsed_seq(out_path, out_seq, control_inputs, process_seq=True)
+    return True
 
 
-def augment_image_list(img_data_path: str, out_path: str, num_aug: int = 10, seq_len: int = 250, min_x_offset: int = 90,
-                       max_x_offset: int = 180, min_y_offset: int = 60, max_y_offset: int = 120,
-                       max_zoom: Optional[float] = None):
+def augment_image_mixed(run_path: str, target_location: Sequence[int], out_path: str, control_df: DataFrame,
+                        min_x_offset: int, max_x_offset: int, min_y_offset: int, max_y_offset: int,
+                        frame_size_padding: Optional[int] = None, ) -> bool:
+    assert min_x_offset < max_x_offset and min_y_offset < max_y_offset, "min should be less than max"
+    run_imgs = sorted(os.listdir(run_path))
+    run_imgs = [os.path.join(run_path, img) for img in run_imgs if "png" in img]  # filter and add absolute path
+    img_sequence = [Image.open(img) for img in run_imgs]
+
+    first_img = img_sequence[0]
+    Path(out_path).mkdir(parents=True, exist_ok=True)
+
+    def valid_fn(target_location: int, crop_size: int, candidate_coord: int, img_dim: int) -> bool:
+        return img_dim // 2 - crop_size // 2 + candidate_coord < target_location < img_dim // 2 + crop_size // 2 + candidate_coord
+
+    # generate params
+    params = generate_aug_params(target_location=target_location, min_x_offset=min_x_offset,
+                                 max_x_offset=max_x_offset, min_y_offset=min_y_offset,
+                                 max_y_offset=max_y_offset,
+                                 frame_size_padding=frame_size_padding,
+                                 img_width=first_img.width, img_height=first_img.height,
+                                 valid_fn=valid_fn)
+    if params is None:
+        print(f"Could not find valid augmentations for run {run_path}")
+        return False
+    crop_size, start_offset = params
+
+    out_seq, control_inputs = generate_mixed_sequence(img_sequence=img_sequence, control_df=control_df,
+                                                      crop_size=crop_size, start_offset=start_offset)
+
+    save_processsed_seq(out_path, out_seq, control_inputs, process_seq=False)
+    return True
+
+
+def augment_image_list(aug_fn: Callable, img_data_path: str, out_path: str, num_aug: int, *args,
+                       parallel_execution: bool = True, **kwargs):
     """
     Augments all images and target locations found in a json at img_data_path. For param meanings, see generate_sequence
     """
     with open(os.path.join(SCRIPT_DIR, img_data_path), "r") as f:
         img_data = json.load(f)
 
-    for i, (img_path, target_loc) in enumerate(img_data):
+    def perform_single_aug(i, img_path, target_loc):
+        extra_args = {}
+        if aug_fn == augment_image_mixed:
+            # get csv file for run, might either be unprocessed csv 1 dir up or data_out.csv in image_dir
+            try:
+                run_num = os.path.basename(os.path.dirname(img_path))
+                csv_filename = os.path.join(os.path.dirname(img_path), "..", '%.2f.csv' % float(run_num))
+                control_df = pd.read_csv(csv_filename)
+            except (FileNotFoundError, ValueError) as e:
+                csv_filename = os.path.join(img_path, "data_out.csv")
+                control_df = pd.read_csv(csv_filename)
+
+            extra_args["control_df"] = control_df
+            extra_args["run_path"] = img_path
+        else:
+            extra_args["image_path"] = img_path
+
+        res = []
         for j in range(num_aug):
             seq_out = os.path.join(out_path, f"{i}_{j}")
-            augment_image(image_path=img_path, target_location=target_loc, out_path=seq_out, seq_len=seq_len,
-                          min_x_offset=min_x_offset, max_x_offset=max_x_offset, min_y_offset=min_y_offset,
-                          max_y_offset=max_y_offset, max_zoom=max_zoom)
+            if os.path.exists(seq_out):
+                print(f"Found out path {seq_out}, skipping")
+                res.append(False)
+                continue
+            res.append(aug_fn(target_location=target_loc, out_path=seq_out,
+                              *args, **extra_args, **kwargs))
+        return res
+
+    # perform augmentation in parallel
+    if parallel_execution:
+        res = Parallel(n_jobs=6)(
+            delayed(perform_single_aug)(i, img_path, target_loc) for i, (img_path, target_loc) in
+            tqdm(enumerate(img_data)))
+    else:
+        res = []
+        for i, (img_path, target_loc) in tqdm(enumerate(img_data)):
+            res.append(perform_single_aug(i, img_path, target_loc))
+
+    # flatten output list
+    res = list(itertools.chain(*res))
+    print(f"Fraction succeeded {sum(res) / len(res)}")
+    return res
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("aug_fn", type=str)
     parser.add_argument("img_data_path", type=str)
     parser.add_argument("out_path", type=str)
     parser.add_argument("--seq_len", type=int, default=250)
     parser.add_argument("--num_aug", type=int, default=10)
     args = parser.parse_args()
-    augment_image_list(img_data_path=args.img_data_path, out_path=args.out_path, seq_len=args.seq_len,
-                       num_aug=args.num_aug, )
+
+    if args.aug_fn == "augment_image_synthetic":
+        # full images
+        # augment_image_list(aug_fn=augment_image_synthetic, img_data_path=args.img_data_path, out_path=args.out_path,
+        #                    seq_len=args.seq_len, num_aug=args.num_aug, min_x_offset=90, max_x_offset=180,
+        #                    min_y_offset=60,
+        #                    max_y_offset=120, )
+        augment_image_list(aug_fn=augment_image_synthetic, img_data_path=args.img_data_path, out_path=args.out_path,
+                           seq_len=args.seq_len, num_aug=args.num_aug, min_x_offset=30, max_x_offset=70,
+                           min_y_offset=15, max_y_offset=40, parallel_execution=True, max_zoom=2,
+                           frame_size_padding=50)
+    elif args.aug_fn == "augment_image_mixed":
+        augment_image_list(aug_fn=augment_image_mixed, img_data_path=args.img_data_path, out_path=args.out_path,
+                           num_aug=args.num_aug, min_x_offset=30, max_x_offset=60, min_y_offset=20,
+                           max_y_offset=40, )
+    else:
+        raise ValueError(f"Illegal aug fn {args.aug_fn}")

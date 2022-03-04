@@ -23,5 +23,5 @@ conda activate $PYTHON_VIRTUAL_ENVIRONMENT
 ulimit -s unlimited
 
 ## Creating SLURM nodes list
-cd ~/drone-causality/utils
-python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_sliced --n_trains 5 --batch_size 300 --storage_name old_db/"${SLURM_JOB_NAME}".pkl --storage_type pkl --timeout 64800
+cd ~/drone-causality
+python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_fixed --n_trains 5 --batch_size 300 --storage_name old_db/"${SLURM_JOB_NAME}".json --storage_type json --timeout 64800

@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import PIL.ImageOps
 import numpy as np
 import pandas as pd
 from PIL import Image
+from joblib import Parallel, delayed
 from pandas import DataFrame
 from tqdm import tqdm
 
@@ -34,6 +36,8 @@ from keras_models import IMAGE_SHAPE
 #    if not keep:
 #        bad_runs.append(d)
 
+CSV_NAME = "data_out.csv"
+
 def process_csv(df: DataFrame) -> DataFrame:
     """
     Applies relative heading transformation to csv file of sensor readings and saves relevant cols for training
@@ -56,45 +60,67 @@ def process_csv(df: DataFrame) -> DataFrame:
     return df_training
 
 
-def process_image(img: Image.Image) -> Image.Image:
+def process_image(img: Image.Image, flip_channels: bool = True) -> Image.Image:
     """
     Applies image transformations to training Data. Resizes to IMAGE_SIZE
     :param img:
     :return:
     """
-    return Image.fromarray(
-        np.array(img.resize((IMAGE_SHAPE[1], IMAGE_SHAPE[0]), resample=PIL.Image.BICUBIC))[:, :, ::-1])
+    desired_shape = (IMAGE_SHAPE[1], IMAGE_SHAPE[0])
+    if img.size != desired_shape:
+        img = img.resize(desired_shape, resample=PIL.Image.BICUBIC)
+    if flip_channels:
+        # noinspection PyTypeChecker
+        img = np.array(img)[:, :, ::-1]
+        img = Image.fromarray(img)
+
+    return img
 
 
-def process_data(data_dir: str, out_dir: str) -> None:
+def process_data(data_dir: str, out_dir: str, flip_channels: bool = True) -> None:
     """
     Processes all runs collected in the session by data_dir and saves to out_dir
     """
     dirs = os.listdir(data_dir)
     dirs = sorted([d for d in dirs if 'csv' not in d])
 
-    for (run_ix, run_dir) in tqdm(enumerate(dirs)):
+    def process_one_run(run_dir: str):
         run_abs = os.path.join(data_dir, run_dir)
-        run_out_dir = '%.2f' % float(run_dir)
-
-        df = pd.read_csv(os.path.join(data_dir, '%.2f.csv' % float(run_dir)))
-
-        df_training = process_csv(df)
+        if "." in run_dir:
+            run_out_dir = '%.2f' % float(run_dir)
+        else:
+            run_out_dir = run_dir
 
         Path(os.path.join(out_dir, run_out_dir)).mkdir(parents=True, exist_ok=True)
-        df_training.to_csv(os.path.join(out_dir, run_out_dir, 'data_out.csv'), index=False)
+        try:
+            df = pd.read_csv(os.path.join(data_dir, '%.2f.csv' % float(run_dir)))
+
+            df_training = process_csv(df)
+
+            df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
+        except FileNotFoundError:
+            print(f"Could not find csv for run {run_dir}. Assuming already processed and copying existing csv")
+            shutil.copy(os.path.join(run_abs, CSV_NAME), os.path.join(out_dir, run_out_dir, CSV_NAME))
 
         img_files = sorted(os.listdir(run_abs))
+        img_files = [os.path.join(run_abs, img) for img in img_files if "png" in img]
 
-        for (ix, fn) in enumerate(img_files):
-            im = Image.open(os.path.join(run_abs, fn))
-            im_smaller = process_image(im)
-            im_smaller.save(os.path.join(out_dir, run_out_dir, '%06d.png' % ix))
+        for (ix, im_path) in enumerate(img_files):
+            img_out_path = os.path.join(out_dir, run_out_dir, '%06d.png' % ix)
+            if os.path.exists(img_out_path):
+                continue
+            img = Image.open(im_path)
+            im_smaller = process_image(img, flip_channels)
+            im_smaller.save(img_out_path)
+
+    # run image processing in different threads
+    Parallel(n_jobs=6)(delayed(process_one_run)(run_dir) for run_dir in tqdm(dirs))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("data_dir", type=str, help="absolute path of data to be processed")
     parser.add_argument("out_dir", type=str, help="absolute path to output location for processed data")
+    parser.add_argument("--flip_channels", action="store_true")
     args = parser.parse_args()
-    process_data(args.data_dir, args.out_dir)
+    process_data(args.data_dir, args.out_dir, flip_channels=args.flip_channels)

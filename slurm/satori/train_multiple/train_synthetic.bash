@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -o train_cfc-%j.out
-#SBATCH -e train_cfc-%j.err
+#SBATCH -o train_%x-%j.out
+#SBATCH -e train_%x-%j.err
 #SBATCH --mail-user=pdkao@mit.edu
 #SBATCH --mail-type=FAIL
 #SBATCH --gres=gpu:4
@@ -23,5 +23,5 @@ conda activate $PYTHON_VIRTUAL_ENVIRONMENT
 ulimit -s unlimited
 
 ## Creating SLURM nodes list
-cd ~/drone-causality/utils
-python train_multiple.py cfc_objective /nobackup/users/pdkao/data/devens_snowy_sliced --n_trains 5 --batch_size 300 --storage_name sqlite:///old_db/cfc.db
+cd ~/drone-causality
+python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_fixed --n_trains 2 --batch_size 300 --storage_name old_db/mixedcfc_objective.pkl --storage_type pkl --timeout 64800 --extra_data_dir /nobackup/users/pdkao/data/synthetic_small

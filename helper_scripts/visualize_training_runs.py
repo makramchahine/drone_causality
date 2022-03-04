@@ -1,6 +1,7 @@
 import argparse
 import os
 from pathlib import Path
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -10,7 +11,9 @@ from tqdm import tqdm
 from utils.vis_utils import ARROW_BOX_HEIGHT, show_vel_cmd
 
 
-def visualize_run(run_dir: str, csv_path: str, output_path: str):
+def visualize_run(run_dir: str, output_path: str, csv_path: Optional[str] = None):
+    if csv_path is None:
+        csv_path = os.path.join(run_dir, "data_out.csv")
     Path(os.path.dirname(output_path)).mkdir(exist_ok=True, parents=True)
     imgs = sorted(os.listdir(run_dir))
     imgs = [os.path.join(run_dir, img) for img in imgs if "png" in img]
@@ -23,6 +26,8 @@ def visualize_run(run_dir: str, csv_path: str, output_path: str):
     csv_dat = pd.read_csv(csv_path)
 
     for i, img_path in tqdm(enumerate(imgs)):
+        if i >= csv_dat.shape[0]:
+            break
         img = cv2.imread(img_path)
         vel_cmd = csv_dat.iloc[i].to_numpy()
         vel_cmd = np.expand_dims(vel_cmd, axis=0)
@@ -33,12 +38,11 @@ def visualize_run(run_dir: str, csv_path: str, output_path: str):
     writer.release()
 
 
-def visualize_processed_run(run_dir: str, output_path: str):
+def visualize_processed_runs(run_dir: str, output_path: str):
     for run in os.listdir(run_dir):
         run = os.path.join(run_dir, run)
-        csv_path = os.path.join(run, "data_out.csv")
         run_output = os.path.join(output_path, f"{run}.mp4")
-        visualize_run(run, csv_path, run_output)
+        visualize_run(run, run_output)
 
 
 if __name__ == "__main__":
@@ -47,5 +51,5 @@ if __name__ == "__main__":
     # parser.add_argument("csv_path", type=str)
     parser.add_argument("output_path", type=str)
     args = parser.parse_args()
-    # visualize_run(args.run_dir, args.csv_path, args.output_path)
-    visualize_processed_run(run_dir=args.run_dir, output_path=args.output_path)
+    visualize_run(args.run_dir, args.output_path)
+    # visualize_processed_runs(run_dir=args.run_dir, output_path=args.output_path)

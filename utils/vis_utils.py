@@ -16,7 +16,7 @@ def show_vel_cmd(vel_cmd: ndarray, img_width: int):
     controller. The left arrow vertical is throttle and horizontal is yaw. The right arrow vertical is pitch and the
     horizontal is roll
 
-    :param vel_cmd: ndarray of shape 1x4 with commands pitch, roll, throt, yaw
+    :param vel_cmd: ndarray of shape 1x4 with commands pitch, roll, throt, yaw in front, left, up, counterclockwise
     :param img_width: width of image to be returned
     :return: Image with both vel_cmd text and arrows drawn on it
     """
@@ -30,11 +30,11 @@ def show_vel_cmd(vel_cmd: ndarray, img_width: int):
     arrow_scale = max_arrow_len / VEL_MAX
 
     yaw_img = cv2.arrowedLine(arrow_img, (left_stick_x, arrow_y),
-                              (left_stick_x + int(vel_cmd[3] * arrow_scale), arrow_y), ARROW_COLOR, ARROW_THICKNESS)
+                              (left_stick_x + int(-vel_cmd[3] * arrow_scale), arrow_y), ARROW_COLOR, ARROW_THICKNESS)
     throt_img = cv2.arrowedLine(yaw_img, (left_stick_x, arrow_y),
                                 (left_stick_x, arrow_y + int(-vel_cmd[2] * arrow_scale)), ARROW_COLOR, ARROW_THICKNESS)
     roll_img = cv2.arrowedLine(throt_img, (right_stick_x, arrow_y),
-                               (right_stick_x + int(vel_cmd[1] * arrow_scale), arrow_y), ARROW_COLOR, ARROW_THICKNESS)
+                               (right_stick_x + int(-vel_cmd[1] * arrow_scale), arrow_y), ARROW_COLOR, ARROW_THICKNESS)
     pitch_img = cv2.arrowedLine(roll_img, (right_stick_x, arrow_y),
                                 (right_stick_x, arrow_y + int(-vel_cmd[0] * arrow_scale)), ARROW_COLOR, ARROW_THICKNESS)
 

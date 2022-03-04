@@ -1,19 +1,16 @@
 #!/usr/bin/env python
 import copy
 import json
-import os
 # import files from hyperparameter_tuning.py one dir up
-import sys
-import time
 from enum import Enum
 from pathlib import Path
 from typing import Union
 
 from optuna.trial import FixedTrial
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from hyperparameter_tuning import *
+# noinspection PyUnresolvedReferences
+from utils.objective_functions import *
 
 # reset script dir since hyperparameter_tuning.py sets it
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -40,7 +37,7 @@ def get_prev_trains(out_dir: str, study_name_network: str):
 def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: int, batch_size: int,
                    storage_name: str = "sqlite:///hyperparam_tuning.db",
                    storage_type: Union[str, StorageType] = StorageType.RDB, out_prefix: str = "",
-                   timeout: Optional[float] = None):
+                   timeout: Optional[float] = None, train_kwargs: Optional[Dict[str, Any]] = None):
     """
     Runs obj_fn with the best parameters from study_name in storage_time
     """
@@ -73,7 +70,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
     else:
         raise ValueError(f"Unsupported storage type {storage_type}")
 
-    obj_filled = functools.partial(objective_fn, data_dir=data_dir, batch_size=batch_size)
+    obj_filled = functools.partial(objective_fn, data_dir=data_dir, batch_size=batch_size, **train_kwargs)
 
     # account for previous trains in n_trains counting
     num_prev_trains = get_prev_trains(out_dir, study_name_network)
@@ -92,6 +89,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
             obj_value = obj_filled(trial_instance)
             run_results = copy.deepcopy(trial_instance.user_attrs)
             run_results["obj_value"] = obj_value
+            run_results["train_kwargs"] = train_kwargs
             json.dump(run_results, outfile)
         num_prev_trains = get_prev_trains(out_dir, study_name_network)
 
@@ -109,8 +107,9 @@ if __name__ == "__main__":
     parser.add_argument("--timeout", type=float, default=None,
                         help="Time in seconds such that if the script has been running for longer than this, no trains"
                              "are started")
-    args = parser.parse_args()
-
+    args, unknown_args = parser.parse_known_args()
+    training_args_dict = parse_unknown_args(unknown_args)
     objective_fn = locals()[args.objective_fn]
     train_multiple(objective_fn, args.data_dir, "hyperparam_tuning", n_trains=args.n_trains, batch_size=args.batch_size,
-                   storage_name=args.storage_name, storage_type=args.storage_type, timeout=args.timeout)
+                   storage_name=args.storage_name, storage_type=args.storage_type, timeout=args.timeout,
+                   train_kwargs=training_args_dict)

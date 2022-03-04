@@ -39,12 +39,13 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
             cached_data_dir = os.path.join(SCRIPT_DIR, cached_data_dir)
             Path(cached_data_dir).mkdir(parents=True, exist_ok=True)
             data_folder = os.path.basename(data_dir)
-            cached_training_fn = os.path.join(cached_data_dir, 'cached_dataset_%s_%d_%d_%d.tf' % (
-                data_folder, model_params.seq_len, data_stride, data_shift))
-            cached_validation_fn = os.path.join(cached_data_dir, 'cached_dataset_%s_validation_%d_%d_%d.tf' % (
-                data_folder, model_params.seq_len, data_stride, data_shift))
+            extra_data_str = f"_{os.path.basename(extra_data_dir)}" if extra_data_dir is not None else ""
+            cached_training_fn = os.path.join(cached_data_dir, 'cached_dataset_%s%s_%d_%d_%d.tf' % (
+                data_folder, extra_data_str, model_params.seq_len, data_stride, data_shift))
+            cached_validation_fn = os.path.join(cached_data_dir, 'cached_dataset_%s%s_validation_%d_%d_%d.tf' % (
+                data_folder, extra_data_str, model_params.seq_len, data_stride, data_shift))
             dataset_spec = os.path.join(cached_data_dir,
-                                        f"cached_{data_folder}_{model_params.seq_len}_{data_stride}_{data_shift}_spec.txt")
+                                        f"cached_{data_folder}{extra_data_str}_{model_params.seq_len}_{data_stride}_{data_shift}_spec.txt")
 
         if cached_data_dir is not None and os.path.exists(cached_training_fn) and os.path.exists(
                 cached_validation_fn) and os.path.exists(dataset_spec):

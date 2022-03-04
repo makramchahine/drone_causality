@@ -1,18 +1,25 @@
 import argparse
+import json
 import os
 
 import cv2
+from tqdm import tqdm
 
-DISPLAY_SIZE_INCREASE = 2
+DISPLAY_SIZE_INCREASE = 4
 
 
 def select_targets_all_runs(session_dir: str):
     flight_folders = sorted(os.listdir(session_dir))
-    all_targets = []
-    for flight in flight_folders:
-        all_targets.extend(select_target_locations(os.path.join(session_dir, flight)))
+    all_targets_png = []
+    all_targets_dir = []
+    for flight in tqdm(flight_folders):
+        if "_" not in flight: # skip non sliced sequences
+            continue
+        png_targets, dir_targets = select_target_locations(os.path.join(session_dir, flight))
+        all_targets_png.extend(png_targets)
+        all_targets_dir.extend(dir_targets)
 
-    return all_targets
+    return all_targets_png, all_targets_dir
 
 
 def select_target_locations(run_dir: str):
@@ -26,13 +33,14 @@ def select_target_locations(run_dir: str):
         nonlocal click_loc
         # checking for left mouse clicks
         if event == cv2.EVENT_LBUTTONDOWN:
-            print(f"Detected click. Press a or d to save location")
+            # print(f"Detected click. Press a or d to save location")
             # displaying the coordinates
             # on the Shell
             click_loc = (x // DISPLAY_SIZE_INCREASE, y // DISPLAY_SIZE_INCREASE)
 
     index = 0
-    seq_targets = []
+    png_targets = []
+    dir_targets = []
     imgs = sorted(os.listdir(run_dir))
 
     while True:
@@ -53,16 +61,25 @@ def select_target_locations(run_dir: str):
             else:
                 pass
             if click_loc is not None:
-                seq_targets.append((img_path, click_loc))
+                img_dir = os.path.dirname(img_path)
+                png_targets.append([img_path, click_loc])
+                dir_targets.append([img_dir, click_loc])
                 click_loc = None
         except IndexError:
             print('Flight end at frame number ' + str(index - 1))
             break
-    return seq_targets
+    return png_targets, dir_targets
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("run_dir")
     args = parser.parse_args()
-    print(select_target_locations(args.run_dir))
+    png_targets, dir_targets = select_targets_all_runs(args.run_dir)
+    print(png_targets)
+    print(dir_targets)
+    with open("output_png.json", "w") as f:
+        json.dump(png_targets, f)
+
+    with open("output_dir.json", "w") as f:
+        json.dump(dir_targets, f)

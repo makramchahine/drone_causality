@@ -57,3 +57,6 @@ tuner_tests/
 *.out
 *.pkl
 **/*train_results.json
+
+# old models
+old_db/
