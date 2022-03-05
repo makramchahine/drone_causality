@@ -4,6 +4,8 @@ from typing import Iterable
 import PIL.Image
 import tensorflow as tf
 
+CSV_COLUMNS = ("vx", "vy", "vz", "omega_z")
+
 
 def image_dir_generator(data_path: str, image_shape: Iterable):
     """

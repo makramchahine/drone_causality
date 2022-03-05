@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 import argparse
 import os
-from typing import Optional
+from typing import Optional, Union
 
 # matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 # import matplotlib
+import pandas as pd
+from tensorflow import Tensor
 from tqdm import tqdm
 
-from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, load_model_from_weights, load_model_no_params
+from helper_scripts.visualize_training_runs import visualize_run
 from node_cell import *
-from utils.data_utils import image_dir_generator
+from utils.data_utils import image_dir_generator, CSV_COLUMNS
+from utils.model_utils import load_model_from_weights, load_model_no_params, \
+    generate_hidden_list, NCPParams, LSTMParams, CTRNNParams, TCNParams
 
 rnn_size = 128
 IMAGE_SHAPE = (144, 256, 3)
@@ -31,8 +35,9 @@ def load_model(model_path: str, params_repr: Optional[str] = None):
     if params_repr is None:
         return load_model_no_params(model_path, single_step=True)
     else:
-        params = exec(params_repr)
-        return load_model_from_weights(params, model_path, single_step=True)
+        params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams] = eval(params_repr)
+        params.single_step = True
+        return load_model_from_weights(params, model_path)
 
 
 def infer_hidden_states(model, data_x):
@@ -47,11 +52,10 @@ def infer_hidden_states(model, data_x):
             hiddens: List num_hiddens long with tensors of shape (batch_size, sequence_length+1, hidden_dim)
 
     """
-    batch_size = data_x.shape[0]
     seq_len = data_x.shape[1]
 
     # assume 1st input is image, all other inputs are hidden with shape batch, hidden_dim. Create all hidden states
-    hiddens = [np.zeros((batch_size, input_shape[1])) for input_shape in model.input_shape[1:]]
+    hiddens = generate_hidden_list(model=model, return_numpy=True)
 
     hidden_states = []  # shape: seq_len x (number of hidden states x hidden shape)
     outputs = []
@@ -70,11 +74,7 @@ def infer_hidden_states(model, data_x):
     return tf.stack(outputs, axis=1), hiddens_stacked
 
 
-def test_models(data_path: str, model_path: str, params_repr: Optional[str] = None):
-    eval_data, labels = load_data(data_path)
-    model = load_model(model_path, params_repr=params_repr)
-    outputs, hiddens = infer_hidden_states(model, eval_data)
-
+def plot_outputs(labels, outputs):
     fig, axs = plt.subplots(2, 2)
     axs[0, 0].plot(labels[:, 0])
     axs[0, 0].plot(outputs[0, :, 0])
@@ -91,8 +91,38 @@ def test_models(data_path: str, model_path: str, params_repr: Optional[str] = No
     axs[1, 1].plot(labels[:, 3])
     axs[1, 1].plot(outputs[0, :, 3])
     axs[1, 1].set_title('W')
-
     plt.show()
+
+
+def save_out_video(outputs: Tensor, data_path: str, output_path: str = "test_out"):
+    """
+
+    :param outputs: Tensor of shape 1, time, 4
+    :param data_path:
+    :param output_path:
+    :return:
+    """
+    df = pd.DataFrame(columns=CSV_COLUMNS)
+    for i, out in enumerate(outputs[0]):
+        df.loc[i, "vx"] = float(out[0])
+        df.loc[i, "vy"] = float(out[1])
+        df.loc[i, "vz"] = float(out[2])
+        df.loc[i, "omega_z"] = float(out[3])
+
+    csv_path = f"{output_path}.csv"
+    df.to_csv(csv_path, index=False)
+
+    visualize_run(run_dir=data_path, output_path=f"{output_path}.mp4", csv_path=csv_path)
+
+
+def test_models(data_path: str, model_path: str, params_repr: Optional[str] = None):
+    eval_data, labels = load_data(data_path)
+    model = load_model(model_path, params_repr=params_repr)
+    outputs, hiddens = infer_hidden_states(model, eval_data)
+
+    plot_outputs(labels, outputs)
+
+    save_out_video(outputs, data_path)
 
 
 if __name__ == "__main__":

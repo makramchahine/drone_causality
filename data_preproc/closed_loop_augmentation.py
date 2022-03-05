@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 from data_preproc.aug_utils import generate_aug_params, compute_crop_offsets, save_processsed_seq, zoom_at
 from data_preproc.process_data import process_csv
+from utils.data_utils import CSV_COLUMNS
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -70,7 +71,7 @@ def generate_mixed_sequence(
 
     out_seq = []
     # in order, controls are forward, left, up, and yaw counterclockwise (rad/s)
-    control_outputs = pd.DataFrame(columns=["vx", "vy", "vz", "omega_z"])
+    control_outputs = pd.DataFrame(columns=CSV_COLUMNS)
     for cur_index in range(seq_len):
         pitch_command = 0
         roll_command = 0
@@ -125,7 +126,7 @@ def generate_synthetic_sequence(
 
     out_seq = []
     # in order, controls are forward, left, up, and yaw counterclockwise (rad/s)
-    control_outputs = pd.DataFrame(columns=["vx", "vy", "vz", "omega_z"])
+    control_outputs = pd.DataFrame(columns=CSV_COLUMNS)
     for cur_index in range(seq_len):
         yaw_command = 0
         pitch_command = 0
