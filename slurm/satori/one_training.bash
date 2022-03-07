@@ -24,4 +24,4 @@ ulimit -s unlimited
 
 ## Creating SLURM nodes list
 cd ~/drone-causality
-./tf_data_training.py --model lstm --rnn_sizes 128 --data_dir /nobackup/users/pdkao/data/devens_snowy_sliced --seq_len 64 --epochs 100 --val_split 0.05 --opt adam --lr .0009 --data_shift 16 --data_stride 1 --batch_size 300
+./tf_data_training.py --model lstm --rnn_sizes 128 --data_dir /nobackup/users/pdkao/data/devens_snowy_fixed --seq_len 64 --epochs 100 --val_split 0.05 --opt adam --lr .0009 --data_shift 16 --data_stride 1 --batch_size 300
