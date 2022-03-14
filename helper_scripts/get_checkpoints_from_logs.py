@@ -1,65 +1,106 @@
 import argparse
+import json
 import os.path
-from datetime import datetime
-from os import listdir
-from os.path import isfile
-from typing import List
+import re
+import shutil
+from collections import defaultdict
+from json import JSONDecodeError
+from pathlib import Path
+from typing import List, Dict, Any
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def get_checkpoint_epoch(checkpoint_dir: str, epoch: int, json_time: float):
-    # get mapping of time to checkpoint path
-    checkpoint_to_time = {}
-    for child in listdir(checkpoint_dir):
-        # filter only model checkpoints
-        if isfile(os.path.join(checkpoint_dir, child)) and "hdf5" in child:
-            name, extension = os.path.splitext(child)
-            time_str = "_".split(name)[-1]
-            dt = datetime.strptime(time_str, "%Y:%m:%d:%H:%M:%S")
-            time_sec = dt.timestamp()
-            checkpoint_to_time[child] = time_sec
+def get_checkpoint_props(checkpoint_path: str) -> Dict[str, Any]:
+    """
+    Given name of checkpoint path, extracts relevant properties from string
 
-    # get checkpoints before and with epoch
-    legal_map = {}
-    for checkpoint, time in checkpoint_to_time.items():
-        if f"epoch-{epoch:03d}" in checkpoint and time < json_time:
-            legal_map[checkpoint] = time
+    :param checkpoint_path: Path or basename of model checkpoint to be analyzed
+    :return: Dict of checkpoint properties, val loss, train loss, and epoch
+    """
+    props = {}
 
-    # get closest checkpoint in time
-    max_checkpoint = max(legal_map, key=legal_map.get)
-    return max_checkpoint
+    val_index = checkpoint_path.index("val")
+    val_loss = float(checkpoint_path[val_index + 9:val_index + 15])
+    props["val_loss"] = val_loss
+
+    try:
+        train_index = checkpoint_path.index("train")
+        train_loss = float(checkpoint_path[train_index + 11:train_index + 17])
+        props["train_loss"] = train_loss
+    except ValueError:
+        props["train_loss"] = 999
+
+    epoch_index = checkpoint_path.index("epoch")
+    epoch = int(checkpoint_path[epoch_index + 6:epoch_index + 9])
+    props["epoch"] = epoch
+
+    return props
 
 
-def get_best_val(checkpoint_dir: str, filters: List[str]):
-    checkpoint_dir = os.path.join(SCRIPT_DIR, checkpoint_dir)
+def get_best_checkpoint(candidate_jsons: List[Dict[str, Any]], checkpoint_dir: str, criteria_key: str = "val"):
+    assert criteria_key == "val" or criteria_key == "train", "only val and train supported"
+    best_props = None
+    best_cand_value = float("inf")
+    for candidate in candidate_jsons:
+        cand_value = candidate[f"best_{criteria_key}_loss"]
+        if cand_value < best_cand_value:
+            best_props = {
+                f"{criteria_key}_loss": round(cand_value, 4),
+                "epoch": candidate[f"best_{criteria_key}_epoch"] + 1  # checkpoints epoch 1 indexed, jsons 0-indexed
+            }
 
-    checkpoint_to_loss = {}
-    for child in listdir(checkpoint_dir):
-        # filter only jsons
-        if isfile(os.path.join(checkpoint_dir, child)) and "hdf5" in child:
-            # make sure all filters in child
-            satisfies_filters = True
-            for filter_str in filters:
-                satisfies_filters = satisfies_filters and filter_str in child
-            if not satisfies_filters:
-                continue
+    for checkpoint in os.listdir(checkpoint_dir):
+        if ".hdf5" not in checkpoint:
+            continue
+        props = get_checkpoint_props(checkpoint)
+        if best_props.items() <= props.items():
+            return os.path.join(checkpoint_dir, checkpoint)
 
-            try:
-                val_index = child.index("val")
-            except ValueError:
-                print(f"substring val not found in {child}")
-                continue
-            val_loss = float(child[val_index + 9:val_index + 15])
-            checkpoint_to_loss[child] = val_loss
+    raise ValueError(f"No checkpoint matching props in json {best_props} found")
 
-    best_checkpoint = min(checkpoint_to_loss, key=checkpoint_to_loss.get)
-    return best_checkpoint
+
+def read_json(path):
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
+    json_map = defaultdict(list)
+    # separate jsons by class
+    re_match = re.compile(".*hyperparam_tuning_(.*)_\d_train_results.json")
+    for file in os.listdir(json_dir):
+        match = re_match.search(file)
+        if match is not None:
+            model_type = match.group(1)
+            json_map[model_type].append(os.path.join(json_dir, file))
+
+    for candidate in ["val", "train"]:
+        params_map = {}
+        # for each class, get best checkpoint
+        dest = os.path.join(out_dir, candidate)
+        Path(dest).mkdir(exist_ok=True, parents=True)
+        for model_type, jsons in json_map.items():
+            json_data = []
+            for path in jsons:
+                try:
+                    parsed = read_json(path)
+                    json_data.append(parsed)
+                except JSONDecodeError:
+                    print(f"Could not parse json at {path}, skipping")
+
+            checkpoint_path = get_best_checkpoint(candidate_jsons=json_data, checkpoint_dir=checkpoint_dir,
+                                                  criteria_key=candidate)
+            shutil.copy(checkpoint_path, dest)
+            params_map[os.path.basename(checkpoint_path)] = json_data[0]["model_params"]
+
+        with open(os.path.join(dest, "params.json"), "w") as f:
+            json.dump(params_map, f)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("json_dir", type=str)
     parser.add_argument("checkpoint_dir", type=str)
-    parser.add_argument("filter_str", nargs='+', type=str)
     args = parser.parse_args()
-    print(get_best_val(args.checkpoint_dir, args.filter_str))
+    process_json_list(args.json_dir, args.checkpoint_dir, "out_models")

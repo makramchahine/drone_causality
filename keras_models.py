@@ -10,6 +10,7 @@ from tf_cfc import CfcCell, MixedCfcCell
 from tf_cfc import LTCCell as CFCLTCCell
 
 IMAGE_SHAPE = (144, 256, 3)
+IMAGE_SHAPE_CV = (IMAGE_SHAPE[1], IMAGE_SHAPE[0])
 
 DROPOUT = 0.1
 DEFAULT_CFC_CONFIG = {

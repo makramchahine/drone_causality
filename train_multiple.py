@@ -107,9 +107,10 @@ if __name__ == "__main__":
     parser.add_argument("--timeout", type=float, default=None,
                         help="Time in seconds such that if the script has been running for longer than this, no trains"
                              "are started")
+    parser.add_argument("--out_prefix", type=str, default="", help="Directory to store logs into")
     args, unknown_args = parser.parse_known_args()
     training_args_dict = parse_unknown_args(unknown_args)
     objective_fn = locals()[args.objective_fn]
     train_multiple(objective_fn, args.data_dir, "hyperparam_tuning", n_trains=args.n_trains, batch_size=args.batch_size,
                    storage_name=args.storage_name, storage_type=args.storage_type, timeout=args.timeout,
-                   train_kwargs=training_args_dict)
+                   train_kwargs=training_args_dict, out_prefix=args.out_prefix)

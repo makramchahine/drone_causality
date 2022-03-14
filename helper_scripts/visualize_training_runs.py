@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from utils.vis_utils import ARROW_BOX_HEIGHT, show_vel_cmd
+from analysis.vis_utils import ARROW_BOX_HEIGHT, show_vel_cmd
 
 
 def visualize_run(run_dir: str, output_path: str, csv_path: Optional[str] = None):
