@@ -7,7 +7,6 @@ from typing import Dict, Tuple, Union, Optional
 
 from analysis.grad_cam import get_last_conv, compute_gradcam, compute_gradcam_tile
 from analysis.input_grad import compute_input_grad
-
 from analysis.vis_utils import run_visualization, write_video
 from analysis.visual_backprop import get_conv_head, compute_visualbackprop
 from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, get_readable_name, TCNParams, ModelParams, \
@@ -19,6 +18,7 @@ class VisualizationType(Enum):
     GRAD_CAM = "grad_cam"
     GRAD_CAM_TILE = "grad_cam_tile"
     INPUT_GRAD = "input_grad"
+
 
 def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: ModelParams):
     if vis_type == VisualizationType.VISUAL_BACKPROP:
@@ -43,6 +43,7 @@ def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: M
     control_model = load_model_from_weights(control_params, model_path)
 
     return vis_model, vis_func, control_model
+
 
 def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = ".",
                    params_path: Optional[str] = None, include_checkpoint_name: bool = False,
@@ -131,7 +132,6 @@ def visualize_combined(datasets: Dict[str, Tuple[str, bool]], output_prefix: str
         print(f"Finished {dataset_name}")
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("vis_func", type=str)
@@ -150,5 +150,3 @@ if __name__ == "__main__":
     vis_func(datasets=datasets, output_prefix="visualbackprop_results", params_path=args.params_path,
              vis_type=VisualizationType(args.vis_type),
              include_checkpoint_name=args.include_checkpoint_name, num_keep_frames=args.num_keep_frames)
-
-

@@ -22,11 +22,10 @@ def compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hiddens
 
 
 def compute_gradcam_tile(img: Union[Tensor, ndarray], grad_model: Functional, hiddens: Sequence[Tensor],
-                    pred_index: Optional[Sequence[Tensor]] = None):
+                         pred_index: Optional[Sequence[Tensor]] = None):
     heatmaps, hiddens = _compute_gradcam(img=img, grad_model=grad_model, hiddens=hiddens, pred_index=pred_index)
-    num_rows = ceil(len(heatmaps)/2)
+    num_rows = ceil(len(heatmaps) / 2)
     return image_grid(imgs=heatmaps, rows=num_rows, cols=2), hiddens
-
 
 
 def _compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hiddens: Sequence[Tensor],
