@@ -1,8 +1,9 @@
 # Created by Patrick Kao at 3/9/22
 from math import ceil
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 import tensorflow as tf
+from numpy import ndarray
 from tensorflow import Tensor
 from tensorflow.python.keras import Model
 from tensorflow.python.keras.layers import Conv2D
@@ -12,7 +13,7 @@ from analysis.vis_utils import image_grid
 from utils.model_utils import load_model_from_weights, load_model_no_params, ModelParams
 
 
-def compute_gradcam(img: Tensor, grad_model: Functional, hiddens: Sequence[Tensor],
+def compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hiddens: Sequence[Tensor],
                     pred_index: Optional[Sequence[Tensor]] = None):
     heatmaps, hiddens = _compute_gradcam(img=img, grad_model=grad_model, hiddens=hiddens, pred_index=pred_index)
     avg_heat = tf.math.add_n(heatmaps)
@@ -20,7 +21,7 @@ def compute_gradcam(img: Tensor, grad_model: Functional, hiddens: Sequence[Tenso
     return avg_heat, hiddens
 
 
-def compute_gradcam_tile(img: Tensor, grad_model: Functional, hiddens: Sequence[Tensor],
+def compute_gradcam_tile(img: Union[Tensor, ndarray], grad_model: Functional, hiddens: Sequence[Tensor],
                     pred_index: Optional[Sequence[Tensor]] = None):
     heatmaps, hiddens = _compute_gradcam(img=img, grad_model=grad_model, hiddens=hiddens, pred_index=pred_index)
     num_rows = ceil(len(heatmaps)/2)
@@ -28,7 +29,7 @@ def compute_gradcam_tile(img: Tensor, grad_model: Functional, hiddens: Sequence[
 
 
 
-def _compute_gradcam(img: Tensor, grad_model: Functional, hiddens: Sequence[Tensor],
+def _compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hiddens: Sequence[Tensor],
                      pred_index: Optional[Sequence[Tensor]] = None):
     """
     Adaptation of grad-cam code at https://keras.io/examples/vision/grad_cam/ with

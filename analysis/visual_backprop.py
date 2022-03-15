@@ -1,7 +1,8 @@
-from typing import List, Iterable, Optional
+from typing import List, Iterable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+from numpy import ndarray
 from tensorflow import keras, Tensor
 from tensorflow.keras.layers import Conv2D
 from tensorflow.python.keras.models import Functional
@@ -10,7 +11,7 @@ from keras_models import IMAGE_SHAPE
 from utils.model_utils import ModelParams, load_model_from_weights, load_model_no_params
 
 
-def compute_visualbackprop(img: Tensor,
+def compute_visualbackprop(img: Union[Tensor, ndarray],
                            activation_model: Functional,
                            hiddens: Optional[List[Tensor]] = None,
                            kernels: Optional[List[Iterable]] = None,

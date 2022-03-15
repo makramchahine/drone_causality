@@ -1,12 +1,13 @@
 # Created by Patrick Kao at 3/10/22
-from typing import Sequence
+from typing import Sequence, Union
 
 import tensorflow as tf
+from numpy import ndarray
 from tensorflow import Tensor
 from tensorflow.python.keras.models import Functional
 
 
-def compute_input_grad(img: Tensor, model: Functional, hiddens: Sequence[Tensor]):
+def compute_input_grad(img: Union[Tensor, ndarray], model: Functional, hiddens: Sequence[Tensor]):
     """
     Computes gradients of model output with respect to img
     :param img:
