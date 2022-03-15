@@ -15,13 +15,10 @@ def compute_visualbackprop(img: Union[Tensor, ndarray],
                            activation_model: Functional,
                            hiddens: Optional[List[Tensor]] = None,
                            kernels: Optional[List[Iterable]] = None,
-                           strides: Optional[List[Iterable]] = None) -> Tensor:
+                           strides: Optional[List[Iterable]] = None):
     """
     Compute the saliency maps for activation_model by running the VisualBackProp algorithm
     as described in https://arxiv.org/pdf/1611.05418.pdf
-    :param activations: List of activation layer values. Each element represents the activations of a layer and has
-    shape 1xheightxwidthxchannels (shapes are different for each layer, and are calculated according to model kernel and
-     stride)
     :param activation_model: keras model that only has convolutional layers of model. used to infer kernels and strides
     :param kernels: alternative to passing in model, num_conv_layers x 2 list of kernel sizes
     :param strides: num_conv_layers long list of model strides
