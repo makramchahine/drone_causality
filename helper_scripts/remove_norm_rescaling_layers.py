@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from tensorflow import keras
-from tensorflow.python.keras.layers import Normalization, Rescaling
+from tensorflow.python.keras.layers import Normalization, Rescaling, Conv2D, TimeDistributed
 
 from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, TCNParams, load_model_from_weights
 
@@ -34,9 +34,11 @@ def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_pa
     input_layer = model.input
     x = input_layer
 
-    to_drop = [0,1]
+    drop_layer = True
     for i, layer in enumerate(model.layers[1:]):
-        if i not in to_drop:
+        if isinstance(layer, Conv2D) or (isinstance(layer, TimeDistributed) and isinstance(layer.layer, Conv2D)):
+            drop_layer = False
+        if not drop_layer:
             x = layer(x)
 
     trimmed_model = keras.Model(inputs=input_layer, outputs=x)
@@ -46,9 +48,11 @@ def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_pa
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("checkpoint_dir", type=str)
-    parser.add_argument("params_path", type=str)
+    parser.add_argument("--params_path", type=str, default=None)
     parser.add_argument("--dest_path", type=str, default=None)
     args = parser.parse_args()
+    if args.params_path is None:
+        args.params_path = os.path.join(args.checkpoint_dir, "params.json")
     for child in listdir(args.checkpoint_dir):
         # filter only model weights
         if isfile(os.path.join(args.checkpoint_dir, child)) and "hdf5" in child:
