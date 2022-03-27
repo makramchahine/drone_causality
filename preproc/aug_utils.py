@@ -6,9 +6,9 @@ import numpy as np
 from PIL import Image
 from pandas import DataFrame
 
-from data_preproc.process_data import process_image
-
 # num times to retry generating offsets
+from preproc.process_data import process_image
+
 NUM_RNG_ATTEMPTS = 100
 
 

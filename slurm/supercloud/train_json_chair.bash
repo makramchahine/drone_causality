@@ -15,4 +15,4 @@ export PYTHONNOUSERSITE=1
 conda activate ramin
 
 cd ~/drone-causality
-python train_multiple.py "${SLURM_JOB_NAME}" /home/gridsan/pdkao/data/devens_snowy_fixed --n_trains 5 --batch_size 128 --storage_name old_db/"${SLURM_JOB_NAME}".json --storage_type json --extra_data_dir /home/gridsan/pdkao/data/mixed
+python train_multiple.py "${SLURM_JOB_NAME}" /home/gridsan/pdkao/data/devens_chair --n_trains 5 --batch_size 128 --storage_name old_db/"${SLURM_JOB_NAME}".json --storage_type json --extra_data_dir /home/gridsan/pdkao/data/synthetic_chair3 --out_prefix chair3

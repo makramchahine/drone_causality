@@ -4,9 +4,11 @@ from typing import Optional, Callable, Sequence, Union
 
 import cv2
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from PIL import Image
 from numpy import ndarray
+from pandas import DataFrame
 from tensorflow import Tensor
 from tensorflow.python.keras.models import Functional
 from tqdm import tqdm
@@ -95,7 +97,7 @@ def show_vel_text(vel_cmd: ndarray, img_width: int):
 def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
                       image_output_path: Optional[str] = None,
                       video_output_path: Optional[str] = None, reverse_channels: bool = True,
-                      control_model: Optional[Functional] = None) -> Sequence[ndarray]:
+                      control_source: Union[str, Functional, None] = None) -> Sequence[ndarray]:
     """
     Runner script that loads images, runs VisualBackProp, and saves saliency maps
     """
@@ -105,9 +107,16 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
     if video_output_path is not None:
         Path(os.path.dirname(video_output_path)).mkdir(parents=True, exist_ok=True)
 
-    vis_hiddens = generate_hidden_list(control_model, False)
-    if control_model is not None:
-        control_hiddens = generate_hidden_list(control_model, True)
+    if len(vis_model.inputs)>1:
+        vis_hiddens = generate_hidden_list(vis_model, False)
+    else:
+        # vis_model doesn't need hidden state
+        vis_hiddens = [None]
+
+    if isinstance(control_source, Functional):
+        control_hiddens = generate_hidden_list(control_source, True)
+    elif isinstance(control_source, str):
+        control_source = pd.read_csv(control_source)
 
     saliency_imgs = []
     for i, img in tqdm(enumerate(image_dir_generator(data_path, IMAGE_SHAPE))):
@@ -127,10 +136,19 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
         # display OG frame and saliency map stacked top and bottom
         og_int = np.uint8(img)
         img_stack = [og_int, saliency_writeable]
-        if control_model is not None:
-            out = control_model.predict([img_batched_tensor, *control_hiddens])
-            vel_cmd = out[0]
-            control_hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
+        if control_source is not None:
+            if isinstance(control_source, Functional):
+                out = control_source.predict([img_batched_tensor, *control_hiddens])
+                vel_cmd = out[0]
+                control_hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
+            elif isinstance(control_source, DataFrame):
+                try:
+                    vel_cmd = control_source.iloc[i][["cmd_vx", "cmd_vy", "cmd_vz", "cmd_omega"]].to_numpy()
+                except IndexError:
+                    vel_cmd = np.zeros((1, 4))
+                vel_cmd = np.expand_dims(vel_cmd, axis=0)
+            else:
+                raise ValueError(f"Unsupported control source {control_source}")
             text_img = show_vel_cmd(vel_cmd, og_int.shape[1])
             img_stack.append(text_img)
 

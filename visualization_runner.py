@@ -68,7 +68,7 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
         model_params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams, None] = eval(params_str)
         model_params.single_step = True
         model_path = os.path.join(os.path.dirname(params_path), local_path)
-        for dataset_name, (data_path, reverse_channels) in datasets.items():
+        for dataset_name, (data_path, reverse_channels, csv_path) in datasets.items():
             checkpoint_name = f"_{os.path.splitext(local_path)[0]}" if include_checkpoint_name else ""
             data_model_id = f"{get_readable_name(model_params)}_{dataset_name}{checkpoint_name}"
             output_name = os.path.join(output_prefix, data_model_id)
@@ -81,7 +81,7 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
                 image_output_path=None,
                 video_output_path=os.path.join(output_name, f"{data_model_id}.mp4"),
                 reverse_channels=reverse_channels,
-                control_model=control_model
+                control_source=csv_path if csv_path!="" else control_model
             )
             print(f"Finished {data_model_id}")
 
@@ -89,7 +89,7 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
 def visualize_combined(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = ".",
                        params_path: Optional[str] = None,
                        vis_type: VisualizationType = VisualizationType.VISUAL_BACKPROP,
-                       num_keep_frames: Optional[int] = None, **kwargs):
+                       num_keep_frames: Optional[int] = None, control_csv: Optional[str] = None, **kwargs):
     """
     Script that instead of producing one output video per dataset per model, combines all of the videos from all of the
     models in params_path
@@ -123,7 +123,7 @@ def visualize_combined(datasets: Dict[str, Tuple[str, bool]], output_prefix: str
                 image_output_path=None,
                 video_output_path=None,
                 reverse_channels=reverse_channels,
-                control_model=control_model
+                control_source=control_csv if control_csv is not None else control_model
             )
             last_kept_frame = 0 if num_keep_frames is None else len(imgs) - num_keep_frames
             img_frames.extend(imgs[last_kept_frame:])
