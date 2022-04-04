@@ -22,19 +22,19 @@ def optimize_hyperparameters(obj_fn: Callable, data_dir: str, study_name: str, n
     Runner script that runs hyperparameter tuning for a given model
 
     @param obj_fn: Optuna objective function. Takes trial and returns objective value
-    @param data_dir:
-    @param study_name:
-    @param n_trials:
-    @param batch_size:
-    @param timeout:
-    @param storage_name:
-    @param save_pkl:
+    @param data_dir: Path to data
+    @param study_name: String prefix to be given to name of study to be created in storage
+    @param n_trials: Absolute desired number of trials that should be in the study
+    @param batch_size: Training batch size
+    @param timeout: After timeout seconds, new trials will not be created
+    @param storage_name: URL for storing trial results
+    @param save_pkl: Bool flag that if true, causes trials to be stoerd to a .pkl file instead of RDB
+    @param train_kwargs: dictionary of miscellaneous arguments that should be passed to the training script. For now,
+    they are passed as strings no matter the input type
     @return:
-    @return:
-    :param train_kwargs:
     """
     optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
-    study_name_network = f"{study_name}_{obj_fn.__name__}"
+    study_name_network = f"{study_name}{obj_fn.__name__}"
     study_params = {
         "study_name": study_name_network,
         "load_if_exists": True,
@@ -55,8 +55,12 @@ def optimize_hyperparameters(obj_fn: Callable, data_dir: str, study_name: str, n
     if train_kwargs is None:
         train_kwargs = {}
 
+    # only continue training up to n_trials trials total
+    current_num_trials = len(study.trials)
+    remaining_trials = n_trials-current_num_trials
+
     study.optimize(functools.partial(objective_fn, data_dir=data_dir, batch_size=batch_size, **train_kwargs),
-                   n_trials=n_trials, timeout=timeout)
+                   n_trials=remaining_trials, timeout=timeout)
 
     if save_pkl:
         joblib.dump(study, storage_name)
@@ -89,9 +93,10 @@ if __name__ == "__main__":
                         help="Filepath for pkl, or URL for SQL RDB")
     parser.add_argument("--save_pkl", action='store_true',
                         help="Whether to save study in file (otherwise uses SQL RDB")
+    parser.add_argument("--study_name", type=str, default="", help="Prefix added to study name before objective")
     args, unknown_args = parser.parse_known_args()
     training_args_dict = parse_unknown_args(unknown_args)
     objective_fn = locals()[args.objective_fn]
-    optimize_hyperparameters(objective_fn, args.data_dir, "hyperparam_tuning", storage_name=args.storage_name,
+    optimize_hyperparameters(objective_fn, args.data_dir, study_name=args.study_name, storage_name=args.storage_name,
                              batch_size=args.batch_size, n_trials=args.n_trials, timeout=args.timeout,
                              save_pkl=args.save_pkl, train_kwargs=training_args_dict)

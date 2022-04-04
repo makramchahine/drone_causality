@@ -24,4 +24,4 @@ ulimit -s unlimited
 
 ## Creating SLURM nodes list
 cd ~/drone-causality
-python hyperparameter_tuning.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_fixed --n_trials 20 --timeout 64800 --batch_size 300
+python hyperparameter_tuning.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_chair --n_trials 40 --timeout 64800 --batch_size 300 --extra_data_dir /nobackup/users/pdkao/data/synthetic_chair3

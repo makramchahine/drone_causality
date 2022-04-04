@@ -107,7 +107,7 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
     if video_output_path is not None:
         Path(os.path.dirname(video_output_path)).mkdir(parents=True, exist_ok=True)
 
-    if len(vis_model.inputs)>1:
+    if len(vis_model.inputs) > 1:
         vis_hiddens = generate_hidden_list(vis_model, False)
     else:
         # vis_model doesn't need hidden state
@@ -119,6 +119,8 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
         control_source = pd.read_csv(control_source)
 
     saliency_imgs = []
+
+    csv_healthy = True
     for i, img in tqdm(enumerate(image_dir_generator(data_path, IMAGE_SHAPE))):
         # compute saliency map
         img_batched_tensor = tf.expand_dims(img, axis=0)
@@ -143,12 +145,21 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
                 control_hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
             elif isinstance(control_source, DataFrame):
                 try:
-                    vel_cmd = control_source.iloc[i][["cmd_vx", "cmd_vy", "cmd_vz", "cmd_omega"]].to_numpy()
+                    vel_cmd = np.nan_to_num(
+                        control_source.iloc[i][["cmd_vx", "cmd_vy", "cmd_vz", "cmd_omega"]].to_numpy())
                 except IndexError:
-                    vel_cmd = np.zeros((1, 4))
+                    vel_cmd = np.zeros((4,))
+                    if csv_healthy:
+                        # log error
+                        csv_healthy = False
+                        csv_rows = control_source.shape[0]
+                        image_num = len([c for c in os.listdir(data_path) if 'png' in c])
+                        print(f"Warning: CSV for {data_path} has {csv_rows} rows and {image_num} images")
+
                 vel_cmd = np.expand_dims(vel_cmd, axis=0)
             else:
                 raise ValueError(f"Unsupported control source {control_source}")
+
             text_img = show_vel_cmd(vel_cmd, og_int.shape[1])
             img_stack.append(text_img)
 

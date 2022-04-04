@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+import functools
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -25,11 +26,43 @@ def tlen(dataset):
     return ix
 
 
+@tf.function
+def sequence_augmentation(x, y, aug_params: Dict[str, Any]):
+    """
+    Apply augmentations where params have to be fixed per-sequence, and not per-sample. Therefore, these augmentations
+    can't go in a layer, as TimeDistribtued would call the layer again and again for each timestep
+
+    Note: to set breakpoints in a tf.function, you need to run tf.config.run_functions_eagerly(True) after import
+
+    :param x: data input, has shape batch x seq_len x height x width x channels
+    :param y: data labels, have shape batch x seq_len x 4
+    :param aug_params: dictionary containing intensity of augmentations. Keys can include brightness, contrast, and
+    saturation
+    :return: augmented data input, same data labels
+    """
+    bright_range = aug_params.get("brightness", None)
+    if bright_range is not None:
+        delta = tf.random.uniform((), -bright_range, bright_range)
+        x = tf.image.adjust_brightness(x, delta)
+
+    contrast_range = aug_params.get("contrast", None)
+    if contrast_range is not None:
+        contrast_factor = tf.random.uniform((), 1 - contrast_range, 1 + contrast_range)
+        x = tf.image.adjust_contrast(x, contrast_factor)
+
+    saturation_range = aug_params.get("saturation", None)
+    if saturation_range is not None:
+        saturation_factor = tf.random.uniform((), 1 - saturation_range, 1 + saturation_range)
+        x = tf.image.adjust_saturation(x, saturation_factor)
+
+    return x, y
+
+
 def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,
                 extra_data_dir: str = None, save_dir: str = "./model_checkpoints", batch_size: int = 32,
                 epochs: int = 30, val_split: float = 0.1, hotstart: str = None, lr: float = 0.001, momentum: float = 0,
                 opt: str = "adam", label_scale: float = 1, data_shift: int = 1, data_stride: int = 1,
-                top_crop: float = 0.0, decay_rate: float = 0.95, callbacks: List = None):
+                decay_rate: float = 0.95, callbacks: List = None, save_period: int = 1):
     # create model checkpoint directory if doesn't exist
     Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -73,6 +106,14 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
 
         print('\n\nTraining Dataset Size: %d\n\n' % tlen(training_dataset))
         training_dataset = training_dataset.shuffle(100).batch(batch_size)
+        # handle sequence augmentations differently
+        seq_params = model_params.augmentation_params.get("sequence_params", None)
+        if isinstance(seq_params, dict):
+            print("Performing sequence aug on training dataset")
+            seq_aug_fn = functools.partial(sequence_augmentation, aug_params=seq_params)
+            training_dataset = training_dataset.map(
+                seq_aug_fn, num_parallel_calls=tf.data.AUTOTUNE
+            )
         validation_dataset = validation_dataset.batch(batch_size)
         # remove annoying TF warning about dataset sharding across multiple GPUs
         options = tf.data.Options()
@@ -80,8 +121,8 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
         training_dataset = training_dataset.with_options(options)
         validation_dataset = validation_dataset.with_options(options)
         # Have GPU prefetch next training batch while first one runs
-        training_dataset = training_dataset.prefetch(1)
-        validation_dataset = validation_dataset.prefetch(1)
+        training_dataset = training_dataset.prefetch(10)
+        validation_dataset = validation_dataset.prefetch(10)
 
     lr_schedule = keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr, decay_steps=500,
                                                               decay_rate=decay_rate, staircase=True)
@@ -94,24 +135,13 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
         raise Exception('Unsupported optimizer type %s' % opt)
 
     time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
-    REV = 0
-    if isinstance(model_params, CTRNNParams):
-        dc = model_params.config  # for abbreviated writing
-        file_path = os.path.join(save_dir,
-                                 'rev-%d' % REV + '_model-ctrnn' + '_ctt-%s' % model_params.ct_network_type + '_cn-%f' %
-                                 dc['clipnorm'] + '_bba-%s' % dc['backbone_activation'] + '_bb-dr-%f' % dc[
-                                     'backbone_dr'] + '_fb-%f' % dc['forget_bias'] + '_bbu-%d' % dc[
-                                     'backbone_units'] + '_bbl-%d' % dc['backbone_layers'] + '_wd-%f' % dc[
-                                     'weight_decay'] + '_seq-%d' % model_params.seq_len + '_opt-%s' % opt + '_lr-%f' % lr + '_crop-%f' % top_crop + '_epoch-{epoch:03d}' + '_val-loss:{val_loss:.4f}' + '_train-loss:{loss:.4f}' + '_mse:{mse:.4f}' + '_%s.hdf5' % time_str)
-    else:
-        file_path = os.path.join(save_dir, 'rev-%d_model-%s_seq-%d_opt-%s'
-                                           '_lr-%f_crop-%f_epoch-{epoch:03d}'
-                                           '_val-loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
-                                     REV, get_readable_name(model_params), model_params.seq_len, opt, lr, top_crop,
-                                     time_str))
+
+    file_path = os.path.join(save_dir, 'model-%s_seq-%d_lr-%f_epoch-{epoch:03d}'
+                                       '_val-loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
+                                 get_readable_name(model_params), model_params.seq_len, lr, time_str))
 
     checkpoint_callback = keras.callbacks.ModelCheckpoint(filepath=file_path, save_weights_only=True,
-                                                          save_best_only=False, save_freq='epoch')
+                                                          save_best_only=False, save_freq='epoch', period=save_period)
 
     if callbacks is None:
         callbacks = []
@@ -134,7 +164,7 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     # Train
     history = model.fit(x=training_dataset, validation_data=validation_dataset, epochs=epochs,
                         use_multiprocessing=False, workers=1, max_queue_size=5, verbose=1, callbacks=callbacks)
-    return history
+    return history, time_str
 
 
 if __name__ == "__main__":

@@ -1,18 +1,39 @@
 import time
 import warnings
-from typing import Dict, Any, Callable, Optional
+from typing import Dict, Any, Callable, Optional, Tuple
 
 import numpy as np
 import optuna
 from optuna import Trial
 from optuna.integration import TFKerasPruningCallback
+from tensorflow.python.keras.callbacks import History
 
 from tf_data_training import train_model
 from utils.model_utils import NCPParams, CTRNNParams, LSTMParams, TCNParams
 
-
-def sum_val_train_loss(logs):
-    return logs["loss"] + logs["val_loss"]
+# args to train_model that are shared between all objective function types
+COMMON_TRAIN_PARAMS = {
+    "epochs": 100,
+    "val_split": 0.05,
+    "opt": "adam",
+    "data_shift": 16,
+    "data_stride": 1,
+    "cached_data_dir": "cached_data",
+    "save_period": 20,
+}
+COMMON_MODEL_PARAMS = {
+    "seq_len": 64,
+    "single_step": False,
+    "no_norm_layer": False,
+    "augmentation_params": {
+        "noise": 0.05,
+        "sequence_params": {
+            "brightness": 0.4,
+            "contrast": 0.4,
+            "saturation": 0.4,
+        }
+    },
+}
 
 
 # optuna objetive functions
@@ -263,33 +284,17 @@ class KerasPruningCallbackFunction(TFKerasPruningCallback):
             raise optuna.TrialPruned(message)
 
 
-# args to train_model that are shared between all objective function types
-COMMON_TRAIN_PARAMS = {
-    "epochs": 100,
-    "val_split": 0.05,
-    "opt": "adam",
-    "data_shift": 16,
-    "data_stride": 1,
-    "cached_data_dir": "cached_data"
-}
-COMMON_MODEL_PARAMS = {
-    "seq_len": 64,
-    "single_step": False,
-    "no_norm_layer": False,
-    "augmentation_params": {
-        "noise": 0.05,
-    },
-}
-
-
-def calculate_objective(trial: Trial, history):
+def calculate_objective(trial: Trial, result: Tuple[History, str]):
     """
     Calculates objective value from history of losses and also logs train_loss and val_loss separately
 
     @param trial: optuna trial
-    @param history: Tensorflow history object returned by trainer
+    @param result: Tensorflow history object returned by trainer
     @return: objective value
     """
+    history, time_str = result
+    trial.set_user_attr("checkpoint_time_str", time_str)
+
     losses = np.array([[epoch_train_loss, epoch_val_loss] for epoch_train_loss, epoch_val_loss in
                        zip(history.history["loss"], history.history["val_loss"])])
     loss_sums = losses.sum(axis=1)
@@ -310,3 +315,7 @@ def calculate_objective(trial: Trial, history):
 
     objective = loss_sums[best_epoch]
     return objective
+
+
+def sum_val_train_loss(logs):
+    return logs["loss"] + logs["val_loss"]
