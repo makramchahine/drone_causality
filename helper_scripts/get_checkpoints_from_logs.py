@@ -68,7 +68,7 @@ def read_json(path):
 def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
     json_map = defaultdict(list)
     # separate jsons by class
-    re_match = re.compile(".*hyperparam_tuning_(.*)_\d_train_results.json")
+    re_match = re.compile("(?:hyperparam_tuning_)?(.*)_\d_train_results.json")
     for file in os.listdir(json_dir):
         match = re_match.search(file)
         if match is not None:

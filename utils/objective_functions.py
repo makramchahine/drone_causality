@@ -1,3 +1,4 @@
+import copy
 import time
 import warnings
 from typing import Dict, Any, Callable, Optional, Tuple
@@ -48,9 +49,10 @@ def ncp_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs: 
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
     model_params = NCPParams(seed=ncp_seed, **COMMON_MODEL_PARAMS)
-    # note rnn_size not needed for ncp
-    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback, model_params=model_params,
-                          data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS, **train_kwargs)
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
@@ -83,10 +85,10 @@ def cfc_objective_base(trial: Trial, ct_network_type: str, data_dir: str, batch_
 
     model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type=ct_network_type, config=cfc_config,
                                **COMMON_MODEL_PARAMS)
-    # note rnn_size not needed for ncp
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS,
-                          **train_kwargs)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
@@ -111,9 +113,10 @@ def ctrnn_objective_base(trial: Trial, data_dir: str, batch_size: int, ct_networ
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
     model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type=ct_network_type, **COMMON_MODEL_PARAMS)
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS,
-                          **train_kwargs)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
@@ -188,9 +191,10 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs:
 
     model_params = LSTMParams(rnn_sizes=[rnn_size], dropout=dropout, recurrent_dropout=dropout,
                               rnn_stateful=False, **COMMON_MODEL_PARAMS)
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS,
-                          **train_kwargs)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
@@ -216,9 +220,10 @@ def tcn_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs: 
 
     model_params = TCNParams(nb_filters=nb_filters, kernel_size=kernel_size, dilations=dilations, dropout=dropout,
                              **COMMON_MODEL_PARAMS)
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS,
-                          **train_kwargs)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)
@@ -240,10 +245,10 @@ def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int, **train
 
     model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type="wiredcfccell", wiredcfc_seed=wiredcfc_seed,
                                **COMMON_MODEL_PARAMS)
-    # note rnn_size not needed for ncp
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
-                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **COMMON_TRAIN_PARAMS,
-                          **train_kwargs)
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
     trial.set_user_attr("model_params", repr(model_params))
 
     return calculate_objective(trial, history)

@@ -9,7 +9,7 @@ from typing import Optional, Union
 from tensorflow import keras
 from tensorflow.python.keras.layers import Normalization, Rescaling, Conv2D, TimeDistributed
 
-from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, TCNParams, load_model_from_weights
+from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, TCNParams, load_model_from_weights, eval_model_params
 
 
 def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_path: Optional[str] = None):
@@ -23,7 +23,7 @@ def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_pa
     # get model params and load model
     with open(params_path, "r") as f:
         data = json.loads(f.read())
-        model_params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams] = eval(data[os.path.basename(checkpoint_path)])
+        model_params = eval_model_params(data[os.path.basename(checkpoint_path)])
         model_params.single_step = False
 
     # even though will be used in single-step mode, easier to recreate in sequential mode and weights are the same

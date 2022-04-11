@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-import copy
 import json
 # import files from hyperparameter_tuning.py one dir up
+import os.path
 from enum import Enum
 from pathlib import Path
 from typing import Union
@@ -10,6 +10,7 @@ from optuna.trial import FixedTrial
 
 from hyperparameter_tuning import *
 # noinspection PyUnresolvedReferences
+from utils.model_utils import get_readable_name
 from utils.objective_functions import *
 
 # reset script dir since hyperparameter_tuning.py sets it
@@ -34,10 +35,35 @@ def get_prev_trains(out_dir: str, study_name_network: str):
     return num_prev_trains
 
 
+def find_hotstart_checkpoint(search_type: str, checkpoint_dir: str):
+    """
+    Of all the models in params.json in checkpoint dir, finds the candidate model that has the same model type as
+    candidate type based on the model params and returns its absolute checkpoint path
+
+    :param search_type: string returned by get_readable_name that specifies which class of model to look for
+    :param checkpoint_dir: base dir for models (should be 2 levels up from train/params.json)
+    :return:
+    """
+    hotstart_dir = os.path.join(checkpoint_dir, "train")
+    hotstart_json = os.path.join(hotstart_dir, "params.json")
+    with open(hotstart_json, "r") as f:
+        hotstart_params = json.load(f)
+
+    candidate_checkpoint = None
+    for checkpoint_path, cand_params in hotstart_params.items():
+        cand_type = get_readable_name(cand_params)
+        if cand_type == search_type:
+            assert candidate_checkpoint is None, f"Only one checkpoint should match the parameter type, but {candidate_checkpoint} also matches"
+            candidate_checkpoint = checkpoint_path
+
+    return os.path.abspath(os.path.join(hotstart_dir, candidate_checkpoint))
+
+
 def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: int, batch_size: int,
                    storage_name: str = "sqlite:///hyperparam_tuning.db",
-                   storage_type: Union[str, StorageType] = StorageType.RDB, out_prefix: str = "",
-                   timeout: Optional[float] = None, train_kwargs: Optional[Dict[str, Any]] = None):
+                   storage_type: Union[str, StorageType] = StorageType.RDB, out_dir: str = "",
+                   timeout: Optional[float] = None, train_kwargs: Optional[Dict[str, Any]] = None,
+                   hotstart_dir: Optional[str] = None):
     """
     Runs obj_fn with the best parameters from study_name in storage_time
     """
@@ -45,13 +71,16 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
     if isinstance(storage_type, str):
         storage_type = StorageType[storage_type.upper()]
 
+    if train_kwargs is None:
+        # default value
+        train_kwargs = {}
+
     start_time = time.time()
     # create output directory
-    out_dir = os.path.join(SCRIPT_DIR, out_prefix)
     Path(out_dir).mkdir(parents=True, exist_ok=True)
 
     optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
-    study_name_network = f"{study_name}_{obj_fn.__name__}"
+    study_name_network = f"{study_name}{obj_fn.__name__}"
 
     path_relative = os.path.join(SCRIPT_DIR, storage_name)
     if storage_type == StorageType.PKL:
@@ -70,6 +99,14 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
     else:
         raise ValueError(f"Unsupported storage type {storage_type}")
 
+    # find hotstart checkpoint
+    if hotstart_dir is not None:
+        model_type = get_readable_name(best_trial.user_attrs["model_params"])
+        hotstart_checkpoint = find_hotstart_checkpoint(model_type, hotstart_dir)
+        print(f"Found hotstart checkpoint {hotstart_checkpoint}")
+        train_kwargs["hotstart"] = hotstart_checkpoint
+
+    train_kwargs["save_period"] = 1
     obj_filled = functools.partial(objective_fn, data_dir=data_dir, batch_size=batch_size, **train_kwargs)
 
     # account for previous trains in n_trains counting
@@ -107,10 +144,13 @@ if __name__ == "__main__":
     parser.add_argument("--timeout", type=float, default=None,
                         help="Time in seconds such that if the script has been running for longer than this, no trains"
                              "are started")
-    parser.add_argument("--out_prefix", type=str, default="", help="Directory to store logs into")
+    parser.add_argument("--out_dir", type=str, default="", help="Directory to store logs into")
+    parser.add_argument("--study_name", type=str, default="", help="Prefix added to study name before objective")
+    parser.add_argument("--hotstart_dir", type=str, default=None, help="Directory to look for hotstart checkpoint"
+                                                                       "with same type as trained model")
     args, unknown_args = parser.parse_known_args()
     training_args_dict = parse_unknown_args(unknown_args)
     objective_fn = locals()[args.objective_fn]
-    train_multiple(objective_fn, args.data_dir, "hyperparam_tuning", n_trains=args.n_trains, batch_size=args.batch_size,
+    train_multiple(objective_fn, args.data_dir, args.study_name, n_trains=args.n_trains, batch_size=args.batch_size,
                    storage_name=args.storage_name, storage_type=args.storage_type, timeout=args.timeout,
-                   train_kwargs=training_args_dict, out_prefix=args.out_prefix)
+                   train_kwargs=training_args_dict, out_dir=args.out_dir, hotstart_dir=args.hotstart_dir)

@@ -119,10 +119,41 @@ def load_model_no_params(checkpoint_path: str, single_step: bool):
     return load_model_from_weights(params, checkpoint_path)
 
 
-def get_readable_name(params: ModelParams):
+COMPATIBILITY_REPLACEMENTS = {
+    "do_normalization=False,": "",
+    "do_normalization=True,": "",
+    "do_augmentation=False,": "",
+    "do_augmentation=True,": "",
+    "data=None,": "",
+    "time_distributed=True,": "",
+    "rnn_stateful=False,": "",
+}
+
+
+def eval_model_params(param_str: str):
+    """
+    Converts a string-serialized model params instance into its respective ModelParams subclass
+    :param param_str:
+    :return:
+    """
+    try:
+        params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams] = eval(param_str)
+    except TypeError:
+        # TODO: fix in a way that doesn't involve manual dict objects/string mod (dataclass takes other args?)
+        print("Could not parse param string into object. Trying to replace deprecated options")
+        for bad_str, replace_str in COMPATIBILITY_REPLACEMENTS.items():
+            param_str = param_str.replace(bad_str, replace_str)
+        params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams] = eval(param_str)
+
+    return params
+
+
+def get_readable_name(params: Union[ModelParams, str]):
     """
     Extracts the model name from the class of params
     """
+    if isinstance(params, str):
+        params = eval_model_params(params)
     class_name = str(params.__class__.__name__)
     name = class_name.replace("Params", "").lower()
     if isinstance(params, CTRNNParams):

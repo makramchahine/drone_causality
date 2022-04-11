@@ -64,7 +64,7 @@ def compute_visualbackprop(img: Union[Tensor, ndarray],
             saliency_mask = tf.multiply(saliency_mask, average_layer_maps[l - 1])
 
     saliency_mask = tf.squeeze(saliency_mask, axis=0)  # remove batch dimension
-    return (saliency_mask, hiddens) if hiddens else saliency_mask
+    return (saliency_mask, hiddens, None) if hiddens else saliency_mask
 
 
 def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):

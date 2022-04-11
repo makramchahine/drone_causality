@@ -29,4 +29,4 @@ def compute_input_grad(img: Union[Tensor, ndarray], model: Functional, hiddens: 
     heatmap = tf.squeeze(heatmap, axis=0)
     # convert heatmap to black and white by summing channels
     heatmap = tf.math.reduce_sum(heatmap, axis=-1, keepdims=True)
-    return heatmap, hiddens
+    return heatmap, hiddens, None

@@ -121,8 +121,8 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
         training_dataset = training_dataset.with_options(options)
         validation_dataset = validation_dataset.with_options(options)
         # Have GPU prefetch next training batch while first one runs
-        training_dataset = training_dataset.prefetch(10)
-        validation_dataset = validation_dataset.prefetch(10)
+        training_dataset = training_dataset.prefetch(tf.data.AUTOTUNE)
+        validation_dataset = validation_dataset.prefetch(tf.data.AUTOTUNE)
 
     lr_schedule = keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr, decay_steps=500,
                                                               decay_rate=decay_rate, staircase=True)

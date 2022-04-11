@@ -18,11 +18,11 @@ def graph_loss(train_losses: Optional[Sequence[Tuple[int, float]]] = None,
     plt.ylabel("Loss")
     plt.legend(loc="upper right")
 
-    if display_result:
-        plt.show()
-
     if save_path is not None:
         plt.savefig(save_path)
+
+    if display_result:
+        plt.show()
 
 
 def get_losses_from_checkpoints(checkpoint_path: str):

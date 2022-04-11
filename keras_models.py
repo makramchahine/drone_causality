@@ -392,7 +392,6 @@ def generate_network_trunk(seq_len,
         x = generate_normalization_layers(x, single_step)
 
     if augmentation_params is not None:
-        print("Generating augmentation layers")
         x = generate_augmentation_layers(x, augmentation_params, single_step)
 
     # Conv Layers

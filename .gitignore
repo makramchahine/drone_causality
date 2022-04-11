@@ -63,3 +63,5 @@ old_db/
 
 # dataset jsons
 dataset_jsons/
+
+analysis/lipschitz_out/

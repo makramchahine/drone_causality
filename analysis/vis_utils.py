@@ -1,6 +1,7 @@
+import json
 import os
 from pathlib import Path
-from typing import Optional, Callable, Sequence, Union
+from typing import Optional, Callable, Sequence, Union, Dict, Any
 
 import cv2
 import numpy as np
@@ -15,7 +16,7 @@ from tqdm import tqdm
 
 from keras_models import IMAGE_SHAPE, IMAGE_SHAPE_CV
 from utils.data_utils import image_dir_generator
-from utils.model_utils import generate_hidden_list
+from utils.model_utils import generate_hidden_list, NCPParams, LSTMParams, CTRNNParams, TCNParams
 
 TEXT_BOX_HEIGHT = 30
 ARROW_BOX_HEIGHT = 100 + TEXT_BOX_HEIGHT
@@ -97,10 +98,14 @@ def show_vel_text(vel_cmd: ndarray, img_width: int):
 def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
                       image_output_path: Optional[str] = None,
                       video_output_path: Optional[str] = None, reverse_channels: bool = True,
-                      control_source: Union[str, Functional, None] = None) -> Sequence[ndarray]:
+                      control_source: Union[str, Functional, None] = None, absolute_norm: bool = True,
+                      vis_kwargs: Optional[Dict[str, Any]] = None) -> Sequence[ndarray]:
     """
     Runner script that loads images, runs VisualBackProp, and saves saliency maps
     """
+    if vis_kwargs is None:
+        vis_kwargs = {}
+
     # create output_dir if not present
     if image_output_path is not None:
         Path(image_output_path).mkdir(parents=True, exist_ok=True)
@@ -119,25 +124,22 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
         control_source = pd.read_csv(control_source)
 
     saliency_imgs = []
-
+    og_imgs = []
+    extra_imgs = []
+    controls = []
     csv_healthy = True
     for i, img in tqdm(enumerate(image_dir_generator(data_path, IMAGE_SHAPE))):
+        og_imgs.append(img)
         # compute saliency map
         img_batched_tensor = tf.expand_dims(img, axis=0)
         if reverse_channels:
             # reverse channels of image to match training
             img_batched_tensor = img_batched_tensor[..., ::-1]
 
-        saliency, vis_hiddens = vis_func(img_batched_tensor, vis_model, vis_hiddens)
-        # save saliency map
-        saliency_writeable = convert_to_color_frame(saliency, desired_size=IMAGE_SHAPE_CV)
+        saliency, vis_hiddens, sample_extra = vis_func(img_batched_tensor, vis_model, vis_hiddens, **vis_kwargs)
+        saliency_imgs.append(saliency)
+        extra_imgs.append(sample_extra)
 
-        if image_output_path:
-            cv2.imwrite(f"{image_output_path}/saliency_mask_{i}.png", saliency_writeable)
-
-        # display OG frame and saliency map stacked top and bottom
-        og_int = np.uint8(img)
-        img_stack = [og_int, saliency_writeable]
         if control_source is not None:
             if isinstance(control_source, Functional):
                 out = control_source.predict([img_batched_tensor, *control_hiddens])
@@ -159,16 +161,44 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
                 vel_cmd = np.expand_dims(vel_cmd, axis=0)
             else:
                 raise ValueError(f"Unsupported control source {control_source}")
+            controls.append(vel_cmd)
 
+    # normalize and display saliency images
+    video_frames = []
+    data_list = zip(range(len(saliency_imgs)), og_imgs, saliency_imgs, extra_imgs,
+                    controls if controls else [None] * len(saliency_imgs))
+
+    # calculate absolute min and max
+    saliency_min = None
+    saliency_max = None
+    if absolute_norm:
+        saliency_ndarr = np.asarray(saliency_imgs)
+        saliency_min = np.min(saliency_ndarr)
+        saliency_max = np.max(saliency_ndarr)
+    for i, img, saliency, extra, vel_cmd in data_list:
+        saliency_writeable = convert_to_color_frame(saliency, desired_size=IMAGE_SHAPE_CV, min_value=saliency_min,
+                                                    max_value=saliency_max)
+
+        if image_output_path:
+            cv2.imwrite(f"{image_output_path}/saliency_mask_{i}.png", saliency_writeable)
+
+        # display OG frame and saliency map stacked top and bottom
+        og_int = np.uint8(img)
+        img_stack = [og_int, saliency_writeable]
+
+        if extra is not None:
+            img_stack.extend(extra)
+
+        if vel_cmd is not None:
             text_img = show_vel_cmd(vel_cmd, og_int.shape[1])
             img_stack.append(text_img)
 
         stacked_imgs = np.concatenate(img_stack, axis=0)
-        saliency_imgs.append(stacked_imgs)
+        video_frames.append(stacked_imgs)
 
     # write video
     if video_output_path:
-        write_video(img_seq=saliency_imgs, output_path=video_output_path)
+        write_video(img_seq=video_frames, output_path=video_output_path)
 
     return saliency_imgs
 
@@ -189,10 +219,24 @@ def write_video(img_seq: Sequence[ndarray], output_path: str, fps: int = 10):
     writer.release()
 
 
-def convert_to_color_frame(saliency_map: Union[Tensor, ndarray], desired_size: Optional[Sequence[int]] = None):
+def parse_params_json(params_path: str, set_single_step: bool = True):
+    with open(params_path, "r") as f:
+        params_data = json.loads(f.read())
+
+    for local_path, params_str in params_data.items():
+        model_params: Union[NCPParams, LSTMParams, CTRNNParams, TCNParams, None] = eval(params_str)
+        if set_single_step:
+            model_params.single_step = True
+        model_path = os.path.join(os.path.dirname(params_path), local_path)
+        yield local_path, model_path, model_params
+
+
+def convert_to_color_frame(saliency_map: Union[Tensor, ndarray], desired_size: Optional[Sequence[int]] = None,
+                           min_value: Optional[float] = None, max_value: Optional[float] = None) -> ndarray:
     """
     Converts tensorflow tensor (1 channel) to 3-channel grayscale numpy array for use with OpenCV
     """
+    assert (min_value is None) == (max_value is None), "Pass both min and max or neither"
     if isinstance(saliency_map, Tensor):
         saliency_map = saliency_map.numpy()
     # add dummy color channel if not present
@@ -206,5 +250,12 @@ def convert_to_color_frame(saliency_map: Union[Tensor, ndarray], desired_size: O
     # resize to desired size if specified
     if desired_size is not None:
         saliency_map = cv2.resize(saliency_map, desired_size, )
-    saliency_map = cv2.normalize(saliency_map, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    if min_value is not None and max_value is not None:
+        saliency_map = saliency_map - min_value
+        saliency_map = saliency_map / (max_value - min_value) * 255
+        saliency_map = saliency_map.astype(np.uint8)
+    else:
+        saliency_map = cv2.normalize(saliency_map, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX,
+                                     dtype=cv2.CV_8U)
     return saliency_map

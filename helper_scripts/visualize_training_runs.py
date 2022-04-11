@@ -29,7 +29,10 @@ def visualize_run(run_dir: str, output_path: str, csv_path: Optional[str] = None
         if i >= csv_dat.shape[0]:
             break
         img = cv2.imread(img_path)
-        vel_cmd = csv_dat.iloc[i][["cmd_vx", "cmd_vy", "cmd_vz", "cmd_omega"]].to_numpy()
+        if len(csv_dat.columns) > 4:
+            vel_cmd = csv_dat.iloc[i][["cmd_vx", "cmd_vy", "cmd_vz", "cmd_omega"]].to_numpy()
+        else:
+            vel_cmd = csv_dat.iloc[i].to_numpy()
         vel_cmd = np.expand_dims(vel_cmd, axis=0)
         command = show_vel_cmd(vel_cmd, frame_size[1])
         stacked = np.concatenate((img, command), axis=0)
