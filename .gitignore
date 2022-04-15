@@ -65,3 +65,6 @@ old_db/
 dataset_jsons/
 
 analysis/lipschitz_out/
+
+# shap rep
+shap/

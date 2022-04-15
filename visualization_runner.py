@@ -3,13 +3,14 @@ import copy
 import json
 import os.path
 from enum import Enum
-from typing import Dict, Tuple, Union, Optional
+from typing import Dict, Tuple, Union, Optional, Any
 
 from analysis.grad_cam import get_last_conv, compute_gradcam, compute_gradcam_tile
 from analysis.input_grad import compute_input_grad
 from analysis.shap_heatmap import compute_shap
 from analysis.vis_utils import run_visualization, write_video, parse_params_json
 from analysis.visual_backprop import get_conv_head, compute_visualbackprop
+from hyperparameter_tuning import parse_unknown_args
 from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, get_readable_name, TCNParams, ModelParams, \
     load_model_from_weights
 
@@ -22,8 +23,7 @@ class VisualizationType(Enum):
     SHAP = "shap"
 
 
-def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: ModelParams):
-    vis_kwargs = {}
+def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: ModelParams, vis_kwargs: Dict[str, Any]):
     if vis_type == VisualizationType.VISUAL_BACKPROP:
         vis_model = get_conv_head(model_path, model_params)
         vis_func = compute_visualbackprop
@@ -39,8 +39,8 @@ def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: M
     elif vis_type == VisualizationType.SHAP:
         vis_model = load_model_from_weights(model_params, model_path)
         vis_func = compute_shap
-        vis_kwargs["cache_path"] = os.path.join("cached_data", f"{get_readable_name(model_params)}.pkl")
-        vis_kwargs["dataset_path"] = "/media/dolphonie/Data/Files/UROP/devens_snowy_fixed"
+        assert "cache_path" in vis_kwargs
+        assert "dataset_path" in vis_kwargs
     else:
         raise ValueError("Illegal vis type")
 
@@ -50,13 +50,13 @@ def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: M
     control_params.no_norm_layer = False
     control_model = load_model_from_weights(control_params, model_path)
 
-    return vis_model, vis_func, control_model, vis_kwargs
+    return vis_model, vis_func, control_model
 
 
 def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = ".",
                    params_path: Optional[str] = None, include_checkpoint_name: bool = False,
                    vis_type: VisualizationType = VisualizationType.VISUAL_BACKPROP,
-                   vis_model_type: Optional[str] = None, **kwargs):
+                   vis_model_type: Optional[str] = None, vis_kwargs: Optional[Dict[str, Any]] = None, **kwargs):
     """
     Convenience script that runs the run_visualbackprop function with
     the cross product of models and data paths and automatically generates output
@@ -70,6 +70,9 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
     if len(kwargs):
         print(f"Not using args {kwargs}")
 
+    if vis_kwargs is None:
+        vis_kwargs = {}
+
     for local_path, model_path, model_params in parse_params_json(params_path):
         for dataset_name, (data_path, reverse_channels, csv_path) in datasets.items():
             checkpoint_name = f"_{os.path.splitext(local_path)[0]}" if include_checkpoint_name else ""
@@ -79,7 +82,7 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
             if vis_model_type is not None and get_readable_name(model_params) != vis_model_type:
                 continue
 
-            vis_model, vis_func, control_model, vis_kwargs = get_vis_models(vis_type, model_path, model_params)
+            vis_model, vis_func, control_model = get_vis_models(vis_type, model_path, model_params, vis_kwargs)
             run_visualization(
                 vis_model=vis_model,
                 data_path=data_path,
@@ -149,14 +152,16 @@ if __name__ == "__main__":
     parser.add_argument("--include_checkpoint_name", action="store_true")
     parser.add_argument("--num_keep_frames", type=int, default=None)
     parser.add_argument("--vis_model_type", type=str, default=None)
-    args = parser.parse_args()
+    parser.add_argument("--output_prefix", type=str, default="visualbackprop_results")
+    args, unknown_args = parser.parse_known_args()
+    arg_vis_kwargs = parse_unknown_args(unknown_args)
 
     vis_func = locals()[args.vis_func.lower()]
 
     with open(args.dataset_path, "r") as f:
         datasets = json.load(f)
 
-    vis_func(datasets=datasets, output_prefix="visualbackprop_results", params_path=args.params_path,
+    vis_func(datasets=datasets, output_prefix=args.output_prefix, params_path=args.params_path,
              vis_type=VisualizationType(args.vis_type),
              include_checkpoint_name=args.include_checkpoint_name, num_keep_frames=args.num_keep_frames,
-             vis_model_type=args.vis_model_type)
+             vis_model_type=args.vis_model_type, vis_kwargs=arg_vis_kwargs)

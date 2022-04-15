@@ -76,7 +76,7 @@ def compute_shap(img: Union[Tensor, ndarray],
     return h_w_1_shap, hiddens, hidden_contribution
 
 
-def generate_shap_dataset(model: Functional, dataset_path: str, num_runs: int = 1, cache_path: str = ""):
+def generate_shap_dataset(model: Functional, dataset_path: str, num_runs: int = 3, cache_path: str = ""):
     """
     Helper function that doesn't need to be called during normal use, but instead generates numpy arrays that are used
     to feed the deepexplainer

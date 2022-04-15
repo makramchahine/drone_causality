@@ -8,8 +8,9 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=0
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 #SBATCH --exclusive
+#SBATCH --qos=sched_level_2
 
 ## User python environment
 HOME2=/nobackup/users/$(whoami)
@@ -23,4 +24,4 @@ ulimit -s unlimited
 
 ## Creating SLURM nodes list
 cd ~/drone-causality
-python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_chair --n_trains 5 --batch_size 300 --storage_name sqlite:////home/pdkao/drone-causality/old_db/"${SLURM_JOB_NAME}".db --storage_type rdb --timeout 21600 --extra_data_dir /nobackup/users/pdkao/data/synthetic_chair3 --hotstart_dir /home/pdkao/drone-causality/old_db/chair3_long_old --study_name hyperparam_tuning_ --save_dir /home/pdkao/drone-causality/model_checkpoints --out_dir /home/pdkao/drone-causality/chair3_fine2
+python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_fixed --n_trains 1 --batch_size 300 --storage_name sqlite:///old_db/"${SLURM_JOB_NAME}".db --storage_type rdb --timeout 57600 --extra_data_dir /nobackup/users/pdkao/data/synthetic_small4 --study_name hyperparam_tuning_ --out_dir chair4_long_balanced

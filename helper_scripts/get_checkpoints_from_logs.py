@@ -73,22 +73,21 @@ def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
         match = re_match.search(file)
         if match is not None:
             model_type = match.group(1)
-            json_map[model_type].append(os.path.join(json_dir, file))
+            # read json data and save
+            json_path = os.path.join(json_dir, file)
+            try:
+                parsed = read_json(json_path)
+                json_map[model_type].append(parsed)
+            except JSONDecodeError:
+                print(f"Could not parse json at {json_path}, skipping")
+                continue
 
     for candidate in ["val", "train"]:
         params_map = {}
         # for each class, get best checkpoint
         dest = os.path.join(out_dir, candidate)
         Path(dest).mkdir(exist_ok=True, parents=True)
-        for model_type, jsons in json_map.items():
-            json_data = []
-            for path in jsons:
-                try:
-                    parsed = read_json(path)
-                    json_data.append(parsed)
-                except JSONDecodeError:
-                    print(f"Could not parse json at {path}, skipping")
-
+        for model_type, json_data in json_map.items():
             checkpoint_path = get_best_checkpoint(candidate_jsons=json_data, checkpoint_dir=checkpoint_dir,
                                                   criteria_key=candidate)
             shutil.copy(checkpoint_path, dest)

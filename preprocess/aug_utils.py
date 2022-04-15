@@ -7,18 +7,42 @@ from PIL import Image
 from pandas import DataFrame
 
 # num times to retry generating offsets
-from preproc.process_data import process_image
+from preprocess.process_data import process_image
 
 NUM_RNG_ATTEMPTS = 100
+
+# full image gains
+# YAW_P = 0.01
+# YAW_I = 0  # no actual feedback, so I should be 0
+# YAW_D = 0
+#
+# THROT_P = 0.01
+# THROT_I = 0
+# THROT_D = 0
+#
+# FORWARD_P = 0.4
+# FORWARD_I = 0
+# FORWARD_D = 0
+YAW_P = 0.01
+YAW_I = 0  # no actual feedback, so I should be 0
+YAW_D = 0
+
+THROT_ROLL_P = 0.01
+THROT_ROLL_I = 0
+THROT_ROLL_D = 0
+
+FORWARD_P = 0.3 * 1.5  # these shouldn't change
+FORWARD_I = 0
+FORWARD_D = 0
 
 
 def random_sign():
     return np.random.choice([-1, 1])
 
 
-def generate_aug_params(target_location: Sequence[int], min_x_offset: int,
-                        max_x_offset: int, min_y_offset: int, max_y_offset: int, frame_size_padding: Optional[float],
-                        img_width: int, img_height: int, valid_fn: Callable[[int, int, int, int], bool]):
+def generate_crop_location(target_location: Sequence[int], min_x_offset: int,
+                           max_x_offset: int, min_y_offset: int, max_y_offset: int, frame_size_padding: Optional[float],
+                           img_width: int, img_height: int, valid_fn: Callable[[int, int, int, int], bool]):
     # automatically calculate average frame size padding if not provided
     if frame_size_padding is None:
         frame_size_padding = np.mean([min_x_offset, max_x_offset, min_y_offset, max_y_offset])
@@ -51,7 +75,7 @@ def compute_crop_offsets(frame_center: Sequence[int], crop_size: Sequence[int],
     x_target, y_target = frame_center
     x_offset, y_offset = offset
     x_size, y_size = crop_size
-    frame_x_center = x_target - x_offset # minus because offset should shift target, not borders, in +x, +y d
+    frame_x_center = x_target - x_offset  # minus because offset should shift target, not borders, in +x, +y d
     frame_y_center = y_target - y_offset
     left_crop = frame_x_center - x_size // 2
     right_crop = frame_x_center + x_size // 2
