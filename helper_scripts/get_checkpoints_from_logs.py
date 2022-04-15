@@ -101,5 +101,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("json_dir", type=str)
     parser.add_argument("checkpoint_dir", type=str)
+    parser.add_argument("--out_dir", type=str, default="out_models")
     args = parser.parse_args()
-    process_json_list(args.json_dir, args.checkpoint_dir, "out_models")
+    process_json_list(args.json_dir, args.checkpoint_dir, args.out_dir)

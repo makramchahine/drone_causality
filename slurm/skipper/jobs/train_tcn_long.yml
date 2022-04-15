@@ -15,7 +15,7 @@ spec:
         python train_multiple.py \
         tcn_objective /data/skipper/data/devens_snowy_fixed \
         --n_trains 1 \
-        --batch_size 128 \
+        --batch_size 300 \
         --storage_name /local/old_db/tcn_objective.json \
         --storage_type json \
         --study_name hyperparam_tuning_ \
