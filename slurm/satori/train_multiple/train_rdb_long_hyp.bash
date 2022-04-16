@@ -24,4 +24,4 @@ ulimit -s unlimited
 
 ## Creating SLURM nodes list
 cd ~/drone-causality
-python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_fixed --n_trains 1 --batch_size 300 --storage_name sqlite:///old_db/hyperparam_tuning.db --storage_type rdb --timeout 57600 --extra_data_dir /nobackup/users/pdkao/data/synthetic_small4 --study_name hyperparam_tuning_ --out_dir chair4_long_balaned
+python train_multiple.py "${SLURM_JOB_NAME}" /nobackup/users/pdkao/data/devens_snowy_fixed --n_trains 1 --batch_size 300 --storage_name sqlite:///old_db/hyperparam_tuning.db --storage_type rdb --timeout 57600 --extra_data_dir /nobackup/users/pdkao/data/synthetic_small4 --study_name hyperparam_tuning_ --out_dir chair4_long_balanced
