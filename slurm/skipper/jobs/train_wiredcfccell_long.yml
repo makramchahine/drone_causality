@@ -15,7 +15,7 @@ spec:
         python train_multiple.py \
         wiredcfccell_objective /data/skipper/data/devens_snowy_fixed \
         --n_trains 1 \
-        --batch_size 300 \
+        --batch_size 256 \
         --storage_name sqlite:////local/old_db/wiredcfccell_objective.db \
         --storage_type rdb \
         --study_name hyperparam_tuning_ \

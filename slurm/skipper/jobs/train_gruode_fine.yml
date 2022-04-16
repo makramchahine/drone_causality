@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: ctrnn-long
+  name: gruode-fine
 spec:
   containers:
     - name: train-container
@@ -13,13 +13,14 @@ spec:
         - "cd /src/drone_causality &&
         cp -r /data/skipper/old_db /local &&
         python train_multiple.py \
-        ctrnn_objective /data/skipper/data/devens_snowy_fixed \
-        --n_trains 1 \
-        --batch_size 256 \
-        --storage_name /local/old_db/ctrnn_objective.json \
-        --storage_type json \
+        gruode_objective /data/skipper/data/devens_chair \
+        --n_trains 5 \
+        --batch_size 128 \
+        --storage_name sqlite:////local/old_db/hyperparam_tuning.db \
+        --storage_type rdb \
         --study_name hyperparam_tuning_ \
         --save_dir /data/skipper/model_checkpoints \
-        --out_dir /data/skipper/res/chair4_long_balanced
+        --out_dir /data/skipper/res/chair4_fine
         --cached_data_dir /data/skipper/cached_data
-        --extra_data_dir /data/skipper/data/synthetic_small4"
+        --extra_data_dir /data/skipper/data/synthetic_chair4
+        --hotstart_dir /data/skipper/old_db/chair4_long_balanced"
