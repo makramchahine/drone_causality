@@ -76,7 +76,7 @@ def slice_sequence(data_path: str, output_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("data_path", type=str)
+    parser.add_argument("data", type=str)
     parser.add_argument("output_path", type=str)
     args = parser.parse_args()
     slice_sequence(args.data_path, args.output_path)

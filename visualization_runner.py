@@ -56,7 +56,9 @@ def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: M
 def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = ".",
                    params_path: Optional[str] = None, include_checkpoint_name: bool = False,
                    vis_type: VisualizationType = VisualizationType.VISUAL_BACKPROP,
-                   vis_model_type: Optional[str] = None, vis_kwargs: Optional[Dict[str, Any]] = None, **kwargs):
+                   vis_model_type: Optional[str] = None, vis_kwargs: Optional[Dict[str, Any]] = None,
+                   match_net_type: bool = False, absolute_norm: bool = True,
+                   **kwargs):
     """
     Convenience script that runs the run_visualbackprop function with
     the cross product of models and data paths and automatically generates output
@@ -70,28 +72,36 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
     if len(kwargs):
         print(f"Not using args {kwargs}")
 
+    assert not (vis_model_type and match_net_type), "Only one of vis_model_type and match_net_type should be specified"
+
     if vis_kwargs is None:
         vis_kwargs = {}
 
     for local_path, model_path, model_params in parse_params_json(params_path):
+        net_name = get_readable_name(model_params)
         for dataset_name, (data_path, reverse_channels, csv_path) in datasets.items():
             checkpoint_name = f"_{os.path.splitext(local_path)[0]}" if include_checkpoint_name else ""
             data_model_id = f"{get_readable_name(model_params)}_{dataset_name}{checkpoint_name}"
             output_name = os.path.join(output_prefix, data_model_id)
 
-            if vis_model_type is not None and get_readable_name(model_params) != vis_model_type:
+            # skip if explicitly only one vis type to be done
+            if vis_model_type is not None and net_name != vis_model_type:
+                continue
+
+            if match_net_type and net_name not in data_path:
                 continue
 
             vis_model, vis_func, control_model = get_vis_models(vis_type, model_path, model_params, vis_kwargs)
             run_visualization(
                 vis_model=vis_model,
-                data_path=data_path,
+                data=data_path,
                 vis_func=vis_func,
                 image_output_path=None,
                 video_output_path=os.path.join(output_name, f"{data_model_id}.mp4"),
                 reverse_channels=reverse_channels,
-                control_source=csv_path if csv_path else control_model,
-                vis_kwargs=vis_kwargs
+                control_source=None,
+                vis_kwargs=vis_kwargs,
+                absolute_norm=absolute_norm,
             )
             print(f"Finished {data_model_id}")
 
@@ -100,6 +110,7 @@ def visualize_combined(datasets: Dict[str, Tuple[str, bool]], output_prefix: str
                        params_path: Optional[str] = None,
                        vis_type: VisualizationType = VisualizationType.VISUAL_BACKPROP,
                        num_keep_frames: Optional[int] = None, control_csv: Optional[str] = None,
+                       absolute_norm: bool = True,
                        **kwargs):
     """
     Script that instead of producing one output video per dataset per model, combines all of the videos from all of the
@@ -129,12 +140,13 @@ def visualize_combined(datasets: Dict[str, Tuple[str, bool]], output_prefix: str
             vis_model, vis_func, control_model = get_vis_models(vis_type, model_path, model_params)
             imgs = run_visualization(
                 vis_model=vis_model,
-                data_path=data_path,
+                data=data_path,
                 vis_func=vis_func,
                 image_output_path=None,
                 video_output_path=None,
                 reverse_channels=reverse_channels,
-                control_source=control_csv if control_csv is not None else control_model
+                control_source=control_csv if control_csv is not None else control_model,
+                absolute_norm=absolute_norm,
             )
             last_kept_frame = 0 if num_keep_frames is None else len(imgs) - num_keep_frames
             img_frames.extend(imgs[last_kept_frame:])
@@ -153,6 +165,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_keep_frames", type=int, default=None)
     parser.add_argument("--vis_model_type", type=str, default=None)
     parser.add_argument("--output_prefix", type=str, default="visualbackprop_results")
+    parser.add_argument("--match_net_type", action="store_true")
+    parser.add_argument('--absolute_norm', action='store_true')
+    parser.add_argument('--no_absolute_norm', dest="absolute_norm", action='store_false')
+    parser.set_defaults(absolute_norm=True)
     args, unknown_args = parser.parse_known_args()
     arg_vis_kwargs = parse_unknown_args(unknown_args)
 
@@ -164,4 +180,5 @@ if __name__ == "__main__":
     vis_func(datasets=datasets, output_prefix=args.output_prefix, params_path=args.params_path,
              vis_type=VisualizationType(args.vis_type),
              include_checkpoint_name=args.include_checkpoint_name, num_keep_frames=args.num_keep_frames,
-             vis_model_type=args.vis_model_type, vis_kwargs=arg_vis_kwargs)
+             vis_model_type=args.vis_model_type, vis_kwargs=arg_vis_kwargs, match_net_type=args.match_net_type,
+             absolute_norm=args.absolute_norm)

@@ -1,0 +1,17 @@
+{
+  "all_targets_box" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650396806.62_ncp_targets",
+    true,
+    null
+  ],
+  "all_targets_chair" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650396574.32_ncp_targets",
+    true,
+    null
+  ],
+  "all_targets_bag" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650396531.48_ncp_targets",
+    true,
+    null
+  ]
+}

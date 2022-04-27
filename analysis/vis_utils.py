@@ -1,7 +1,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Optional, Callable, Sequence, Union, Dict, Any
+from typing import Optional, Callable, Sequence, Union, Dict, Any, Iterable
 
 import cv2
 import numpy as np
@@ -95,7 +95,7 @@ def show_vel_text(vel_cmd: ndarray, img_width: int):
     return text_img
 
 
-def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
+def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_func: Callable,
                       image_output_path: Optional[str] = None,
                       video_output_path: Optional[str] = None, reverse_channels: bool = True,
                       control_source: Union[str, Functional, None] = None, absolute_norm: bool = True,
@@ -105,6 +105,9 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
     """
     if vis_kwargs is None:
         vis_kwargs = {}
+
+    if isinstance(data, str):
+        data = image_dir_generator(data, IMAGE_SHAPE)
 
     # create output_dir if not present
     if image_output_path is not None:
@@ -128,21 +131,16 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
     extra_imgs = []
     controls = []
     csv_healthy = True
-    for i, img in tqdm(enumerate(image_dir_generator(data_path, IMAGE_SHAPE))):
+    for i, img in tqdm(enumerate(data)):
         og_imgs.append(img)
-        # compute saliency map
-        img_batched_tensor = tf.expand_dims(img, axis=0)
-        if reverse_channels:
-            # reverse channels of image to match training
-            img_batched_tensor = img_batched_tensor[..., ::-1]
 
-        saliency, vis_hiddens, sample_extra = vis_func(img_batched_tensor, vis_model, vis_hiddens, **vis_kwargs)
+        saliency, vis_hiddens, sample_extra = vis_func(img, vis_model, vis_hiddens, **vis_kwargs)
         saliency_imgs.append(saliency)
         extra_imgs.append(sample_extra)
 
         if control_source is not None:
             if isinstance(control_source, Functional):
-                out = control_source.predict([img_batched_tensor, *control_hiddens])
+                out = control_source.predict([img, *control_hiddens])
                 vel_cmd = out[0]
                 control_hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
             elif isinstance(control_source, DataFrame):
@@ -155,8 +153,8 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
                         # log error
                         csv_healthy = False
                         csv_rows = control_source.shape[0]
-                        image_num = len([c for c in os.listdir(data_path) if 'png' in c])
-                        print(f"Warning: CSV for {data_path} has {csv_rows} rows and {image_num} images")
+                        image_num = len([c for c in os.listdir(data) if 'png' in c])
+                        print(f"Warning: CSV for {data} has {csv_rows} rows and {image_num} images")
 
                 vel_cmd = np.expand_dims(vel_cmd, axis=0)
             else:
@@ -175,6 +173,7 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
         saliency_ndarr = np.asarray(saliency_imgs)
         saliency_min = np.min(saliency_ndarr)
         saliency_max = np.max(saliency_ndarr)
+    # prepare video frames
     for i, img, saliency, extra, vel_cmd in data_list:
         saliency_writeable = convert_to_color_frame(saliency, desired_size=IMAGE_SHAPE_CV, min_value=saliency_min,
                                                     max_value=saliency_max)
@@ -184,6 +183,11 @@ def run_visualization(vis_model: Functional, data_path: str, vis_func: Callable,
 
         # display OG frame and saliency map stacked top and bottom
         og_int = np.uint8(img)
+
+        # when opening with PIL and writing with cv video writer, channels are implicitly flipped
+        # if not flipped, need to flip if OG and if is flipped, need to flip again to restore normal
+        og_int = og_int[..., ::-1]
+
         img_stack = [og_int, saliency_writeable]
 
         if extra is not None:

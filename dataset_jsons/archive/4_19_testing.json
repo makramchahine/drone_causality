@@ -1,0 +1,32 @@
+{
+  "cfc_close" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650395768.88_ctrnn_cfc_fine",
+    true,
+    null
+  ],
+  "cfc_lose_bag" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650395953.93_ctrnn_cfc_fine",
+    true,
+    null
+  ],
+  "ncp_lose_bag" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650396096.2_ncp_fine",
+    true,
+    null
+  ],
+  "ncp_get_bag" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650396149.82_ncp_fine",
+    true,
+    null
+  ],
+  "ncp_get_box" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-19-22_fine_vs_targets/1650397002.02_ncp_fine",
+    true,
+    null
+  ],
+  "lab": [
+    "/media/dolphonie/Data/Files/UROP/vis_raw_sequences/vbp_raw/1645485699.36",
+    true,
+    null
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "lstm_bad_chair" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650563061.0_lstm_fine_train",
+    true,
+    null
+  ],
+  "ncp_good_chair" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650560235.46_ncp_fine_train",
+    true,
+    null
+  ],
+  "ncp_balcony_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650751584.69_ncp_fine_train",
+    true,
+    null
+  ],
+  "lstm_balcony_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650752683.81_lstm_fine_train",
+    true,
+    null
+  ],
+  "ncp_range_test_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650577965.93_ncp_fine_train",
+    true,
+    null
+  ],
+  "lstm_range_test_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650579970.49_lstm_fine_train",
+    true,
+    null
+  ]
+}

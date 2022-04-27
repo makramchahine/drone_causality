@@ -8,6 +8,8 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import List, Dict, Any
 
+from utils.model_utils import get_readable_name
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -35,6 +37,16 @@ def get_checkpoint_props(checkpoint_path: str) -> Dict[str, Any]:
     epoch = int(checkpoint_path[epoch_index + 6:epoch_index + 9])
     props["epoch"] = epoch
 
+    # get checkpoint time string
+    time_search = re.compile(".*(\d\d\d\d:\d\d:\d\d:\d\d:\d\d:\d\d).hdf5")
+    time_str = time_search.search(checkpoint_path).group(1)
+    props["checkpoint_time_str"] = time_str
+
+    # get model name
+    name_search = re.compile("model-(.*)_seq-.*")
+    model_name = name_search.search(checkpoint_path).group(1)
+    props["model_name"] = model_name
+
     return props
 
 
@@ -47,8 +59,11 @@ def get_best_checkpoint(candidate_jsons: List[Dict[str, Any]], checkpoint_dir: s
         if cand_value < best_cand_value:
             best_props = {
                 f"{criteria_key}_loss": round(cand_value, 4),
-                "epoch": candidate[f"best_{criteria_key}_epoch"] + 1  # checkpoints epoch 1 indexed, jsons 0-indexed
+                "epoch": candidate[f"best_{criteria_key}_epoch"] + 1,  # checkpoints epoch 1 indexed, jsons 0-indexed
+                "model_name": get_readable_name(candidate["model_params"])
             }
+            if "checkpoint_time_str" in candidate:
+                best_props["checkpoint_time_str"] = candidate["checkpoint_time_str"]
 
     for checkpoint in os.listdir(checkpoint_dir):
         if ".hdf5" not in checkpoint:

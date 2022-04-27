@@ -1,0 +1,128 @@
+{
+  "ncp_og_good": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650560180.64_ncp_fine_train",
+    true,
+    null
+  ],
+  "ncp_bag_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650560687.38_ncp_fine_train",
+    true,
+    null
+  ],
+  "ncp_bag_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650560662.22_ncp_fine_train",
+    true,
+    null
+  ],
+  "lstm_og_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650562653.89_lstm_fine_train",
+    true,
+    null
+  ],
+  "lstm_og_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650563061.0_lstm_fine_train",
+    true,
+    null
+  ],
+  "lstm_bag_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650564344.55_lstm_fine_train",
+    true,
+    null
+  ],
+  "lstm_bag_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650563274.44_lstm_fine_train",
+    true,
+    null
+  ],
+  "cfc_og_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650565107.82_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "cfc_og_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650564917.18_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "cfc_bag_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650565246.2_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "cfc_bag_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650565662.76_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_og_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650566430.28_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_og_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650566544.57_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_bag_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650567440.97_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_bag_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650567690.43_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "gruode_og_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650568580.75_ctrnn_gruode_fine_train",
+    true,
+    null
+  ],
+  "gruode_og_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650568538.44_ctrnn_gruode_fine_train",
+    true,
+    null
+  ],
+  "gruode_bag_good_maybe" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650569661.03_ctrnn_gruode_fine_train",
+    true,
+    null
+  ],
+  "gruode_bag_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650569608.69_ctrnn_gruode_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_og_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650572787.16_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_og_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650572835.38_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_bag_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650573362.58_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_bag_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650573781.6_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ],
+  "tcn_og_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650575371.58_tcn_fine_train",
+    true,
+    null
+  ],
+  "tcn_og_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650575436.62_tcn_fine_train",
+    true,
+    null
+  ]
+}
+

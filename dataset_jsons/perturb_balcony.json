@@ -1,0 +1,27 @@
+{
+  "ncp_good": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650751858.6_ncp_fine_train",
+    true,
+    null
+  ],
+  "lstm_good": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650753070.34_lstm_fine_train",
+    true,
+    null
+  ],
+  "cfc_good": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650753765.36_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_good": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650754551.0_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650807296.61_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ]
+}

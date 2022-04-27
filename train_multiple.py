@@ -35,11 +35,12 @@ def get_prev_trains(out_dir: str, study_name_network: str):
     return num_prev_trains
 
 
-def find_hotstart_checkpoint(search_type: str, checkpoint_dir: str):
+def find_hotstart_checkpoint(search_type: str, checkpoint_dir: str, require_equality: bool = True):
     """
     Of all the models in params.json in checkpoint dir, finds the candidate model that has the same model type as
     candidate type based on the model params and returns its absolute checkpoint path
 
+    :param require_equality: if false, doensn't check for strict equality and just sees if search_type is IN the candidate
     :param search_type: string returned by get_readable_name that specifies which class of model to look for
     :param checkpoint_dir: base dir for models (should be 2 levels up from train/params.json)
     :return:
@@ -52,10 +53,12 @@ def find_hotstart_checkpoint(search_type: str, checkpoint_dir: str):
     candidate_checkpoint = None
     for checkpoint_path, cand_params in hotstart_params.items():
         cand_type = get_readable_name(cand_params)
-        if cand_type == search_type:
+        satisfies = cand_type == search_type if require_equality else search_type in cand_type
+        if satisfies:
             assert candidate_checkpoint is None, f"Only one checkpoint should match the parameter type, but {candidate_checkpoint} also matches"
             candidate_checkpoint = checkpoint_path
 
+    assert candidate_checkpoint is not None, "No matching candidate checkpoint found"
     return os.path.abspath(os.path.join(hotstart_dir, candidate_checkpoint))
 
 
@@ -101,8 +104,19 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
 
     # find hotstart checkpoint
     if hotstart_dir is not None:
-        model_type = get_readable_name(best_trial.user_attrs["model_params"])
-        hotstart_checkpoint = find_hotstart_checkpoint(model_type, hotstart_dir)
+        try:
+            model_type = get_readable_name(best_trial.user_attrs["model_params"])
+            hotstart_checkpoint = find_hotstart_checkpoint(model_type, hotstart_dir)
+        except KeyError:
+            # loaded from json with no model params. Use objective function name instead
+            # note: because this only works with "in", likely won't work if cfc used as both mixedcfc and cfc will match
+            model_type = obj_fn.__name__.replace("_objective", "")
+            # try ctrnn version first
+            try:
+                hotstart_checkpoint = find_hotstart_checkpoint(f"ctrnn_{model_type}", hotstart_dir)
+            except AssertionError:
+                hotstart_checkpoint = find_hotstart_checkpoint(model_type, hotstart_dir)
+
         print(f"Found hotstart checkpoint {hotstart_checkpoint}")
         train_kwargs["hotstart"] = hotstart_checkpoint
 

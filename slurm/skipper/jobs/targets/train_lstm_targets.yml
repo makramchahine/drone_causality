@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: wiredcfccell-long
+  name: lstm-targets
 spec:
   containers:
     - name: train-container
-      image: dolphonie1/causal_repo:0.1.0
+      image: dolphonie1/causal_repo:0.1.4
       command:
         - "/bin/bash"
         - "-c" # run with bash and pass in the args below
@@ -13,13 +13,14 @@ spec:
         - "cd /src/drone_causality &&
         cp -r /data/skipper/old_db /local &&
         python train_multiple.py \
-        wiredcfccell_objective /data/skipper/data/devens_snowy_fixed \
-        --n_trains 1 \
-        --batch_size 256 \
-        --storage_name sqlite:////local/old_db/wiredcfccell_objective.db \
+        lstm_objective /data/skipper/data/devens_snowy_short \
+        --n_trains 5 \
+        --batch_size 128 \
+        --storage_name sqlite:////local/old_db/lstm_objective.db \
         --storage_type rdb \
         --study_name hyperparam_tuning_ \
         --save_dir /data/skipper/model_checkpoints \
-        --out_dir /data/skipper/res/chair4_long_balanced
+        --out_dir /data/skipper/res/chair4_fine_targets
         --cached_data_dir /data/skipper/cached_data
-        --extra_data_dir /data/skipper/data/synthetic_small4"
+        --extra_data_dir /data/skipper/data/synthetic_small4_v2
+        --hotstart_dir /data/skipper/old_db/chair4_long_balanced"

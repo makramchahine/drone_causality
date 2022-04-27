@@ -127,7 +127,7 @@ def test_models(data_path: str, model_path: str, params_repr: Optional[str] = No
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("data_path", type=str, help="Filepath of test dataset")
+    parser.add_argument("data", type=str, help="Filepath of test dataset")
     parser.add_argument("model_path", type=str, help="Filepath of model checkpoint")
     parser.add_argument("--params", type=str, help="repr() string of model params used during training", default=None)
     args = parser.parse_args()

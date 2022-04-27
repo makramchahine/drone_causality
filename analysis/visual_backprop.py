@@ -78,10 +78,15 @@ def get_conv_head(model_path: str, model_params: Optional[ModelParams] = None):
         vis_model = load_model_from_weights(model_params, checkpoint_path=model_path)
     else:
         vis_model = load_model_no_params(model_path, single_step=True)
-    # cleave off only convolutional head
-    conv_layers = [layer for layer in vis_model.layers if isinstance(layer, Conv2D)]
 
-    act_model_inputs = vis_model.inputs[0]  # don't want to take in hidden state, just image
+    return get_conv_head_model(vis_model)
+
+
+def get_conv_head_model(model: Functional):
+    # cleave off only convolutional head
+    conv_layers = [layer for layer in model.layers if isinstance(layer, Conv2D)]
+
+    act_model_inputs = model.inputs[0]  # don't want to take in hidden state, just image
     activation_model = keras.models.Model(inputs=act_model_inputs,
                                           outputs=[layer.output for layer in conv_layers])
     return activation_model

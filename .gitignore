@@ -62,9 +62,11 @@ tuner_tests/
 old_db/
 
 # dataset jsons
-dataset_jsons/
+#dataset_jsons/
 
+# analysis results
 analysis/lipschitz_out/
+perturb/
 
 # shap rep
 shap/

@@ -1,0 +1,37 @@
+{
+  "ncp_far": [
+    "/home/dolphonie/Desktop/04-12-22_fine_good/1649771088.67_ncp_fine",
+    true,
+    null
+  ],
+  "ncp_good" : [
+    "/home/dolphonie/Desktop/04-12-22_fine_good/1649771354.89_ncp_fine",
+    true,
+    null
+  ],
+  "ncp_decide" : [
+    "/home/dolphonie/Desktop/04-12-22_fine_good/1649771560.16_ncp_fine",
+    true,
+    null
+  ],
+  "lstm_bad" : [
+    "/home/dolphonie/Desktop/04-12-22_fine_good/1649771871.07_lstm_fine",
+    true,
+    null
+  ],
+  "lstm_good" : [aa
+    "/home/dolphonie/Desktop/04-12-22_fine_good/1649771887.55_lstm_fine",
+    true,
+    null
+  ],
+  "lstm_decide" : [
+    "/home/dolphonie/Desktop/04-12-22_fine_good/1649772073.33_lstm_fine",
+    true,
+    null
+  ],
+  "lab": [
+    "/media/dolphonie/Data/Files/UROP/vis_raw_sequences/vbp_raw/1645485699.36",
+    true,
+    null
+  ]
+}
