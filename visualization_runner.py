@@ -8,7 +8,7 @@ from typing import Dict, Tuple, Union, Optional, Any
 from analysis.grad_cam import get_last_conv, compute_gradcam, compute_gradcam_tile
 from analysis.input_grad import compute_input_grad
 from analysis.shap_heatmap import compute_shap
-from analysis.vis_utils import run_visualization, write_video, parse_params_json
+from utils.vis_utils import run_visualization, write_video, parse_params_json
 from analysis.visual_backprop import get_conv_head, compute_visualbackprop
 from hyperparameter_tuning import parse_unknown_args
 from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, get_readable_name, TCNParams, ModelParams, \

@@ -6,7 +6,6 @@ from typing import Optional, Callable, Sequence, Union, Dict, Any, Iterable
 import cv2
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from PIL import Image
 from numpy import ndarray
 from pandas import DataFrame
@@ -107,7 +106,7 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
         vis_kwargs = {}
 
     if isinstance(data, str):
-        data = image_dir_generator(data, IMAGE_SHAPE)
+        data = image_dir_generator(data, IMAGE_SHAPE, reverse_channels)
 
     # create output_dir if not present
     if image_output_path is not None:
@@ -174,15 +173,17 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
         saliency_min = np.min(saliency_ndarr)
         saliency_max = np.max(saliency_ndarr)
     # prepare video frames
+    saliency_written = []
     for i, img, saliency, extra, vel_cmd in data_list:
         saliency_writeable = convert_to_color_frame(saliency, desired_size=IMAGE_SHAPE_CV, min_value=saliency_min,
                                                     max_value=saliency_max)
 
+        saliency_written.append(saliency_writeable)
         if image_output_path:
             cv2.imwrite(f"{image_output_path}/saliency_mask_{i}.png", saliency_writeable)
 
         # display OG frame and saliency map stacked top and bottom
-        og_int = np.uint8(img)
+        og_int = np.squeeze(np.uint8(img), axis=0)
 
         # when opening with PIL and writing with cv video writer, channels are implicitly flipped
         # if not flipped, need to flip if OG and if is flipped, need to flip again to restore normal
@@ -204,7 +205,7 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
     if video_output_path:
         write_video(img_seq=video_frames, output_path=video_output_path)
 
-    return saliency_imgs
+    return saliency_written
 
 
 def write_video(img_seq: Sequence[ndarray], output_path: str, fps: int = 10):
@@ -236,7 +237,8 @@ def parse_params_json(params_path: str, set_single_step: bool = True):
 
 
 def convert_to_color_frame(saliency_map: Union[Tensor, ndarray], desired_size: Optional[Sequence[int]] = None,
-                           min_value: Optional[float] = None, max_value: Optional[float] = None) -> ndarray:
+                           min_value: Optional[float] = None, max_value: Optional[float] = None,
+                           color_map: int = cv2.COLORMAP_INFERNO) -> ndarray:
     """
     Converts tensorflow tensor (1 channel) to 3-channel grayscale numpy array for use with OpenCV
     """
@@ -262,4 +264,6 @@ def convert_to_color_frame(saliency_map: Union[Tensor, ndarray], desired_size: O
     else:
         saliency_map = cv2.normalize(saliency_map, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX,
                                      dtype=cv2.CV_8U)
+    # apply color map, matplotlib and cv2 color conventions are reversed, so flip channels
+    saliency_map = cv2.applyColorMap(saliency_map, color_map)[..., ::-1]
     return saliency_map

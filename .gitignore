@@ -65,8 +65,11 @@ old_db/
 #dataset_jsons/
 
 # analysis results
-analysis/lipschitz_out/
-perturb/
+**/lipschitz_out/
+**/ssim_out/
+**/perturb_out/
+**/grid_out/
+**/loss_out/
 
 # shap rep
 shap/

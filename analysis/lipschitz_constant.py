@@ -10,10 +10,10 @@ import numpy as np
 from numpy import ndarray
 from tqdm import tqdm
 
-from analysis.vis_utils import parse_params_json
 from keras_models import IMAGE_SHAPE
 from utils.data_utils import image_dir_generator
 from utils.model_utils import ModelParams, load_model_from_weights, generate_hidden_list, get_readable_name
+from utils.vis_utils import parse_params_json
 
 
 def calculate_lipschitz_constant(model_path: str, model_params: ModelParams, sequence_path: str,
@@ -24,8 +24,10 @@ def calculate_lipschitz_constant(model_path: str, model_params: ModelParams, seq
     for i, img in tqdm(enumerate(image_dir_generator(sequence_path, IMAGE_SHAPE, reverse_channels))):
         all_hiddens.append(hiddens)
         out = model.predict([img, *hiddens])
-        hiddens = out[1:]  # list num_hidden long, each el is batch x hidden_dim
+        hiddens = out[1:]  # list num_hidden long, each el is hidden_dim,
 
+    # flatten batch dim
+    all_hiddens = [[np.squeeze(hid, axis=0) for hid in step_hid] for step_hid in all_hiddens]
     # crete list with same shape as hidden vectors where contents are lipschitz values of each dimension
     lip = [np.zeros_like(h) for h in all_hiddens[0]]
     for i in range(len(all_hiddens) - 1):
@@ -45,15 +47,14 @@ def graph_lipschitz_constant(lip_mean: Dict[str, ndarray], lip_std: Optional[Dic
 
     # concat all hidden dims into 1d
     for model_name, hiddens in lip_mean.items():
-        # hiddens shape: number hidden x 1 x hidden dim
-        flattened = hiddens.flatten()
-        sort_order = np.argsort(flattened)
+        # hiddens shape: flattened_hidden_dim
+        sort_order = np.argsort(hiddens)
 
-        lip_sorted = flattened[sort_order]
+        lip_sorted = hiddens[sort_order]
         lip_x = np.linspace(0, 1, num=len(lip_sorted))
         plt.plot(lip_x, lip_sorted, label=model_name)
         if lip_std is not None:
-            std = lip_std[model_name].flatten()
+            std = lip_std[model_name]
             std_sorted = std[sort_order]
             plt.fill_between(lip_x, lip_sorted + std_sorted, lip_sorted - std_sorted, alpha=0.5)
 
@@ -77,14 +78,20 @@ def params_lipschitz_constant(datasets_json: str, params_path: str, display_resu
         Path(save_dir).mkdir(parents=True, exist_ok=True)
     for local_path, model_path, model_params in parse_params_json(params_path):
         model_name = get_readable_name(model_params)
+        if model_name == "tcn":
+            # TCN has no hidden state
+            continue
+
         lips = []
         for dataset_name, (data_path, reverse_channels, csv_path) in datasets.items():
             lip = calculate_lipschitz_constant(model_path, model_params, data_path, reverse_channels=reverse_channels)
             lips.append(lip)
 
-        lips = np.array(lips)  # shape: num_datasets x num_hiddens x 1 x hidden dim
-        lip_mean = np.mean(lips, axis=0)
-        lip_std = np.std(lips, axis=0)
+        # lips shape: num_datasets x num_hiddens x hidden dim
+        # shape : num_dataset x flattened_hidden_dim
+        lips_flat = np.array([np.hstack(dataset) for dataset in lips])
+        lip_mean = np.mean(lips_flat, axis=0)
+        lip_std = np.std(lips_flat, axis=0)
         model_lip_mean = {model_name: lip_mean}
         model_lip_std = {model_name: lip_std}
         if display_result or save_dir is not None:
@@ -102,10 +109,18 @@ def params_lipschitz_constant(datasets_json: str, params_path: str, display_resu
 
     if save_dir is not None:
         with open(os.path.join(save_dir, "lip_data.json"), "w") as f:
-            lip_data = {"means": all_mean, "stds": all_std}
+            lip_data = {"means": convert_values_to_list(all_mean), "stds": convert_values_to_list(all_std)}
             json.dump(lip_data, f)
 
     return all_mean, all_std
+
+
+def convert_values_to_list(to_convert: Dict[str, ndarray]):
+    to_ret = {}
+    for key, np_arr in to_convert.items():
+        to_ret[key] = list(np_arr)
+
+    return to_ret
 
 
 if __name__ == "__main__":

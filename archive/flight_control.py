@@ -194,7 +194,7 @@ class FlightController:
             if planningWrapper is not None:
                 planningThread, t = self.joinPlanningThread(path, planningThread, planningWrapper, planningKnotsBuffer)
 
-            # TODO(cvorbach) Move marker                
+            # TODO(cvorbach) Move MARKERS
 
             # Get the pure pursuit point
             t, lookAheadPoint = getLookAhead(path, t, position, self.config['lookAheadDistance'])

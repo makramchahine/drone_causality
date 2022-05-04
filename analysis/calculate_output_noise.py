@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 from tensorflow import keras
 
-from analysis.vis_utils import parse_params_json
+from utils.vis_utils import parse_params_json
 from utils.model_utils import load_model_from_weights, get_readable_name, generate_hidden_list
 
 

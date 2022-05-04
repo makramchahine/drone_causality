@@ -21,7 +21,7 @@ class Empty:
 parser = argparse.ArgumentParser(description='Fly the deepdrone agent in the Airsim simulator')
 parser.add_argument('--mission',               type=str,   default='target', help='Task to attempt')
 parser.add_argument('--task',                  type=str,   default=Empty(), help='Task to attempt')
-parser.add_argument('--endpoint_tolerance',    type=float, default=Empty(),      help='The distance tolerance on reaching the endpoint marker')
+parser.add_argument('--endpoint_tolerance',    type=float, default=Empty(),      help='The distance tolerance on reaching the endpoint MARKERS')
 parser.add_argument('--max_endpoint_radius',   type=float, default=Empty(),     help='The max distance of endpoints in the near planning task')
 parser.add_argument('--min_blaze_gap',         type=float, default=Empty(),     help='The minimum distance between hiking task blazes')
 parser.add_argument('--plot_update_period',    type=float, default=Empty(),      help='The time between updates of debug plotting information')
@@ -154,7 +154,7 @@ for i in range(config['num_repetitions']):
             position, _ = flight_control.getPose()
             print(distance(endpoint, position))
                 
-            # place endpoint marker
+            # place endpoint MARKERS
             endpointPose = airsim.Pose()
             endpointPose.position = Vector3r(*endpoint)
             client.simSetObjectPose(marker, endpointPose)
@@ -277,7 +277,7 @@ for i in range(config['num_repetitions']):
             position, _ = flight_control.getPose()
             print(distance(endpoint, position))
                 
-            # place endpoint marker
+            # place endpoint MARKERS
             endpointPose = airsim.Pose()
             endpointPose.position = Vector3r(*endpoint)
             client.simSetObjectPose(marker, endpointPose)
@@ -357,7 +357,7 @@ for i in range(config['num_repetitions']):
             if endpoint is None:
                 continue
                 
-            # place endpoint marker
+            # place endpoint MARKERS
             endpointPose = airsim.Pose()
             endpointPose.position = Vector3r(*endpoint)
             client.simSetObjectPose(marker, endpointPose)

@@ -10,5 +10,7 @@ RUN pip install /src/shap
 # install opencv deps for shap
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && apt-get install ffmpeg libsm6 libxext6  -y
 
+RUN pip install seaborn
+
 # add current repo contents
 COPY . /src/drone_causality/

@@ -9,7 +9,7 @@ from tensorflow.python.keras import Model
 from tensorflow.python.keras.layers import Conv2D
 from tensorflow.python.keras.models import Functional
 
-from analysis.vis_utils import image_grid
+from utils.vis_utils import image_grid
 from utils.model_utils import load_model_from_weights, load_model_no_params, ModelParams
 
 

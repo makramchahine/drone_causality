@@ -1,0 +1,17 @@
+{
+  "lab_short" : [
+    "/media/dolphonie/Data/Files/UROP/vis_raw_sequences/lab_short",
+    true,
+    null
+  ],
+  "devens_short" : [
+    "/media/dolphonie/Data/Files/UROP/vis_raw_sequences/1635515333.21_2",
+    false,
+    null
+  ],
+  "balcony_short" : [
+    "/media/dolphonie/Data/Files/UROP/vis_raw_sequences/1650808221.77_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ]
+}

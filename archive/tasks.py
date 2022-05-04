@@ -317,7 +317,7 @@ class FlightController:
             lookAheadT, lookAheadPoint = self.getLookAhead(path, pathParameter, self.config['lookahead_distance'])
             lookAheadDisplacement      = lookAheadPoint - position
 
-            # place marker if passed
+            # place MARKERS if passed
             if marker is not None:
                 markerPose.position    = Vector3r(*lookAheadPoint)
                 self.client.simSetObjectPose(marker, markerPose)
@@ -356,7 +356,7 @@ class FlightController:
 
             # If we are flying by a model
             else:
-                # place marker if passed
+                # place MARKERS if passed
                 if marker is not None:
                     markerPose.position = Vector3r(*lookAheadPoint)
                     self.client.simSetObjectPose(marker, markerPose)
@@ -402,7 +402,7 @@ class FlightController:
                     controlThread.join()
                 controlThread = self.client.moveByVelocityAsync(float(velocity[0]), float(velocity[1]), float(velocity[2]), self.config['control_update_period'], yaw_mode=YawMode(is_rate = False, yaw_or_rate = yawAngle))
 
-        # hide the marker
+        # hide the MARKERS
         if marker is not None:
             markerPose.position = Vector3r(0,0,100)
             self.client.simSetObjectPose(marker, markerPose)
