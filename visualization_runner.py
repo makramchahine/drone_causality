@@ -99,7 +99,7 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
                 image_output_path=None,
                 video_output_path=os.path.join(output_name, f"{data_model_id}.mp4"),
                 reverse_channels=reverse_channels,
-                control_source=None,
+                control_source=csv_path if csv_path else control_model,
                 vis_kwargs=vis_kwargs,
                 absolute_norm=absolute_norm,
             )

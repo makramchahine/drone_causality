@@ -1,4 +1,4 @@
-name: ramin
+name: causality
 channels:
   - https://opence.mit.edu
   - pytorch

@@ -181,20 +181,15 @@ if __name__ == "__main__":
                              'but not validation')
     parser.add_argument('--save_dir', type=str, default="./model_checkpoints", help='Path to save checkpoints')
     parser.add_argument('--history_dir', type=str, default="./histories", help='Path to save history')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--seq_len', type=int, default=64)
-    parser.add_argument('--epochs', type=int, default=30)
-    parser.add_argument('--val_split', type=float, default=0.1)
+    parser.add_argument('--batch_size', type=int, default=32, help="Number of sequences in one training batch")
+    parser.add_argument('--seq_len', type=int, default=64, help="Number of data points per sequence within each batch")
+    parser.add_argument('--epochs', type=int, default=30, help="Number of epochs to train for")
+    parser.add_argument('--val_split', type=float, default=0.1, help="Fraction of dataset that becomes validation set")
     parser.add_argument('--hotstart', type=str, default=None, help="Starting weights to use for pretraining")
-    # parser.add_argument('--tb_dir', type=str, default='tb_logs',
-    #                    help="Name of directory to save tensorboard logs")
     parser.add_argument('--lr', type=float, default='.001', help="Learning Rate")
     parser.add_argument('--momentum', type=float, default='0.0', help="Momentum (for use with SGD)")
     parser.add_argument('--opt', type=str, default='adam', help="Optimizer to use (adam, sgd)")
     parser.add_argument('--augmentation', action='store_true', help="Whether to turn on data augmentation in network")
-    # parser.add_argument('--normalize', action='store_true',
-    #                     help="Whether to have float conversion
-    #                     and normalization inside network layers")
     parser.add_argument('--label_scale', type=float, default=1, help='Scale factor to apply to labels')
     parser.add_argument('--translation_factor', type=float, default=0.1,
                         help='Amount to (randomly) translate width and height '
@@ -205,7 +200,6 @@ if __name__ == "__main__":
                         help='Amount to (randomly) zoom. Must be used with --augment.')
     parser.add_argument('--data_stride', type=int, default=1, help='Stride within image sequence. Default=1.')
     parser.add_argument('--data_shift', type=int, default=1, help='Window shift between windows. Default=1.')
-    parser.add_argument('--top_crop', type=float, default=0.0, help='Proportion of height to clip from image')
     parser.add_argument('--decay_rate', type=float, default=0.95, help="Exponential decay rate of the lr scheduler")
     parser.add_argument("--ncp_seed", type=int, default=2222, help="Seed for ncp")
     parser.add_argument("--tcn_nb_filters", type=int, default=128, help="Number of tcn filters")
@@ -239,4 +233,4 @@ if __name__ == "__main__":
                 opt=args.opt, lr=args.lr, data_shift=args.data_shift, data_stride=args.data_stride,
                 batch_size=args.batch_size, save_dir=args.save_dir, hotstart=args.hotstart, momentum=args.momentum,
                 cached_data_dir=args.cached_data_dir, label_scale=args.label_scale,
-                top_crop=args.top_crop, model_params=model_params_constructed, decay_rate=args.decay_rate)
+                model_params=model_params_constructed, decay_rate=args.decay_rate)

@@ -58,9 +58,6 @@ tuner_tests/
 *.pkl
 **/*train_results.json
 
-# old models
-old_db/
-
 # dataset jsons
 #dataset_jsons/
 

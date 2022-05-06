@@ -11,13 +11,13 @@ def analyze_study(study_name: str, storage_name: str):
     study = optuna.create_study(study_name=study_name, storage=storage_name, load_if_exists=True,
                                 direction="minimize")
     print(study.best_trial.params)
-    # graph_study(study)
+    graph_study(study)
 
 
 def analyze_local(file_path: str):
     study = joblib.load(file_path)
     print(study.best_trial.params)
-    # graph_study(study)
+    graph_study(study)
 
 
 def graph_study(study: Study):

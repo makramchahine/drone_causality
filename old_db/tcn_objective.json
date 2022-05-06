@@ -1,0 +1,7 @@
+{
+  "nb_filters": 236,
+  "kernel_dilation_config": 2,
+  "dropout": 0.25417245152621387,
+  "lr": 0.0003000759033624064,
+  "decay_rate": 0.9812988062614213
+}

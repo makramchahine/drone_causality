@@ -1,5 +1,6 @@
 # Created by Patrick Kao at 4/27/22
 import argparse
+import copy
 import json
 import os.path
 from collections import OrderedDict
@@ -12,6 +13,7 @@ from matplotlib import pyplot as plt
 from analysis.visual_backprop import compute_visualbackprop, get_conv_head
 from keras_models import IMAGE_SHAPE
 from utils.data_utils import image_dir_generator
+from utils.graph_utils import LABEL_MAP, GRAPH_ORDER
 from utils.model_utils import get_readable_name
 from utils.vis_utils import parse_params_json, run_visualization
 
@@ -35,6 +37,7 @@ def grid_one_run(dataset_path: str, params_path: str, vis_func: Callable, revers
                                           video_output_path=None, reverse_channels=reverse_channels,
                                           control_source=None,
                                           absolute_norm=True, )
+
         all_vis[get_readable_name(model_params)] = saliency_imgs
 
     plt.clf()
@@ -44,13 +47,23 @@ def grid_one_run(dataset_path: str, params_path: str, vis_func: Callable, revers
                                  len(all_vis.keys()) * IMAGE_SHAPE[1] // DPI, len(og_imgs) * IMAGE_SHAPE[0] // DPI),
                              dpi=DPI)
 
-    for i, (model_name, saliencies) in enumerate(all_vis.items()):
+    mod_graph = []
+    for graph in GRAPH_ORDER:
+        if graph not in skip_models:
+            mod_graph.append(graph)
+    col_order_map = {name: index+1 for index, name in enumerate(mod_graph)}
+    col_order_map["Original Images"] = 0
+    for model_name, saliencies in all_vis.items():
         for j, sal_img in enumerate(saliencies):
-            axes[j, i].imshow(sal_img)
-            axes[j, i].set_xticks([])
-            axes[j, i].set_yticks([])
+            axes[j, col_order_map[model_name]].imshow(sal_img)
+            axes[j, col_order_map[model_name]].set_xticks([])
+            axes[j, col_order_map[model_name]].set_yticks([])
 
-        axes[len(saliencies) - 1, i].set_xlabel(model_name)
+        column_name = LABEL_MAP[model_name] if model_name != "Original Images" else "Original Images"
+        axes[len(saliencies) - 1, col_order_map[model_name]].set_xlabel(column_name)
+
+    for i in range(len(all_vis["Original Images"])):
+        axes[i, 0].set_ylabel(i + 1, rotation=0)
 
     plt.subplots_adjust(wspace=0.1, hspace=0.1)
 
