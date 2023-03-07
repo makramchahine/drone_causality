@@ -1,0 +1,14 @@
+tensorflow~=2.4.1
+keras-ncp==2.0.5
+tqdm~=4.62.3
+optuna~=2.10.0
+pillow~=9.0.0
+joblib~=1.1.0
+numpy~=1.19.5
+pyyaml~=6.0
+matplotlib~=3.5.1
+opencv-python~=4.5.5.62
+scipy~=1.7.3
+tensorflow_probability==0.12.2
+keras-tcn
+pandas~=1.4.1
