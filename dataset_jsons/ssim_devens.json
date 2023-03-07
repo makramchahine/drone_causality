@@ -1,0 +1,27 @@
+{
+  "ncp_close_r" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650560180.64_ncp_fine_train/1650560200.241.png",
+    true,
+    null
+  ],
+  "lstm_far_r" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650562653.89_lstm_fine_train/1650562653.833.png",
+    true,
+    null
+  ],
+  "cfc_close_angle" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650565107.82_ctrnn_cfc_fine_train/1650565137.141.png",
+    true,
+    null
+  ],
+  "wiredcfcell_mid_m" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650566430.28_ctrnn_wiredcfccell_fine_train/1650566440.757.png",
+    true,
+    null
+  ],
+  "ctrnn_close_l" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650572787.16_ctrnn_ctrnn_fine_train/1650572816.059.png",
+    true,
+    null
+  ]
+}

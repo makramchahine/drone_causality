@@ -1,0 +1,22 @@
+{
+  "lstm_far_middle" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650579280.28_lstm_fine_train",
+    true,
+    null
+  ],
+  "lstm_far_right" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650579970.49_lstm_fine_train",
+    true,
+    null
+  ],
+  "ncp_far_right" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650577965.93_ncp_fine_train",
+    true,
+    null
+  ],
+  "ncp_far_left" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-21-22_devens_2/1650578098.39_ncp_fine_train",
+    true,
+    null
+  ]
+}

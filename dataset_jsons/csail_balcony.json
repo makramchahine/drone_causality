@@ -1,0 +1,72 @@
+{
+  "ncp_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650751858.6_ncp_fine_train",
+    true,
+    null
+  ],
+  "ncp_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650751956.43_ncp_fine_train",
+    true,
+    null
+  ],
+  "lstm_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650753070.34_lstm_fine_train",
+    true,
+    null
+  ],
+  "lstm_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650752710.4_lstm_fine_train",
+    true,
+    null
+  ],
+  "cfc_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650753765.36_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "cfc_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650754161.08_ctrnn_cfc_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_good" : [
+      "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650754551.0_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/4-23-22_patio/1650754459.8_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ],
+  "gruode_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650806651.85_ctrnn_gruode_fine_train",
+    true,
+    null
+  ],
+  "gruode_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650806542.08_ctrnn_gruode_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650807296.61_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ],
+  "ctrnn_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650807359.16_ctrnn_ctrnn_fine_train",
+    true,
+    null
+  ],
+  "tcn_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650809054.8_tcn_fine_train",
+    true,
+    null
+  ],
+  "wiredcfccell_new_env" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-24-22_patio2/1650808221.77_ctrnn_wiredcfccell_fine_train",
+    true,
+    null
+  ]
+}

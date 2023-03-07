@@ -1,0 +1,12 @@
+{
+  "ncp_good": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-22-22_csail_bright/1650649302.0_ncp_fine_train",
+    true,
+    null
+  ],
+  "lstm_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/04-22-22_csail_bright/1650650197.79_lstm_fine_train",
+    true,
+    null
+  ]
+}

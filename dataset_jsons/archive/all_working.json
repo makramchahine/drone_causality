@@ -1,0 +1,57 @@
+{
+  "ncp_long" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476101.52_ncp_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476101.52_ncp_all.csv"
+  ],
+  "ncp_bad": [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648475045.86_ncpparams",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648475045.86_ncpparams.csv"
+  ],
+  "lstm_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648475523.06_lstm_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648475523.06_lstm_all.csv"
+  ],
+  "lstm_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648475770.27_lstm_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648475770.27_lstm_all.csv"
+  ],
+  "cfc_good" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476713.23_ctrnn_cfc_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476713.23_ctrnn_cfc_all.csv"
+  ],
+  "cfc_bad" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476787.35_ctrnn_cfc_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476787.35_ctrnn_cfc_all.csv"
+  ],
+  "mixedcfc" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476994.89_ctrnn_mixedcfc_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648476994.89_ctrnn_mixedcfc_all.csv"
+  ],
+  "ltc" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648477257.87_ctrnn_ltc_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648477257.87_ctrnn_ltc_all.csv"
+  ],
+  "wiredcfccell" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648477781.13_ctrnn_wiredcfccell_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648477781.13_ctrnn_wiredcfccell_all.csv"
+  ],
+  "gruode" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648478098.72_ctrnn_gruode_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648478098.72_ctrnn_gruode_all.csv"
+  ],
+  "tcn" : [
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648478441.99_tcn_all",
+    true,
+    "/media/dolphonie/Data/Files/UROP/devens_data/03-28-22 all working/1648478441.99_tcn_all.csv"
+  ]
+}
