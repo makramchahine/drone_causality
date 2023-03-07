@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ctrnn-targets
+spec:
+  containers:
+    - name: train-container
+      image: dolphonie1/causal_repo:0.1.10
+      command:
+        - "/bin/bash"
+        - "-c" # run with bash and pass in the args below
+      args:
+        - "cd /src/drone_causality &&
+        cp -r /data/skipper/old_db /local &&
+        python train_multiple.py \
+        ctrnn_objective /data/skipper/data/devens_snowy_short \
+        --n_trains 5 \
+        --batch_size 100 \
+        --storage_name /local/old_db/ctrnn_objective.json \
+        --storage_type json \
+        --study_name hyperparam_tuning_ \
+        --save_dir /data/skipper/model_checkpoints \
+        --out_dir /data/skipper/res/chair4_fine_targets
+        --cached_data_dir /data/skipper/cached_data
+        --extra_data_dir /data/skipper/data/synthetic_small4_v2
+        --hotstart_dir /data/skipper/old_db/chair4_long_balanced"

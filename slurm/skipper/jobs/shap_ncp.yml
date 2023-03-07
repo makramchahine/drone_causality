@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shap-ncp
+spec:
+  containers:
+    - name: env-container
+      image: dolphonie1/causal_repo:0.1.16
+      command:
+        - "/bin/bash"
+        - "-c" # run with bash and pass in the args below
+      args:
+        - "cd /src/drone_causality &&
+        python visualization_runner.py \
+        visualize_each \
+        /src/drone_causality/slurm/skipper/chair_approach.json \
+        /data/skipper/models/chair3_fine2/train/params.json \
+        --vis_type shap \
+        --vis_model_type ncp \
+        --output_prefix /data/skipper/ncp_shap
+        --cache_path /data/skipper/cached_data/ncp.pkl
+        --dataset_path /data/skipper/data/devens_snowy_fixed"
