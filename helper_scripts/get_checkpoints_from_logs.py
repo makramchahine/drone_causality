@@ -8,6 +8,10 @@ from json import JSONDecodeError
 from pathlib import Path
 from typing import List, Dict, Any
 
+import sys
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, ".."))
+
 from utils.model_utils import get_readable_name
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

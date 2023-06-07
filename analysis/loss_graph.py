@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # noinspection PyArgumentList
-from utils.graph_utils import MARKERS
+# from utils.graph_utils import MARKERS
+MARKERS = ['o', 'v', '^', '<', '>', 's', 'p', '*', 'h', 'H', 'D', 'd']
 
 
 # noinspection PyArgumentList
@@ -42,6 +43,8 @@ def graph_loss(train_losses: Optional[Dict[str, Sequence[Tuple[int, float]]]] = 
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend(loc="upper right")
+    # make y axis logaritmic:
+    plt.yscale('log')
 
     plt.autoscale(enable=True, axis='x', tight=True)
 
@@ -81,6 +84,7 @@ def get_losses_from_checkpoints(checkpoint_paths: Sequence[str], save_dir: str, 
     all_train_losses = {}
     all_val_losses = {}
     for i, checkpoint_path in enumerate(checkpoint_paths):
+        print(checkpoint_path)
         match_reg = re.compile(".*(\d\d\d\d:\d\d:\d\d:\d\d:\d\d:\d\d)")
         date_str = match_reg.search(checkpoint_path).group(1)
 

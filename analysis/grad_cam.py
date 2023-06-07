@@ -8,6 +8,7 @@ from tensorflow import Tensor
 from tensorflow.python.keras import Model
 from tensorflow.python.keras.layers import Conv2D
 from tensorflow.python.keras.models import Functional
+import numpy as np
 
 from utils.vis_utils import image_grid
 from utils.model_utils import load_model_from_weights, load_model_no_params, ModelParams
@@ -17,8 +18,14 @@ def compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hiddens
                     pred_index: Optional[Sequence[Tensor]] = None):
     heatmaps, hiddens = _compute_gradcam(img=img, grad_model=grad_model, hiddens=hiddens, pred_index=pred_index)
     avg_heat = tf.math.add_n(heatmaps)
+
+    map_min = np.min(avg_heat)
+    map_max = np.max(avg_heat)
+    avg_heat = (avg_heat - map_min) / (map_max - map_min + 1e-6)
+
     avg_heat = tf.expand_dims(avg_heat, axis=-1)
-    return avg_heat, hiddens
+
+    return avg_heat, hiddens, avg_heat
 
 
 def compute_gradcam_tile(img: Union[Tensor, ndarray], grad_model: Functional, hiddens: Sequence[Tensor],
@@ -47,6 +54,7 @@ def _compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hidden
     # Then, we compute the gradient of the top predicted class for our input image
     # with respect to the activations of the last conv layer
     with tf.GradientTape() as tape:
+        img = tf.convert_to_tensor(img, dtype=tf.float32)
         out = grad_model([img, *hiddens])
         last_conv_layer_output = out[0]
         preds = out[1]
@@ -59,7 +67,7 @@ def _compute_gradcam(img: Union[Tensor, ndarray], grad_model: Functional, hidden
     grads = tape.jacobian(preds, last_conv_layer_output)[0]
     last_conv_layer_output = last_conv_layer_output[0]
     for pred in pred_index:
-        # This is the gradient of the output neuron (top pred1icted or chosen)
+        # This is the gradient of the output neuron (top predicted or chosen)
         # with regard to the output feature map of the last conv layer
         grad = grads[pred]
 
@@ -95,5 +103,6 @@ def get_last_conv(model_path: str, model_params: Optional[ModelParams] = None) -
     # First, we create a model that maps the input image to the activations
     # of the last conv layer as well as the output predictions
     return tf.keras.models.Model(
-        [vis_model.inputs], [conv_layers[-1].output, *vis_model.output]
+        inputs=[vis_model.inputs],
+        outputs=[conv_layers[-1].output, *vis_model.output]
     )

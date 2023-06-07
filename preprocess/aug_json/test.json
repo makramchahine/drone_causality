@@ -1,0 +1,65 @@
+[
+  [
+    "/home/makramchahine/Desktop/png2aug/pos1_up.png",
+    [
+      128, 72
+    ],
+    0
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos1_right.png",
+    [
+      128, 72
+    ],
+    1
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos1_left.png",
+    [
+      128, 72
+    ],
+    -1
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos2_up.png",
+    [
+      128, 72
+    ],
+    0
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos2_right.png",
+    [
+      128, 72
+    ],
+    1
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos2_left.png",
+    [
+      128, 72
+    ],
+    -1
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos3_up.png",
+    [
+      128, 72
+    ],
+    0
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos3_right.png",
+    [
+      128, 72
+    ],
+    1
+  ],
+  [
+    "/home/makramchahine/Desktop/png2aug/pos3_left.png",
+    [
+      128, 72
+    ],
+    -1
+  ]
+]

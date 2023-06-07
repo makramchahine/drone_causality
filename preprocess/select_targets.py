@@ -13,8 +13,8 @@ def select_targets_all_runs(session_dir: str):
     all_targets_png = []
     all_targets_dir = []
     for flight in tqdm(flight_folders):
-        if "_" not in flight: # skip non sliced sequences
-            continue
+        # if "_" not in flight: # skip non sliced sequences
+        #     continue
         png_targets, dir_targets = select_target_locations(os.path.join(session_dir, flight))
         all_targets_png.extend(png_targets)
         all_targets_dir.extend(dir_targets)
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("run_dir")
     args = parser.parse_args()
-    png_targets, dir_targets = select_targets_all_runs(args.run_dir)
+    png_targets, dir_targets = select_target_locations(args.run_dir)
     print(png_targets)
     print(dir_targets)
     with open("output_png.json", "w") as f:

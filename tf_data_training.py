@@ -17,6 +17,8 @@ from keras_models import IMAGE_SHAPE
 from utils.model_utils import ModelParams, NCPParams, LSTMParams, CTRNNParams, TCNParams, get_skeleton, \
     get_readable_name
 
+# physical_devices = tf.config.list_physical_devices('GPU')
+# tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 def tlen(dataset):
     for (ix, _) in enumerate(dataset):
@@ -38,22 +40,24 @@ def sequence_augmentation(x, y, aug_params: Dict[str, Any]):
     saturation
     :return: augmented data input, same data labels
     """
+    xi = x["input_image"]
+    xv = x["input_vector"]
     bright_range = aug_params.get("brightness", None)
     if bright_range is not None:
         delta = tf.random.uniform((), -bright_range, bright_range)
-        x = tf.image.adjust_brightness(x, delta)
+        xi = tf.image.adjust_brightness(xi, delta)
 
     contrast_range = aug_params.get("contrast", None)
     if contrast_range is not None:
         contrast_factor = tf.random.uniform((), 1 - contrast_range, 1 + contrast_range)
-        x = tf.image.adjust_contrast(x, contrast_factor)
+        xi = tf.image.adjust_contrast(xi, contrast_factor)
 
     saturation_range = aug_params.get("saturation", None)
     if saturation_range is not None:
         saturation_factor = tf.random.uniform((), 1 - saturation_range, 1 + saturation_range)
-        x = tf.image.adjust_saturation(x, saturation_factor)
+        xi = tf.image.adjust_saturation(xi, saturation_factor)
 
-    return x, y
+    return {"input_image":xi, "input_vector":xv}, y
 
 
 def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,
@@ -93,6 +97,7 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
                                                                      data_shift,
                                                                      data_stride, val_split, label_scale,
                                                                      extra_data_dir)
+
             if cached_data_dir is not None:
                 print('Saving cached training data at %s' % cached_training_fn)
                 tf.data.experimental.save(training_dataset, cached_training_fn)

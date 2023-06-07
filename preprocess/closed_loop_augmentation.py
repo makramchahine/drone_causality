@@ -7,7 +7,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from mixed_aug import *
-from preprocess.aug_utils import save_processsed_seq
+from aug_utils import save_processsed_seq
 from synthetic_aug import *
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

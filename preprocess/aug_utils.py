@@ -7,7 +7,7 @@ from PIL import Image
 from pandas import DataFrame
 
 # num times to retry generating offsets
-from preprocess.process_data import process_image
+from process_data import process_image
 
 NUM_RNG_ATTEMPTS = 100
 
@@ -98,7 +98,7 @@ def save_processsed_seq(out_path: str, out_seq: Sequence[Image.Image], control_i
 
 def zoom_at(img: Image.Image, x: int, y: int, zoom: float) -> Image.Image:
     """
-    PIL helper that combines crop and resize to zooom into an image at a point. From
+    PIL helper that combines crop and resize to zoom into an image at a point. From
     https://stackoverflow.com/questions/46149003/pil-zoom-into-image-at-a-particular-point
 
     :param img: image to transform
