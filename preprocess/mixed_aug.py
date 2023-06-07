@@ -8,9 +8,9 @@ from PIL import Image
 from pandas import DataFrame
 from simple_pid import PID
 
-from preprocess.aug_utils import YAW_P, YAW_I, YAW_D, THROT_ROLL_I, THROT_ROLL_P, THROT_ROLL_D, compute_crop_offsets, \
+from aug_utils import YAW_P, YAW_I, YAW_D, THROT_ROLL_I, THROT_ROLL_P, THROT_ROLL_D, compute_crop_offsets, \
     generate_crop_location, save_processsed_seq
-from preprocess.process_data import process_csv
+from process_data import process_csv
 from utils.data_utils import CSV_COLUMNS
 
 

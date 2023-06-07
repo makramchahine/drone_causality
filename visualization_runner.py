@@ -49,6 +49,7 @@ def get_vis_models(vis_type: VisualizationType, model_path: str, model_params: M
     control_params.single_step = True
     control_params.no_norm_layer = False
     control_model = load_model_from_weights(control_params, model_path)
+    print(control_model.summary())
 
     return vis_model, vis_func, control_model
 
@@ -96,7 +97,7 @@ def visualize_each(datasets: Dict[str, Tuple[str, bool]], output_prefix: str = "
                 vis_model=vis_model,
                 data=data_path,
                 vis_func=vis_func,
-                image_output_path=None,
+                image_output_path= output_name+"/"+data_model_id,
                 video_output_path=os.path.join(output_name, f"{data_model_id}.mp4"),
                 reverse_channels=reverse_channels,
                 control_source=csv_path if csv_path else control_model,
@@ -160,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("vis_func", type=str)
     parser.add_argument("dataset_path", type=str)
     parser.add_argument("params_path", type=str)
-    parser.add_argument("--vis_type", type=str, default=VisualizationType.VISUAL_BACKPROP.value)
+    parser.add_argument("--vis_type", type=str, default=VisualizationType.GRAD_CAM.value)
     parser.add_argument("--include_checkpoint_name", action="store_true")
     parser.add_argument("--num_keep_frames", type=int, default=None)
     parser.add_argument("--vis_model_type", type=str, default=None)

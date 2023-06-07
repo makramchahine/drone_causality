@@ -109,8 +109,8 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
         data = image_dir_generator(data, IMAGE_SHAPE, reverse_channels)
 
     # create output_dir if not present
-    if image_output_path is not None:
-        Path(image_output_path).mkdir(parents=True, exist_ok=True)
+    # if image_output_path is not None:
+        # Path(image_output_path).mkdir(parents=True, exist_ok=True)
     if video_output_path is not None:
         Path(os.path.dirname(video_output_path)).mkdir(parents=True, exist_ok=True)
 
@@ -132,7 +132,6 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
     csv_healthy = True
     for i, img in tqdm(enumerate(data)):
         og_imgs.append(img)
-
         saliency, vis_hiddens, sample_extra = vis_func(img, vis_model, vis_hiddens, **vis_kwargs)
         saliency_imgs.append(saliency)
         extra_imgs.append(sample_extra)
@@ -175,12 +174,16 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
     # prepare video frames
     saliency_written = []
     for i, img, saliency, extra, vel_cmd in data_list:
+        #cv2.imshow('asd', np.array(saliency))
+        #print(saliency.shape)
+        #print(IMAGE_SHAPE_CV)
         saliency_writeable = convert_to_color_frame(saliency, desired_size=IMAGE_SHAPE_CV, min_value=saliency_min,
                                                     max_value=saliency_max)
-
-        saliency_written.append(saliency_writeable)
+        #cv2.imshow('asde', np.array(saliency_writeable))
+        #cv2.waitKey(0)
+        #print(saliency_writeable.shape)
         if image_output_path:
-            cv2.imwrite(f"{image_output_path}/saliency_mask_{i}.png", saliency_writeable)
+            cv2.imwrite(f"{image_output_path}_saliency_mask_{i}.png", saliency_writeable)
 
         # display OG frame and saliency map stacked top and bottom
         og_int = np.squeeze(np.uint8(img), axis=0)
@@ -188,11 +191,10 @@ def run_visualization(vis_model: Functional, data: Union[str, Iterable], vis_fun
         # when opening with PIL and writing with cv video writer, channels are implicitly flipped
         # if not flipped, need to flip if OG and if is flipped, need to flip again to restore normal
         og_int = og_int[..., ::-1]
-
         img_stack = [og_int, saliency_writeable]
 
-        if extra is not None:
-            img_stack.extend(extra)
+        # if extra is not None:
+        #     img_stack.extend(extra)
 
         if vel_cmd is not None:
             text_img = show_vel_cmd(vel_cmd, og_int.shape[1])

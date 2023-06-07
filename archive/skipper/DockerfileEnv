@@ -1,0 +1,30 @@
+# Base Image on DRL image
+FROM mitdrl/ubuntu:20.04_cuda11.0
+
+# Let us install tzdata painlessly
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install development and runtime libraries (~4GB)
+RUN apt-get update && apt-get install --no-install-recommends \
+    libcudnn8=8.1.0.77-1+cuda11.2  \
+    libcudnn8-dev=8.1.0.77-1+cuda11.2
+
+# For CUDA profiling, TensorFlow requires CUPTI.
+ENV LD_LIBRARY_PATH /usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Link libcusolver so that tensorflow can find it
+RUN ln -s /usr/local/cuda/lib64/libcusolver.so /usr/local/cuda/lib64/libcusolver.so.11
+
+# See http://bugs.python.org/issue19846
+ENV LANG C.UTF-8
+
+# Install dependencies
+# RUN apt-get install -y libsndfile1
+RUN conda install python=3.8 pip
+RUN pip install keras-ncp tensorflow==2.5.1 tensorflow-probability==0.13.0
+
+# Update something to the bashrc (/etc/bashrc_skipper) to customize your shell
+RUN echo -e "alias py='python'" >> /etc/bashrc_skipper
+
+# Switch to src directory
+WORKDIR /src

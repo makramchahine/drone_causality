@@ -1,0 +1,3 @@
+model: ctrnn
+ct_type: phased
+rnn_sizes: 128
