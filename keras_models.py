@@ -419,7 +419,6 @@ def generate_network_trunk(seq_len,
 
     # x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
     # concatenate xi and xp using tf.concat along the last axis
-    print(xi.shape, xp.shape)
     #x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
     x = tf.concat([xi, xp], axis=-1)
 

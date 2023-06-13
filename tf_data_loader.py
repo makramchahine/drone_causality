@@ -88,7 +88,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
         dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
 
-        assert len(dataset_vu) == len(dataset_np), 'number of images should be equal to number of values'
+        assert len(dataset_vu) == len(dataset_np), f'number of images should be equal to number of values ({len(dataset_vu)} vs {len(dataset_np)})'
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
         values_dataset = tf.data.Dataset.from_tensor_slices(dataset_vu)

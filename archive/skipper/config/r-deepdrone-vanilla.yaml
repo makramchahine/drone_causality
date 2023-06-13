@@ -1,3 +1,0 @@
-model: ctrnn
-ct_type: vanilla
-rnn_sizes: 128

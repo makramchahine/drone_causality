@@ -1,3 +1,0 @@
-model: ctrnn
-ct_type: gruode
-rnn_sizes: 128
