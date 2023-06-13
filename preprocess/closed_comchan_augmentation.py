@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from mixed_aug import *
 from aug_utils import save_processsed_seq
-from synthetic_aug import *
+from comchan_aug import *
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -26,7 +26,6 @@ def augment_image_list(img_data_path: str, out_path: str, num_aug: int, balance_
     """
     Augments all images and target locations found in a json at img_data_path. For param meanings, see generate_sequence
     """
-    # TODO: get this function to work with mixed aug
     with open(os.path.join(SCRIPT_DIR, img_data_path), "r") as f:
         img_data = json.load(f)
 
@@ -44,9 +43,9 @@ def augment_image_list(img_data_path: str, out_path: str, num_aug: int, balance_
 
     # get aug params
     all_params = []
-    for img_path, target_loc in img_data:
+    for img_path, target_loc, man_dir in img_data:
         for _ in range(num_aug):
-            params = get_synthetic_params(img_path, target_loc, **kwargs)
+            params = get_synthetic_params(img_path, target_loc, man_dir, **kwargs)
             if params is not None:
                 all_params.append(params)
     print(f"Success rate: {len(all_params) / num_aug / len(img_data)}")

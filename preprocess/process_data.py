@@ -12,6 +12,7 @@ from PIL import Image
 from joblib import Parallel, delayed
 from pandas import DataFrame
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from sequence_slice.transformations import euler_from_quaternion
 
@@ -20,35 +21,17 @@ sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
 
-# bad_runs = []
-# plt.ion()
-# for d in dirs:
-#    df = pd.read_csv(os.path.join('raw_data', '%.2f.csv' % float(d)))
-#    plt.figure()
-#    plt.plot(df['lat'], df['lng'])
-#    plt.xlim([.00035 + 42.521, .00065 + 42.521])
-#    plt.ylim([-.0006 - 71.606, -.00035 - 71.606])
-#
-#    keep = raw_input('Data ok? [Y/n]')
-#    plt.close()
-#    keep = keep == '' or keep == 'Y' or keep == 'y'
-#
-#    if not keep:
-#        bad_runs.append(d)
-
 CSV_NAME = "data_out.csv"
+CSV_NAME_2 = "data_in.csv"
 
-def process_csv(df: DataFrame) -> DataFrame:
+def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
     """
     Applies relative heading transformation to csv file of sensor readings and saves relevant cols for training
 
     :param df: pandas df containing sensor readings collected during logging
     :return: Transformed dataframe
     """
-    yaws = np.zeros(len(df))
-    for ix in range(len(yaws)):
-        quat = [df['att_x'][ix], df['att_y'][ix], df['att_z'][ix], df['att_w'][ix]]
-        yaws[ix] = euler_from_quaternion(quat)[2]
+    yaws = np.array(df['yaw'])
 
     vx_body = df.vx * np.cos(-yaws) - df.vy * np.sin(-yaws)
     vy_body = df.vx * np.sin(-yaws) + df.vy * np.cos(-yaws)
@@ -56,7 +39,60 @@ def process_csv(df: DataFrame) -> DataFrame:
     df_training['vx'] = vx_body
     df_training['vy'] = vy_body
     df_training['vz'] = df.vz
-    df_training['omega_z'] = df.ang_vel_z
+    df_training['omega_z'] = df.yaw_rate
+
+    df_training['time_total'] = df.time_total
+    df_training = df_training.drop_duplicates(subset='time_total', keep="first")
+
+    # # plot df.att_x vs df.att_y in a subplot and df.yaw vs df.time_total in another subplot
+    # fig, axs = plt.subplots(2)
+    # fig.suptitle('Attitude and yaw vs time')
+    # axs[0].plot(df['x'][1:], df['y'][1:])
+    # axs[0].set_title('x vs y')
+    # axs[1].plot(df['time_total'][1:], df['yaw'][1:])
+    # axs[1].set_title('yaw')
+    # for ax in axs.flat:
+    #     ax.set(xlabel='time_total', ylabel='value')
+    # # Hide x labels and tick labels for top plots and y ticks for right plots.
+    # for ax in axs.flat:
+    #     ax.label_outer()
+    # # show plot
+    # plt.show()
+    # # save plot in out_dir
+    # fig.savefig(os.path.join(out_dir, 'attitude_and_yaw_vs_time.png'))
+    # # close plot
+    # plt.close()
+    #
+    #
+    # # plot vx, vy, vz, omega_z vs time_total each in a different subplot
+    # fig, axs = plt.subplots(4)
+    # fig.suptitle('Velocity and angular velocity vs time')
+    # axs[0].plot(df_training['time_total'][1:], df_training['vx'][1:])
+    # axs[0].set_title('vx')
+    # axs[1].plot(df_training['time_total'][1:], df_training['vy'][1:])
+    # axs[1].set_title('vy')
+    # axs[2].plot(df_training['time_total'][1:], df_training['vz'][1:])
+    # axs[2].set_title('vz')
+    # axs[3].plot(df_training['time_total'][1:], df_training['omega_z'][1:])
+    # axs[3].set_title('omega_z')
+    # for ax in axs.flat:
+    #     ax.set(xlabel='time_total', ylabel='value')
+    # # Hide x labels and tick labels for top plots and y ticks for right plots.
+    # for ax in axs.flat:
+    #     ax.label_outer()
+    # # show plot
+    # plt.show()
+    # # save plot in out_dir
+    # fig.savefig(os.path.join(out_dir, 'velocity_and_angular_velocity_vs_time.png'))
+    # # close plot
+    # plt.close()
+
+    df_training = df_training.drop('time_total', axis=1)
+
+    #add header to df with column names vx, vy, vz, omega_z
+    df_training.columns = ['vx', 'vy', 'vz', 'omega_z']
+
+
     return df_training
 
 
@@ -77,7 +113,7 @@ def process_image(img: Image.Image, flip_channels: bool = True) -> Image.Image:
     return img
 
 
-def process_data(data_dir: str, out_dir: str, flip_channels: bool = True) -> None:
+def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> None:
     """
     Processes all runs collected in the session by data_dir and saves to out_dir
     """
@@ -86,24 +122,39 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = True) -> Non
 
     def process_one_run(run_dir: str):
         run_abs = os.path.join(data_dir, run_dir)
-        if "." in run_dir:
-            run_out_dir = '%.2f' % float(run_dir)
-        else:
-            run_out_dir = run_dir
-
+        run_out_dir = run_dir
         Path(os.path.join(out_dir, run_out_dir)).mkdir(parents=True, exist_ok=True)
+
         try:
-            df = pd.read_csv(os.path.join(data_dir, '%.2f.csv' % float(run_dir)))
-
-            df_training = process_csv(df)
-
+            df = pd.read_csv(os.path.join(run_abs, 'log_0.csv'), header=0)
+            df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
+            #skip first row
+            df_training = df_training[1:]
             df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
+
+            df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
+            df.columns = ['direction']
+            # create a new df with 2
+            # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
+            # if the value is equal to -1 write a line containing the values 0 and 1
+            nu_df = pd.DataFrame(columns=['R', 'L'])
+            for index, row in df.iterrows():
+                if row['direction'] == 1:
+                    nu_df.loc[index] = [1, 0]
+                elif row['direction'] == -1:
+                    nu_df.loc[index] = [0, 1]
+                else:
+                    raise ValueError("Invalid value in direction column")
+            nu_df = nu_df[1:]
+            nu_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
+
         except FileNotFoundError:
             print(f"Could not find csv for run {run_dir}. Assuming already processed and copying existing csv")
             shutil.copy(os.path.join(run_abs, CSV_NAME), os.path.join(out_dir, run_out_dir, CSV_NAME))
 
         img_files = sorted(os.listdir(run_abs))
         img_files = [os.path.join(run_abs, img) for img in img_files if "png" in img]
+        img_files = img_files[1:]
 
         for (ix, im_path) in enumerate(img_files):
             img_out_path = os.path.join(out_dir, run_out_dir, '%06d.png' % ix)
@@ -112,7 +163,8 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = True) -> Non
             img = Image.open(im_path)
             im_smaller = process_image(img, flip_channels)
             im_smaller.save(img_out_path)
-
+    # for run_dir in tqdm(dirs):
+    #     process_one_run(run_dir)
     # run image processing in different threads
     Parallel(n_jobs=6)(delayed(process_one_run)(run_dir) for run_dir in tqdm(dirs))
 

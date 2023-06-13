@@ -9,6 +9,10 @@ import tensorflow as tf
 from tensorflow.python.keras.layers import Conv2D, Dense
 from tensorflow.python.keras.models import Functional
 
+import sys
+SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(SCRIPT_PATH, ".."))
+
 from keras_models import IMAGE_SHAPE, DEFAULT_CFC_CONFIG, generate_ncp_model, generate_ctrnn_model, generate_lstm_model, \
     generate_tcn_model, DEFAULT_NCP_SEED
 
@@ -77,9 +81,9 @@ def load_model_from_weights(params: ModelParams, checkpoint_path: str, load_name
     Convenience function that loads weights from checkpoint_path into model_skeleton
     """
     model_skeleton = get_skeleton(params)
-    if load_name_ok:
+    if True:
         try:
-            model_skeleton.load_weights(checkpoint_path)
+            model_skeleton.load_weights(checkpoint_path, by_name=True)
         except ValueError:
             # different number of weights from file and model. Assume normalization layer in model but not file
             # rename conv layers starting at 5
@@ -174,7 +178,12 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
     """
     constructor = np.zeros if return_numpy else tf.zeros
     hiddens = []
-    for input_shape in model.input_shape[1:]:  # ignore 1st output, as is this control output
+    if len(model.input_shape)==1:
+        lool = model.input_shape[0][1:]
+    else:
+        lool = model.input_shape[2:]
+
+    for input_shape in lool:  # ignore 1st output, as is this control output
         hidden = []
         for i, shape in enumerate(input_shape):
             if shape is None:

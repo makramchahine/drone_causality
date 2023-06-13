@@ -3,7 +3,7 @@ from typing import Iterable, Dict
 
 import kerasncp as kncp
 from kerasncp.tf import LTCCell, WiredCfcCell
-from tensorflow import keras
+from tensorflow import keras, concat
 
 from node_cell import *
 from tf_cfc import CfcCell, MixedCfcCell
@@ -46,7 +46,7 @@ def generate_lstm_model(
         single_step: bool = False,
         no_norm_layer: bool = False,
 ):
-    inputs_image, x = generate_network_trunk(
+    inputs_image, inputs_value, x = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -88,9 +88,9 @@ def generate_lstm_model(
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
-        lstm_model = keras.Model([inputs_image, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
+        lstm_model = keras.Model([inputs_image, inputs_value, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
     else:
-        lstm_model = keras.Model([inputs_image], [x])
+        lstm_model = keras.Model([inputs_image, inputs_value], [x])
 
     return lstm_model
 
@@ -103,7 +103,7 @@ def generate_ncp_model(seq_len,
                        single_step: bool = False,
                        no_norm_layer: bool = False,
                        ):
-    inputs_image, x = generate_network_trunk(
+    inputs_image, inputs_value, x = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -131,7 +131,7 @@ def generate_ncp_model(seq_len,
         inputs_state = tf.keras.Input(shape=(rnn_cell.state_size,))
         # wrap output states in list since want output to just be ndarray, not list of 1 el ndarray
         motor_out, [output_states] = rnn_cell(x, inputs_state)
-        ncp_model = keras.Model([inputs_image, inputs_state], [motor_out, output_states])
+        ncp_model = keras.Model([inputs_image, inputs_value, inputs_state], [motor_out, output_states])
     else:
         x = keras.layers.RNN(rnn_cell,
                              batch_input_shape=(batch_size,
@@ -139,7 +139,7 @@ def generate_ncp_model(seq_len,
                                                 x.shape[-1]),
                              return_sequences=True)(x)
 
-        ncp_model = keras.Model([inputs_image], [x])
+        ncp_model = keras.Model([inputs_image, inputs_value], [x])
 
     return ncp_model
 
@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, x = generate_network_trunk(
+    inputs_image, inputs_value, x = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -203,7 +203,8 @@ def generate_ctrnn_model(rnn_sizes,
                 sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
                 inter_fanout=4,  # How many outgoing synapses has each inter neuron
                 recurrent_command_synapses=4,  # Now many recurrent synapses are in the
-                # command neuron layer
+                # command neuron
+                # layer
                 motor_fanin=6,  # How many incoming syanpses has each motor neuron,
                 seed=kwargs.get("wiredcfc_seed", DEFAULT_NCP_SEED),  # random seed to generate connections between nodes
             )
@@ -236,9 +237,9 @@ def generate_ctrnn_model(rnn_sizes,
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
-        ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [x, *all_hidden_outputs])
+        ctrnn_model = keras.Model([inputs_image, inputs_value, *all_hidden_inputs], [x, *all_hidden_outputs])
     else:
-        ctrnn_model = keras.Model([inputs_image], [x])
+        ctrnn_model = keras.Model([inputs_image, inputs_value], [x])
 
     return ctrnn_model
 
@@ -266,7 +267,7 @@ def generate_tcn_model(
     """
     from tcn import TCN  # only import keras_tcn library if needed
 
-    inputs_image, x = generate_network_trunk(
+    inputs_image, inputs_value, x = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -313,9 +314,9 @@ def generate_tcn_model(
     x = keras.layers.Dense(units=4, activation='linear')(x)
 
     if single_step:
-        tcn_model = keras.Model([inputs_image, inputs_sequence], [x, combined_sequence])
+        tcn_model = keras.Model([inputs_image, inputs_value, inputs_sequence], [x, combined_sequence])
     else:
-        tcn_model = keras.Model([inputs_image], [x])
+        tcn_model = keras.Model([inputs_image, inputs_value], [x])
 
     return tcn_model
 
@@ -382,33 +383,44 @@ def generate_network_trunk(seq_len,
     """
 
     if single_step:
-        inputs = keras.Input(shape=image_shape)
+        inputs_image = keras.Input(shape=image_shape, name="input_image")
+        inputs_value = keras.Input(shape=(2,), name="input_vector")
     else:
-        inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
+        inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
+        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
 
-    x = inputs
+    xi = inputs_image
+    xp = inputs_value
 
     if not no_norm_layer:
-        x = generate_normalization_layers(x, single_step)
+        xi = generate_normalization_layers(xi, single_step)
 
     if augmentation_params is not None:
-        x = generate_augmentation_layers(x, augmentation_params, single_step)
+        xi = generate_augmentation_layers(xi, augmentation_params, single_step)
 
     # Conv Layers
-    x = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
-        x)
-    x = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
-        x)
-    x = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
-        x)
-    x = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step)(
-        x)
-    x = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step)(
-        x)
+    xi = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+        xi)
+    xi = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+        xi)
+    xi = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+        xi)
+    xi = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step)(
+        xi)
+    xi = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step)(
+        xi)
 
-    # fully connected layers
-    x = wrap_time(keras.layers.Flatten(), single_step)(x)
-    x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
-    x = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(x)
+    xi = wrap_time(keras.layers.Flatten(), single_step)(xi)
+    xi = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xi)
+    xi = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xi)
 
-    return inputs, x
+    xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
+    xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+
+    # x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
+    # concatenate xi and xp using tf.concat along the last axis
+    print(xi.shape, xp.shape)
+    #x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
+    x = tf.concat([xi, xp], axis=-1)
+
+    return inputs_image, inputs_value, x

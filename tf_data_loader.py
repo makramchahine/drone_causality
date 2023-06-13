@@ -51,13 +51,14 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
     file_ending = 'png'
 
     def sub_to_batch(sub_feature, sub_label):
-        sfb = sub_feature.batch(seq_len, drop_remainder=True)
+        sib = sub_feature['input_image'].batch(seq_len, drop_remainder=True)
+        svb = sub_feature['input_vector'].batch(seq_len, drop_remainder=True)
         slb = sub_label.batch(seq_len, drop_remainder=True)
-        return tf.data.Dataset.zip((sfb, slb))
+        return tf.data.Dataset.zip(({"input_image":sib, "input_vector":svb}, slb))
         # return sub.batch(seq_len, drop_remainder=True)
 
     dirs = sorted(os.listdir(root))
-    dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d]
+    dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d and 'DS_Store' not in d]
     datasets = []
 
     output_means, output_stds = get_output_normalization(root)
@@ -74,19 +75,24 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
         else:
             raise Exception('Wrong size of input data (expected 4, got %d' % labels.shape[1])
         labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
-        # n_images = len(os.listdir(os.path.join(root, d))) - 1
+
         n_images = len([fn for fn in os.listdir(os.path.join(root, d)) if file_ending in fn])
-        # dataset_np = np.empty((n_images, 256, 256, 3), dtype=np.uint8)
         dataset_np = np.empty((n_images, *image_size), dtype=np.uint8)
 
         for ix in range(n_images):
             # dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
-            img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
-            # dataset_np[ix] = img[img.height - image_size[0]:, :, :]
+            # open image with rgb channels
+            #img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
+            img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending))).convert('RGB')
             dataset_np[ix] = img
 
+        dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
+
+        assert len(dataset_vu) == len(dataset_np), 'number of images should be equal to number of values'
+
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
-        dataset = tf.data.Dataset.zip((images_dataset, labels_dataset))
+        values_dataset = tf.data.Dataset.from_tensor_slices(dataset_vu)
+        dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_vector":values_dataset}, labels_dataset))
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
         datasets.append(dataset)
 

@@ -2,6 +2,8 @@ from typing import List, Iterable, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+physical_devices = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(physical_devices[0], True)
 from numpy import ndarray
 from tensorflow import keras, Tensor
 from tensorflow.keras.layers import Conv2D
@@ -32,7 +34,6 @@ def compute_visualbackprop(img: Union[Tensor, ndarray],
             if isinstance(layer, Conv2D):
                 kernels.append(layer.kernel_size)
                 strides.append(layer.strides)
-
     activations = activation_model.predict(img)
     average_layer_maps = []
     for layer_activation in activations:  # Only the convolutional layers
