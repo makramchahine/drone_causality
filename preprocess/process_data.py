@@ -23,6 +23,7 @@ from keras_models import IMAGE_SHAPE
 
 CSV_NAME = "data_out.csv"
 CSV_NAME_2 = "data_in.csv"
+POS_CSV = "pos.csv"
 
 def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
     """
@@ -60,6 +61,29 @@ def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
 
     return df_training
 
+def process_csv_pos(df: DataFrame, out_dir: str) -> DataFrame:
+    """
+    Applies relative heading transformation to csv file of sensor readings and saves relevant cols for training
+
+    :param df: pandas df containing sensor readings collected during logging
+    :return: Transformed dataframe
+    """
+    df_training = pd.DataFrame()
+    df_training['x'] = df.x
+    df_training['y'] = df.y
+    df_training['z'] = df.z
+    df_training['yaw'] = df.yaw
+
+    df_training['time_total'] = df.time_total
+    df_training = df_training.drop_duplicates(subset='time_total', keep="first")
+
+    df_training = df_training.drop('time_total', axis=1)
+
+    #add header to df with column names x, y, z, yaw
+    df_training.columns = ['x', 'y', 'z', 'yaw']
+
+    return df_training
+
 
 def process_image(img: Image.Image, flip_channels: bool = True) -> Image.Image:
     """
@@ -93,9 +117,12 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
         try:
             df = pd.read_csv(os.path.join(run_abs, 'log_0.csv'), header=0)
             df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
+            df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
             #skip first row
             df_training = df_training[1:]
             df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
+            df_training_pos = df_training_pos[1:]
+            df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
 
             df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
             df.columns = ['direction']
@@ -131,7 +158,7 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
     # for run_dir in tqdm(dirs):
     #     process_one_run(run_dir)
     # run image processing in different threads
-    Parallel(n_jobs=6)(delayed(process_one_run)(run_dir) for run_dir in tqdm(dirs))
+    Parallel(n_jobs=16)(delayed(process_one_run)(run_dir) for run_dir in tqdm(dirs))
 
 
 if __name__ == "__main__":

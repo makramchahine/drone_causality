@@ -70,3 +70,6 @@ tuner_tests/
 
 # shap rep
 shap/
+
+clean_train*
+runner_models/*

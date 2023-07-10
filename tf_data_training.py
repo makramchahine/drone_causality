@@ -163,9 +163,9 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
 
         model.summary(line_length=80)
 
-    # Train
-    history = model.fit(x=training_dataset, validation_data=validation_dataset, epochs=epochs,
-                        use_multiprocessing=False, workers=1, max_queue_size=5, verbose=1, callbacks=callbacks)
+        # Train
+        history = model.fit(x=training_dataset, validation_data=validation_dataset, epochs=epochs,
+                            use_multiprocessing=False, workers=1, max_queue_size=5, verbose=1, callbacks=callbacks)
     return history, time_str
 
 
