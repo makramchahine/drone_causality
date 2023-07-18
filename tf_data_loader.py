@@ -11,7 +11,7 @@ def process_dataset(root, label_scale):
     run_dirs = os.listdir(root)  # should be directories named run%03d
     n = len(run_dirs)
     dataset = np.empty((n, 64, 256, 256, 3), dtype=np.uint8)
-    labels = np.empty((n, 64, 4))
+    labels = np.empty((n, 64, 4+4))
     for (dx, d) in enumerate(run_dirs):
         for i in range(len(os.listdir(os.path.join(root, d))) - 1):
             dataset[dx, i] = imread(os.path.join(root, d, '%03d.jpg' % i))
@@ -35,14 +35,14 @@ def get_output_normalization(root):
         print('Loading training data output means from: %s' % training_output_mean_fn)
         output_means = np.genfromtxt(training_output_mean_fn, delimiter=',')
     else:
-        output_means = np.zeros(4)
+        output_means = np.zeros(4+4)
 
     training_output_std_fn = os.path.join(root, 'stats', 'training_output_stds.csv')
     if os.path.exists(training_output_std_fn):
         print('Loading training data output std from: %s' % training_output_std_fn)
         output_stds = np.genfromtxt(training_output_std_fn, delimiter=',')
     else:
-        output_stds = np.ones(4)
+        output_stds = np.ones(4+4)
 
     return output_means, output_stds
 
@@ -66,10 +66,10 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
     for (run_number, d) in tqdm(enumerate(dirs)):
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
 
-        if labels.shape[1] == 4:
+        if labels.shape[1] == 4+4:
             labels = (labels - output_means) / output_stds
             # labels = labels * label_scale
-        elif labels.shape[1] == 5:
+        elif labels.shape[1] == 5+4:
             labels = (labels[:, 1:] - output_means) / output_stds
             # labels = labels[:,1:] * label_scale
         else:
@@ -172,7 +172,7 @@ def frames_to_array_rnn(root, dirs, image_size, seq_len):
     n_batches = min(int(np.ceil(max_run_length / seq_len)), run_len_threshold)
     data = np.zeros((n_batches, n_runs + total_extra_runs, seq_len, *image_size), dtype=np.uint8)
     full_batch_size = n_runs + total_extra_runs
-    labels = np.zeros((n_batches, full_batch_size, seq_len, 4))
+    labels = np.zeros((n_batches, full_batch_size, seq_len, 4+4))
     print('Data shape: ', data.shape)
     for (ix, dname) in enumerate(dirs):
         print('Loading directory %d of %d (%s)' % (ix, n_runs, dname))

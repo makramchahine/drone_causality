@@ -121,26 +121,28 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
             df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
             #skip first row
             df_training = df_training[1:]
+            # duplicate all columns
+            df_training = pd.concat([df_training, df_training], axis=1, ignore_index=False)
             df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
             df_training_pos = df_training_pos[1:]
             df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
 
-            df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
-            df.columns = ['direction']
-            # create a new df with 2
-            # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
-            # if the value is equal to -1 write a line containing the values 0 and 1
-            nu_df = pd.DataFrame(columns=['R0', 'L0', 'R1', 'L1'])
-            leader_i = random.choice([0, 1])
-            for index, row in df.iterrows():
-                if row['direction'] == 1:
-                    nu_df.loc[index] = [1, 0, 0, 0] if leader_i == 0 else [0, 0, 1, 0]
-                elif row['direction'] == -1:
-                    nu_df.loc[index] = [0, 1, 0, 0] if leader_i == 0 else [0, 0, 0, 1]
-                else:
-                    raise ValueError("Invalid value in direction column")
-            nu_df = nu_df[1:]
-            nu_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
+            # df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
+            # df.columns = ['direction']
+            # # create a new df with 2
+            # # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
+            # # if the value is equal to -1 write a line containing the values 0 and 1
+            # nu_df = pd.DataFrame(columns=['R0', 'L0', 'R1', 'L1'])
+            # leader_i = random.choice([0, 1])
+            # for index, row in df.iterrows():
+            #     if row['direction'] == 1:
+            #         nu_df.loc[index] = [1, 0, 0, 0] if leader_i == 0 else [0, 0, 1, 0]
+            #     elif row['direction'] == -1:
+            #         nu_df.loc[index] = [0, 1, 0, 0] if leader_i == 0 else [0, 0, 0, 1]
+            #     else:
+            #         raise ValueError("Invalid value in direction column")
+            # nu_df = nu_df[1:]
+            # nu_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
 
         except FileNotFoundError:
             print(f"Could not find csv for run {run_dir}. Assuming already processed and copying existing csv")

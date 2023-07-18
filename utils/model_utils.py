@@ -81,7 +81,8 @@ def load_model_from_weights(params: ModelParams, checkpoint_path: str, load_name
     Convenience function that loads weights from checkpoint_path into model_skeleton
     """
     model_skeleton = get_skeleton(params)
-    if load_name_ok:
+    print(load_name_ok)
+    if not load_name_ok:
         try:
             model_skeleton.load_weights(checkpoint_path)
         except ValueError:
@@ -91,6 +92,7 @@ def load_model_from_weights(params: ModelParams, checkpoint_path: str, load_name
             conv_index = 5
             dense_index = 1
             for layer in model_skeleton.layers:
+                print(f"{layer._name}, {layer.__class__.__name__} {[l.shape for l in layer.weights]}")
                 if isinstance(layer, Conv2D):
                     layer._name = f"conv2d_{conv_index}"
                     conv_index += 1
@@ -179,9 +181,9 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
     constructor = np.zeros if return_numpy else tf.zeros
     hiddens = []
     if len(model.input_shape)==1:
-        lool = model.input_shape[0][1:]
+        lool = model.input_shape[0][0:]
     else:
-        lool = model.input_shape[2:]
+        lool = model.input_shape[1:]
 
     for input_shape in lool:  # ignore 1st output, as is this control output
         hidden = []
