@@ -22,7 +22,7 @@ sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
 
-CSV_NAME = "data_out.csv"
+CSV_NAME = "data_out_base.csv"
 CSV_NAME_2 = "data_in.csv"
 POS_CSV = "pos.csv"
 
@@ -118,11 +118,13 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
         try:
             df = pd.read_csv(os.path.join(run_abs, 'log_0.csv'), header=0)
             df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
+            df = pd.read_csv(os.path.join(run_abs, 'log_1.csv'), header=0)
+            df_training2 = process_csv(df, os.path.join(out_dir, run_out_dir))
             df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
             #skip first row
             df_training = df_training[1:]
             # duplicate all columns
-            df_training = pd.concat([df_training, df_training], axis=1, ignore_index=False)
+            df_training = pd.concat([df_training, df_training2], axis=1, ignore_index=False)
             df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
             df_training_pos = df_training_pos[1:]
             df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
