@@ -11,7 +11,7 @@ def process_dataset(root, label_scale):
     run_dirs = os.listdir(root)  # should be directories named run%03d
     n = len(run_dirs)
     dataset = np.empty((n, 64, 256, 256, 3), dtype=np.uint8)
-    labels = np.empty((n, 64, 4))
+    labels = np.empty((n, 64, 4+4))
     for (dx, d) in enumerate(run_dirs):
         for i in range(len(os.listdir(os.path.join(root, d))) - 1):
             dataset[dx, i] = imread(os.path.join(root, d, '%03d.jpg' % i))
@@ -35,14 +35,14 @@ def get_output_normalization(root):
         print('Loading training data output means from: %s' % training_output_mean_fn)
         output_means = np.genfromtxt(training_output_mean_fn, delimiter=',')
     else:
-        output_means = np.zeros(4)
+        output_means = np.zeros(4+4)
 
     training_output_std_fn = os.path.join(root, 'stats', 'training_output_stds.csv')
     if os.path.exists(training_output_std_fn):
         print('Loading training data output std from: %s' % training_output_std_fn)
         output_stds = np.genfromtxt(training_output_std_fn, delimiter=',')
     else:
-        output_stds = np.ones(4)
+        output_stds = np.ones(4+4)
 
     return output_means, output_stds
 
@@ -55,6 +55,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
         svb = sub_feature['input_vector'].batch(seq_len, drop_remainder=True)
         slb = sub_label.batch(seq_len, drop_remainder=True)
         return tf.data.Dataset.zip(({"input_image":sib, "input_vector":svb}, slb))
+        #return tf.data.Dataset.zip(({"input_image":sib}, slb))
         # return sub.batch(seq_len, drop_remainder=True)
 
     dirs = sorted(os.listdir(root))
@@ -66,10 +67,10 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
     for (run_number, d) in tqdm(enumerate(dirs)):
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
 
-        if labels.shape[1] == 4:
+        if labels.shape[1] == 4+4:
             labels = (labels - output_means) / output_stds
             # labels = labels * label_scale
-        elif labels.shape[1] == 5:
+        elif labels.shape[1] == 5+4:
             labels = (labels[:, 1:] - output_means) / output_stds
             # labels = labels[:,1:] * label_scale
         else:
@@ -86,13 +87,15 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
             img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending))).convert('RGB')
             dataset_np[ix] = img
 
-        dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
+        #dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
+        dataset_vu = np.zeros(len(dataset_np))
 
         assert len(dataset_vu) == len(dataset_np), 'number of images should be equal to number of values'
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
         values_dataset = tf.data.Dataset.from_tensor_slices(dataset_vu)
         dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_vector":values_dataset}, labels_dataset))
+        #dataset = tf.data.Dataset.zip(({"input_image":images_dataset}, labels_dataset))
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
         datasets.append(dataset)
 
@@ -172,7 +175,7 @@ def frames_to_array_rnn(root, dirs, image_size, seq_len):
     n_batches = min(int(np.ceil(max_run_length / seq_len)), run_len_threshold)
     data = np.zeros((n_batches, n_runs + total_extra_runs, seq_len, *image_size), dtype=np.uint8)
     full_batch_size = n_runs + total_extra_runs
-    labels = np.zeros((n_batches, full_batch_size, seq_len, 4))
+    labels = np.zeros((n_batches, full_batch_size, seq_len, 4+4))
     print('Data shape: ', data.shape)
     for (ix, dname) in enumerate(dirs):
         print('Loading directory %d of %d (%s)' % (ix, n_runs, dname))

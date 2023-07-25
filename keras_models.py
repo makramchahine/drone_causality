@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, inputs_value, x = generate_network_trunk(
+    inputs_image, x = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -197,15 +197,15 @@ def generate_ctrnn_model(rnn_sizes,
             rnn_cell = MixedCfcCell(units=s, hparams=config)
         elif ct_network_type == "wiredcfccell":
             wiring = kncp.wirings.NCP(
-                inter_neurons=18,  # Number of inter neurons
-                command_neurons=12,  # Number of command neurons
-                motor_neurons=4,  # Number of motor neurons
-                sensory_fanout=6,  # How many outgoing synapses has each sensory neuron
-                inter_fanout=4,  # How many outgoing synapses has each inter neuron
-                recurrent_command_synapses=4,  # Now many recurrent synapses are in the
+                inter_neurons=18+4,  # Number of inter neurons
+                command_neurons=12+4,  # Number of command neurons
+                motor_neurons=4+4,  # Number of motor neurons
+                sensory_fanout=6+4,  # How many outgoing synapses has each sensory neuron
+                inter_fanout=4+4,  # How many outgoing synapses has each inter neuron
+                recurrent_command_synapses=4+4,  # Now many recurrent synapses are in the
                 # command neuron
                 # layer
-                motor_fanin=6,  # How many incoming syanpses has each motor neuron,
+                motor_fanin=6+4,  # How many incoming syanpses has each motor neuron,
                 seed=kwargs.get("wiredcfc_seed", DEFAULT_NCP_SEED),  # random seed to generate connections between nodes
             )
             rnn_cell = WiredCfcCell(wiring=wiring, mode="default")
@@ -228,18 +228,34 @@ def generate_ctrnn_model(rnn_sizes,
                 all_hidden_outputs.extend(hidden_outputs)
 
         else:
-            x = keras.layers.RNN(rnn_cell,
+            rnn = keras.layers.RNN(rnn_cell,
                                  batch_input_shape=(batch_size, seq_len,
                                                     x.shape[-1]),
                                  return_sequences=True,
                                  stateful=rnn_stateful,
-                                 time_major=False)(x)
+                                 time_major=False)
+            v1 = rnn(x)
 
-    x = keras.layers.Dense(units=4, activation='linear')(x)
+        x = keras.layers.Dense(units=128, activation='linear')(v1)
+        
+        twornn = False
+        if twornn:
+            rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
+            rnn2 = keras.layers.RNN(rnn_cell2,
+                                 batch_input_shape=(batch_size, seq_len,
+                                                    x.shape[-1]),
+                                 return_sequences=True,
+                                 stateful=rnn_stateful,
+                                 time_major=False)
+            v2 = rnn2(x)
+        else:
+            v2 = rnn(x)
+        v = keras.layers.concatenate([v1[:, :, 0:4], v2[:, :, 0:4]], axis=-1)
+
     if single_step:
-        ctrnn_model = keras.Model([inputs_image, inputs_value, *all_hidden_inputs], [x, *all_hidden_outputs])
+        ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [v, *all_hidden_outputs])
     else:
-        ctrnn_model = keras.Model([inputs_image, inputs_value], [x])
+        ctrnn_model = keras.Model([inputs_image], [v])
 
     return ctrnn_model
 
@@ -384,13 +400,13 @@ def generate_network_trunk(seq_len,
 
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
-        inputs_value = keras.Input(shape=(2,), name="input_vector")
+        #inputs_value = keras.Input(shape=(3,), name="input_vector")
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
-        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
+        #inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 3), name="input_vector")
 
     xi = inputs_image
-    xp = inputs_value
+    #xp = inputs_value
 
     if not no_norm_layer:
         xi = generate_normalization_layers(xi, single_step)
@@ -414,13 +430,15 @@ def generate_network_trunk(seq_len,
     xi = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xi)
     xi = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xi)
 
-    xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
-    xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+    #xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
+    #xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
 
     # x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
     # concatenate xi and xp using tf.concat along the last axis
-    print(xi.shape, xp.shape)
+    #print(xi.shape, xp.shape)
     #x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
-    x = tf.concat([xi, xp], axis=-1)
+    #x = tf.concat([xi, xp], axis=-1)
 
-    return inputs_image, inputs_value, x
+    x = xi
+
+    return inputs_image, x

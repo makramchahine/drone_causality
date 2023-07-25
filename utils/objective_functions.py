@@ -14,7 +14,7 @@ from utils.model_utils import NCPParams, CTRNNParams, LSTMParams, TCNParams
 
 # args to train_model that are shared between all objective function types
 COMMON_TRAIN_PARAMS = {
-    "epochs": 200,
+    "epochs": 300,
     "val_split": 0.05,
     "opt": "adam",
     "data_shift": 16,
@@ -108,6 +108,7 @@ def ctrnn_objective_base(trial: Trial, data_dir: str, batch_size: int, ct_networ
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
 
     lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
+    #lr = 1e5
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
@@ -186,6 +187,8 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs:
 
     lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
+    #lr = 0.001
+    #decay_rate = 0.9975
 
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
@@ -239,8 +242,10 @@ def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int, **train
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
 
     lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
+    #lr = 0.01
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
-
+    print(f"decay_rate: {decay_rate}")
+    #decay_rate = 0.95
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 
     model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type="wiredcfccell", wiredcfc_seed=wiredcfc_seed,
