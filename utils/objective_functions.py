@@ -14,7 +14,7 @@ from utils.model_utils import NCPParams, CTRNNParams, LSTMParams, TCNParams
 
 # args to train_model that are shared between all objective function types
 COMMON_TRAIN_PARAMS = {
-    "epochs": 300,
+    "epochs": 100,
     "val_split": 0.05,
     "opt": "adam",
     "data_shift": 16,

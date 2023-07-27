@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, x = generate_network_trunk(
+    inputs_image, inputs_image2, inputs_value, x, x2 = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -234,11 +234,15 @@ def generate_ctrnn_model(rnn_sizes,
                                  return_sequences=True,
                                  stateful=rnn_stateful,
                                  time_major=False)
-            v1 = rnn(x)
+            x = rnn(x)
 
-        x = keras.layers.Dense(units=128, activation='linear')(v1)
+        v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
+        comm = keras.layers.Dense(units=128, activation='linear')(x)
         
-        twornn = False
+        rnn2_input = keras.layers.concatenate([comm, x2, inputs_value], axis=-1)
+        rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
+
+        twornn = True
         if twornn:
             rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
             rnn2 = keras.layers.RNN(rnn_cell2,
@@ -247,15 +251,22 @@ def generate_ctrnn_model(rnn_sizes,
                                  return_sequences=True,
                                  stateful=rnn_stateful,
                                  time_major=False)
-            v2 = rnn2(x)
         else:
-            v2 = rnn(x)
-        v = keras.layers.concatenate([v1[:, :, 0:4], v2[:, :, 0:4]], axis=-1)
+            rnn_cell2 = rnn_cell
+            if not single_step:
+                rnn2 = rnn
+        
+        if single_step:
+            continue
+        else:
+            x = rnn2(rnn2_input)
+        v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
+        v = keras.layers.concatenate([v1, v2], axis=-1)
 
     if single_step:
-        ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [v, *all_hidden_outputs])
+        ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value, *all_hidden_inputs], [v, comm, *all_hidden_outputs])
     else:
-        ctrnn_model = keras.Model([inputs_image], [v])
+        ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value], [v])
 
     return ctrnn_model
 
@@ -400,45 +411,67 @@ def generate_network_trunk(seq_len,
 
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
-        #inputs_value = keras.Input(shape=(3,), name="input_vector")
+        inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
+        inputs_value = keras.Input(shape=(2,), name="input_vector")
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
-        #inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 3), name="input_vector")
+        inputs_image2 = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
+        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
 
     xi = inputs_image
-    #xp = inputs_value
+    xi2 = inputs_image2
+    xp = inputs_value
 
     if not no_norm_layer:
         xi = generate_normalization_layers(xi, single_step)
+        xi2 = generate_normalization_layers(xi2, single_step)
 
     if augmentation_params is not None:
         xi = generate_augmentation_layers(xi, augmentation_params, single_step)
+        xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
+
+    seq = keras.Sequential()
 
     # Conv Layers
-    xi = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
-        xi)
-    xi = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
-        xi)
-    xi = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
-        xi)
-    xi = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step)(
-        xi)
-    xi = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step)(
-        xi)
+    seq.add(wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step))
+    seq.add(wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step))
+    seq.add(wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step))
+    seq.add(wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step))
+    seq.add(wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step))
 
-    xi = wrap_time(keras.layers.Flatten(), single_step)(xi)
-    xi = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xi)
-    xi = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xi)
+    seq.add(wrap_time(keras.layers.Flatten(), single_step))
+    seq.add(wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step))
+    seq.add(wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step))
 
-    #xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
-    #xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+    xi = seq(xi)
+    xi2 = seq(xi2)
+    #xi = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
 
-    # x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
+    #xi = wrap_time(keras.layers.Flatten(), single_step)(xi)
+    #xi = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xi)
+    #xi = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xi)
+
+    xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
+    xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+
+    #x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
+    #x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
     # concatenate xi and xp using tf.concat along the last axis
     #print(xi.shape, xp.shape)
     #x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
-    #x = tf.concat([xi, xp], axis=-1)
+    x = tf.concat([xi, xp], axis=-1)
+    x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
 
-    x = xi
+    #x = xi
+    x2 = xi2
 
-    return inputs_image, x
+    return inputs_image, inputs_image2, inputs_value, x, x2
