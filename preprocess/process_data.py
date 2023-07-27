@@ -118,49 +118,52 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
         try:
             df = pd.read_csv(os.path.join(run_abs, 'log_0.csv'), header=0)
             df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
-            df = pd.read_csv(os.path.join(run_abs, 'log_1.csv'), header=0)
-            df_training2 = process_csv(df, os.path.join(out_dir, run_out_dir))
+            # df = pd.read_csv(os.path.join(run_abs, 'log_1.csv'), header=0)
+            # df_training2 = process_csv(df, os.path.join(out_dir, run_out_dir))
             df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
             #skip first row
             df_training = df_training[1:]
             # duplicate all columns
-            df_training = pd.concat([df_training, df_training2], axis=1, ignore_index=False)
+            # df_training = pd.concat([df_training, df_training2], axis=1, ignore_index=False)
             df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
             df_training_pos = df_training_pos[1:]
             df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
 
-            # df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
-            # df.columns = ['direction']
-            # # create a new df with 2
-            # # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
-            # # if the value is equal to -1 write a line containing the values 0 and 1
-            # nu_df = pd.DataFrame(columns=['R0', 'L0', 'R1', 'L1'])
-            # leader_i = random.choice([0, 1])
-            # for index, row in df.iterrows():
-            #     if row['direction'] == 1:
-            #         nu_df.loc[index] = [1, 0, 0, 0] if leader_i == 0 else [0, 0, 1, 0]
-            #     elif row['direction'] == -1:
-            #         nu_df.loc[index] = [0, 1, 0, 0] if leader_i == 0 else [0, 0, 0, 1]
-            #     else:
-            #         raise ValueError("Invalid value in direction column")
-            # nu_df = nu_df[1:]
-            # nu_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
+            df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
+            df.columns = ['direction']
+            # create a new df with 2
+            # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
+            # if the value is equal to -1 write a line containing the values 0 and 1
+            nu_df = pd.DataFrame(columns=['L', 'R'])
+            for index, row in df.iterrows():
+                if row['direction'] == 1:
+                    nu_df.loc[index] = [1, 0]
+                elif row['direction'] == -1:
+                    nu_df.loc[index] = [0, 1]
+                else:
+                    raise ValueError("Invalid value in direction column")
+            nu_df = nu_df[1:]
+            nu_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
 
         except FileNotFoundError:
             print(f"Could not find csv for run {run_dir}. Assuming already processed and copying existing csv")
             shutil.copy(os.path.join(run_abs, CSV_NAME), os.path.join(out_dir, run_out_dir, CSV_NAME))
 
-        img_files = sorted(os.listdir(run_abs))
-        img_files = [os.path.join(run_abs, img) for img in img_files if "png" in img]
-        img_files = img_files[1:]
+        # for d, letter in zip(range(2), ["a", "b"]):
+        for d, letter in zip(range(1), ["a"]):
+            img_files = sorted(os.listdir(run_abs+f"/pics{d}"))
+            img_files = [os.path.join(run_abs, f"pics{d}", img) for img in img_files if "png" in img]
+            img_files = img_files[1:]
 
-        for (ix, im_path) in enumerate(img_files):
-            img_out_path = os.path.join(out_dir, run_out_dir, '%06d.png' % ix)
-            if os.path.exists(img_out_path):
-                continue
-            img = Image.open(im_path)
-            im_smaller = process_image(img, flip_channels)
-            im_smaller.save(img_out_path)
+
+            for (ix, im_path) in enumerate(img_files):
+                # f format string for ix with 6 digits:
+                img_out_path = os.path.join(out_dir, run_out_dir, f'{ix:06d}{letter}.png')
+                if os.path.exists(img_out_path):
+                    continue
+                img = Image.open(im_path)
+                im_smaller = process_image(img, flip_channels)
+                im_smaller.save(img_out_path)
     # for run_dir in tqdm(dirs):
     #     process_one_run(run_dir)
     # run image processing in different threads
