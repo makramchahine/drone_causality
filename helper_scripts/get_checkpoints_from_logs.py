@@ -86,6 +86,7 @@ def read_json(path):
 
 def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
     json_map = defaultdict(list)
+    loss_map = defaultdict(dict)
     # separate jsons by class
     re_match = re.compile("(?:hyperparam_tuning_)?(.*)_\d_train_results.json")
     for file in os.listdir(json_dir):
@@ -97,6 +98,8 @@ def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
             try:
                 parsed = read_json(json_path)
                 json_map[model_type].append(parsed)
+                loss_map[model_type]["loss"] = parsed["loss"]
+                loss_map[model_type]["val_loss"] = parsed["val_loss"]
             except JSONDecodeError:
                 print(f"Could not parse json at {json_path}, skipping")
                 continue
@@ -114,6 +117,9 @@ def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
 
         with open(os.path.join(dest, "params.json"), "w") as f:
             json.dump(params_map, f)
+
+    with open(os.path.join(out_dir, "loss.json"), "w") as f:
+        json.dump(loss_map, f)
 
 
 if __name__ == "__main__":

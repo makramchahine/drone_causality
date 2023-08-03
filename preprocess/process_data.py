@@ -21,8 +21,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
-
-CSV_NAME = "data_out_base.csv"
+normalize = True
+CSV_NAME = "data_out_base.csv" if normalize else "data_out.csv"
 CSV_NAME_2 = "data_in.csv"
 POS_CSV = "pos.csv"
 
@@ -108,7 +108,7 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
     Processes all runs collected in the session by data_dir and saves to out_dir
     """
     dirs = os.listdir(data_dir)
-    dirs = sorted([d for d in dirs if 'csv' not in d])
+    dirs = sorted([d for d in dirs if ('csv' not in d and 'mp4' not in d)])
 
     def process_one_run(run_dir: str):
         run_abs = os.path.join(data_dir, run_dir)

@@ -317,6 +317,8 @@ def calculate_objective(trial: Trial, result: Tuple[History, str]):
     trial.set_user_attr("best_val_loss", losses[best_val, 1])
 
     trial.set_user_attr("trial_time", time.time())
+    trial.set_user_attr("losses", history.history["loss"])
+    trial.set_user_attr("val_losses", history.history["val_loss"])
 
     objective = loss_sums[best_epoch]
     return objective

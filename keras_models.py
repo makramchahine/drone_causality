@@ -199,7 +199,7 @@ def generate_ctrnn_model(rnn_sizes,
             wiring = kncp.wirings.NCP(
                 inter_neurons=18+4,  # Number of inter neurons
                 command_neurons=12+4,  # Number of command neurons
-                motor_neurons=4+4,  # Number of motor neurons
+                motor_neurons=4,  # Number of motor neurons
                 sensory_fanout=6+4,  # How many outgoing synapses has each sensory neuron
                 inter_fanout=4+4,  # How many outgoing synapses has each inter neuron
                 recurrent_command_synapses=4+4,  # Now many recurrent synapses are in the command neuron layer
@@ -235,49 +235,50 @@ def generate_ctrnn_model(rnn_sizes,
             x = rnn(x)
 
     v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
-    comm = keras.layers.Dense(units=128, activation='linear')(x)
+    v = v1
+    # comm = keras.layers.Dense(units=128, activation='linear')(x)
 
-    rnn2_input = keras.layers.concatenate([comm, x2], axis=-1)
-    rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
+    # rnn2_input = keras.layers.concatenate([comm, x2], axis=-1)
+    # rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
     
-    twornn = True
-    if twornn:
-        rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
-        rnn2 = keras.layers.RNN(rnn_cell2,
-                batch_input_shape=(batch_size, seq_len,
-                                x.shape[-1]),
-                return_sequences=True,
-                stateful=rnn_stateful,
-                time_major=False)
-    else:
-        rnn_cell2 = rnn_cell
-        if not single_step:
-            rnn2 = rnn
+    # twornn = True
+    # if twornn:
+    #     rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
+    #     rnn2 = keras.layers.RNN(rnn_cell2,
+    #             batch_input_shape=(batch_size, seq_len,
+    #                             x.shape[-1]),
+    #             return_sequences=True,
+    #             stateful=rnn_stateful,
+    #             time_major=False)
+    # else:
+    #     rnn_cell2 = rnn_cell
+    #     if not single_step:
+    #         rnn2 = rnn
 
-    if single_step:
-        if isinstance(rnn_cell2.state_size, int):
-            # only 1 hidden state
-            hidden_inputs = [tf.keras.Input(shape=rnn_cell2.state_size)]
-            x, hidden = rnn_cell2(rnn2_input, hidden_inputs)  # assume hidden is list of length 1 with tensor
-            all_hidden_inputs.extend(hidden_inputs)
-            all_hidden_outputs.extend(hidden)
-        else:
-            # multiple hiddens
-            hidden_inputs = [tf.keras.Input(shape=size) for size in rnn_cell2.state_size]
-            x, hidden_outputs = rnn_cell2(rnn2_input, hidden_inputs)
-            all_hidden_inputs.extend(hidden_inputs)
-            all_hidden_outputs.extend(hidden_outputs)
-    else:
-        x = rnn2(rnn2_input)
+    # if single_step:
+    #     if isinstance(rnn_cell2.state_size, int):
+    #         # only 1 hidden state
+    #         hidden_inputs = [tf.keras.Input(shape=rnn_cell2.state_size)]
+    #         x, hidden = rnn_cell2(rnn2_input, hidden_inputs)  # assume hidden is list of length 1 with tensor
+    #         all_hidden_inputs.extend(hidden_inputs)
+    #         all_hidden_outputs.extend(hidden)
+    #     else:
+    #         # multiple hiddens
+    #         hidden_inputs = [tf.keras.Input(shape=size) for size in rnn_cell2.state_size]
+    #         x, hidden_outputs = rnn_cell2(rnn2_input, hidden_inputs)
+    #         all_hidden_inputs.extend(hidden_inputs)
+    #         all_hidden_outputs.extend(hidden_outputs)
+    # else:
+    #     x = rnn2(rnn2_input)
         
-    v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
+    # v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
 
-    v = keras.layers.concatenate([v1, v2], axis=-1)
+    # v = keras.layers.concatenate([v1, v2], axis=-1)
 
     if single_step:
-        ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value, *all_hidden_inputs], [v, comm, *all_hidden_outputs])
+        ctrnn_model = keras.Model([inputs_image, inputs_value, *all_hidden_inputs], [v, *all_hidden_outputs])
     else:
-        ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value], [v, comm])
+        ctrnn_model = keras.Model([inputs_image, inputs_value], [v])
 
     return ctrnn_model
 

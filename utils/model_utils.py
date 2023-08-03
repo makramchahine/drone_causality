@@ -183,7 +183,7 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
     if len(model.input_shape)==1:
         lool = model.input_shape[0][0:]
     else:
-        lool = model.input_shape[3:]
+        lool = model.input_shape[2:]
 
     for input_shape in lool:  # ignore 1st output, as is this control output
         hidden = []
