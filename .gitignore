@@ -15,6 +15,7 @@ __pycache__
 # Data
 data/*
 **/model_checkpoints/*
+filtered*
 processed-data/*
 training-histories/*
 model-piloted-runs/*

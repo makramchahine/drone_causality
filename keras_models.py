@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, inputs_image2, inputs_value, x, x2 = generate_network_trunk(
+    inputs_image, inputs_value, x = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -199,7 +199,7 @@ def generate_ctrnn_model(rnn_sizes,
             wiring = kncp.wirings.NCP(
                 inter_neurons=18+4,  # Number of inter neurons
                 command_neurons=12+4,  # Number of command neurons
-                motor_neurons=4+4,  # Number of motor neurons
+                motor_neurons=4,  # Number of motor neurons
                 sensory_fanout=6+4,  # How many outgoing synapses has each sensory neuron
                 inter_fanout=4+4,  # How many outgoing synapses has each inter neuron
                 recurrent_command_synapses=4+4,  # Now many recurrent synapses are in the
@@ -235,38 +235,39 @@ def generate_ctrnn_model(rnn_sizes,
                                  stateful=rnn_stateful,
                                  time_major=False)
             x = rnn(x)
-
-        v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
-        comm = keras.layers.Dense(units=128, activation='linear')(x)
+        v = x
+        #v = x[:, 0:4] if single_step else x[:, :, 0:4]
+        #v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
+        #comm = keras.layers.Dense(units=128, activation='linear')(x)
         
-        rnn2_input = keras.layers.concatenate([comm, x2, inputs_value], axis=-1)
-        rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
+        #rnn2_input = keras.layers.concatenate([comm, x2, inputs_value], axis=-1)
+        #rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
 
-        twornn = True
-        if twornn:
-            rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
-            rnn2 = keras.layers.RNN(rnn_cell2,
-                                 batch_input_shape=(batch_size, seq_len,
-                                                    x.shape[-1]),
-                                 return_sequences=True,
-                                 stateful=rnn_stateful,
-                                 time_major=False)
-        else:
-            rnn_cell2 = rnn_cell
-            if not single_step:
-                rnn2 = rnn
-        
-        if single_step:
-            continue
-        else:
-            x = rnn2(rnn2_input)
-        v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
-        v = keras.layers.concatenate([v1, v2], axis=-1)
+        #twornn = True
+        #if twornn:
+        #    rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
+#            rnn2 = keras.layers.RNN(rnn_cell2,
+#                                 batch_input_shape=(batch_size, seq_len,
+#                                                    x.shape[-1]),
+#                                 return_sequences=True,
+#                                 stateful=rnn_stateful,
+#                                 time_major=False)
+#        else:
+#            rnn_cell2 = rnn_cell
+#            if not single_step:
+#                rnn2 = rnn
+#        
+#        if single_step:
+#            continue
+#        else:
+#            x = rnn2(rnn2_input)
+#        v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
+#        v = keras.layers.concatenate([v1, v2], axis=-1)
 
     if single_step:
         ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value, *all_hidden_inputs], [v, comm, *all_hidden_outputs])
     else:
-        ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value], [v])
+        ctrnn_model = keras.Model([inputs_image, inputs_value], [v])
 
     return ctrnn_model
 
@@ -411,24 +412,24 @@ def generate_network_trunk(seq_len,
 
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
-        inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
+        #inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
         inputs_value = keras.Input(shape=(2,), name="input_vector")
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
-        inputs_image2 = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
+        #inputs_image2 = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
         inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
 
     xi = inputs_image
-    xi2 = inputs_image2
+    #xi2 = inputs_image2
     xp = inputs_value
 
     if not no_norm_layer:
         xi = generate_normalization_layers(xi, single_step)
-        xi2 = generate_normalization_layers(xi2, single_step)
+        #xi2 = generate_normalization_layers(xi2, single_step)
 
     if augmentation_params is not None:
         xi = generate_augmentation_layers(xi, augmentation_params, single_step)
-        xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
+        #xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
 
     seq = keras.Sequential()
 
@@ -444,7 +445,7 @@ def generate_network_trunk(seq_len,
     seq.add(wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step))
 
     xi = seq(xi)
-    xi2 = seq(xi2)
+    #xi2 = seq(xi2)
     #xi = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
     #    xi)
     #xi = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
@@ -472,6 +473,6 @@ def generate_network_trunk(seq_len,
     x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
 
     #x = xi
-    x2 = xi2
+    #x2 = xi2
 
-    return inputs_image, inputs_image2, inputs_value, x, x2
+    return inputs_image, inputs_value, x
