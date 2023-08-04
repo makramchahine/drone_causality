@@ -22,6 +22,7 @@ sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
 normalize = True
+num_drones = 1
 CSV_NAME = "data_out_base.csv" if normalize else "data_out.csv"
 CSV_NAME_2 = "data_in.csv"
 POS_CSV = "pos.csv"
@@ -118,13 +119,15 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
         try:
             df = pd.read_csv(os.path.join(run_abs, 'log_0.csv'), header=0)
             df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
-            # df = pd.read_csv(os.path.join(run_abs, 'log_1.csv'), header=0)
-            # df_training2 = process_csv(df, os.path.join(out_dir, run_out_dir))
+            if num_drones > 1:
+                df = pd.read_csv(os.path.join(run_abs, 'log_1.csv'), header=0)
+                df_training2 = process_csv(df, os.path.join(out_dir, run_out_dir))
             df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
             #skip first row
             df_training = df_training[1:]
             # duplicate all columns
-            # df_training = pd.concat([df_training, df_training2], axis=1, ignore_index=False)
+            if num_drones > 1:
+                df_training = pd.concat([df_training, df_training2], axis=1, ignore_index=False)
             df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
             df_training_pos = df_training_pos[1:]
             df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
@@ -149,8 +152,8 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
             print(f"Could not find csv for run {run_dir}. Assuming already processed and copying existing csv")
             shutil.copy(os.path.join(run_abs, CSV_NAME), os.path.join(out_dir, run_out_dir, CSV_NAME))
 
-        # for d, letter in zip(range(2), ["a", "b"]):
-        for d, letter in zip(range(1), ["a"]):
+        zipped = zip(range(2), ["a", "b"]) if num_drones > 1 else zip(range(1), ["a"])
+        for d, letter in zipped:
             img_files = sorted(os.listdir(run_abs+f"/pics{d}"))
             img_files = [os.path.join(run_abs, f"pics{d}", img) for img in img_files if "png" in img]
             img_files = img_files[1:]
