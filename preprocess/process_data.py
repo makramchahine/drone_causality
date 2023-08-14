@@ -22,7 +22,7 @@ sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
 normalize = True
-num_drones = 1
+num_drones = 2
 CSV_NAME = "data_out_base.csv" if normalize else "data_out.csv"
 CSV_NAME_2 = "data_in.csv"
 POS_CSV = "pos.csv"
