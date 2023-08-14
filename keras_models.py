@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, inputs_image2, inputs_value, x, x2 = generate_network_trunk(
+    inputs_image, inputs_image2, inputs_value, x, x2, instr_translate = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -199,7 +199,7 @@ def generate_ctrnn_model(rnn_sizes,
             wiring = kncp.wirings.NCP(
                 inter_neurons=18+4,  # Number of inter neurons
                 command_neurons=12+4,  # Number of command neurons
-                motor_neurons=4+2,  # Number of motor neurons
+                motor_neurons=4+1,  # Number of motor neurons
                 sensory_fanout=6+4,  # How many outgoing synapses has each sensory neuron
                 inter_fanout=4+4,  # How many outgoing synapses has each inter neuron
                 recurrent_command_synapses=4+4,  # Now many recurrent synapses are in the
@@ -238,13 +238,14 @@ def generate_ctrnn_model(rnn_sizes,
         #v = x
         v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
         comm = x[:, 4:] if single_step else x[:, :, 4:]
+        #comm = instr_translate(comm)
         comm = keras.layers.Dense(units=128, activation='linear')(comm)
         
         #rnn2_input = keras.layers.concatenate([comm, x2, inputs_value], axis=-1)
         rnn2_input = keras.layers.concatenate([comm, x2], axis=-1)
         rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
 
-        twornn = True
+        twornn = False
         if twornn:
             rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
             rnn2 = keras.layers.RNN(rnn_cell2,
@@ -462,8 +463,10 @@ def generate_network_trunk(seq_len,
     #xi = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xi)
     #xi = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xi)
 
-    xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
-    xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+    #xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
+    #xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+    instr_translate = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)
+    xp = instr_translate(xp)
 
     #x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
     #x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
@@ -476,4 +479,4 @@ def generate_network_trunk(seq_len,
     #x = xi
     x2 = xi2
 
-    return inputs_image, inputs_image2, inputs_value, x, x2
+    return inputs_image, inputs_image2, inputs_value, x, x2, instr_translate
