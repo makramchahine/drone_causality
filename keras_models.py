@@ -245,7 +245,7 @@ def generate_ctrnn_model(rnn_sizes,
         rnn2_input = keras.layers.concatenate([comm, x2], axis=-1)
         rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
 
-        twornn = False
+        twornn = True
         if twornn:
             rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
             rnn2 = keras.layers.RNN(rnn_cell2,
@@ -415,11 +415,11 @@ def generate_network_trunk(seq_len,
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
         inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
-        inputs_value = keras.Input(shape=(2,), name="input_vector")
+        inputs_value = keras.Input(shape=(6,), name="input_vector")
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
         inputs_image2 = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
-        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
+        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 6), name="input_vector")
 
     xi = inputs_image
     xi2 = inputs_image2

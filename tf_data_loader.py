@@ -65,7 +65,9 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
     output_means, output_stds = get_output_normalization(root)
 
-    for (run_number, d) in tqdm(enumerate(dirs)):
+    #for (run_number, d) in tqdm(enumerate(dirs)):
+    dataset_dirs = tf.data.Dataset.from_tensor_slices(dirs)
+    def process_directory(d):
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
 
         if labels.shape[1] == 4+4:
@@ -102,7 +104,10 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
         dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_image2":images_dataset2, "input_vector":values_dataset}, labels_dataset))
         #dataset = tf.data.Dataset.zip(({"input_image":images_dataset}, labels_dataset))
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
-        datasets.append(dataset)
+        return dataset
+        #datasets.append(dataset)
+
+    datasets = dataset_dirs.map(process_directory, num_parallel_calls=tf.data.AUTOTUNE)
 
     return datasets
 
