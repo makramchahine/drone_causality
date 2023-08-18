@@ -7,7 +7,6 @@ from matplotlib.image import imread
 from tqdm import tqdm
 import functools
 
-
 def process_dataset(root, label_scale):
     run_dirs = os.listdir(root)  # should be directories named run%03d
     n = len(run_dirs)
@@ -47,22 +46,47 @@ def get_output_normalization(root):
 
     return output_means, output_stds
 
-def load_image(ix, root, d, file_ending):
-    img = Image.open(os.path.join(root, d, '%06da.%s' % (ix, file_ending))).convert('RGB')
-    img2 = Image.open(os.path.join(root, d, '%06db.%s' % (ix, file_ending))).convert('RGB')
-    return img, img2
+def sub_to_batch(sub_feature, sub_label, seq_len):
+    sib = sub_feature['input_image'].batch(seq_len, drop_remainder=True)
+    sib2 = sub_feature['input_image2'].batch(seq_len, drop_remainder=True)
+    svb = sub_feature['input_vector'].batch(seq_len, drop_remainder=True)
+    slb = sub_label.batch(seq_len, drop_remainder=True)
+    return tf.data.Dataset.zip(({"input_image":sib, "input_image2":sib2, "input_vector":svb}, slb))
+
+def process_directory(d, root, image_size, file_ending, seq_len, shift, stride):
+    labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
+
+    labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
+
+    n_images = len([fn for fn in os.listdir(os.path.join(root, d)) if file_ending in fn])
+    dataset_np = np.empty((n_images//2, *image_size), dtype=np.uint8)
+    dataset_np2 = np.empty((n_images//2, *image_size), dtype=np.uint8)
+
+    for ix in range(n_images//2):
+        # dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
+        # open image with rgb channels
+        #img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
+        img = Image.open(os.path.join(root, d, '%06da.%s' % (ix, file_ending))).convert('RGB')
+        img2 = Image.open(os.path.join(root, d, '%06db.%s' % (ix, file_ending))).convert('RGB')
+        dataset_np[ix] = img
+        dataset_np2[ix] = img2
+
+    dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
+    #dataset_vu = np.zeros(len(dataset_np))
+
+    assert len(dataset_vu) == len(dataset_np), 'number of images should be equal to number of values'
+
+    images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
+    images_dataset2 = tf.data.Dataset.from_tensor_slices(dataset_np2)
+    values_dataset = tf.data.Dataset.from_tensor_slices(dataset_vu)
+    dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_image2":images_dataset2, "input_vector":values_dataset}, labels_dataset))
+    #dataset = tf.data.Dataset.zip(({"input_image":images_dataset}, labels_dataset))
+    partial_sub_to_batch = functools.partial(sub_to_batch, seq_len=seq_len)
+    dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(partial_sub_to_batch)
+    return dataset
 
 def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
     file_ending = 'png'
-
-    def sub_to_batch(sub_feature, sub_label):
-        sib = sub_feature['input_image'].batch(seq_len, drop_remainder=True)
-        sib2 = sub_feature['input_image2'].batch(seq_len, drop_remainder=True)
-        svb = sub_feature['input_vector'].batch(seq_len, drop_remainder=True)
-        slb = sub_label.batch(seq_len, drop_remainder=True)
-        return tf.data.Dataset.zip(({"input_image":sib, "input_image2":sib2, "input_vector":svb}, slb))
-        #return tf.data.Dataset.zip(({"input_image":sib}, slb))
-        # return sub.batch(seq_len, drop_remainder=True)
 
     dirs = sorted(os.listdir(root))
     dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d and 'DS_Store' not in d]
@@ -70,47 +94,10 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
     output_means, output_stds = get_output_normalization(root)
 
-    from multiprocessing import Pool
+    import multiprocessing
+    pool = multiprocessing.Pool(80)
     for (run_number, d) in tqdm(enumerate(dirs)):
-    # dataset_dirs = tf.data.Dataset.from_tensor_slices(dirs)
-    # def process_directory(d):
-        labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
-
-        if labels.shape[1] == 4+4:
-            labels = (labels - output_means) / output_stds
-            # labels = labels * label_scale
-        elif labels.shape[1] == 5+4:
-            labels = (labels[:, 1:] - output_means) / output_stds
-            # labels = labels[:,1:] * label_scale
-        else:
-            raise Exception('Wrong size of input data (expected 4, got %d' % labels.shape[1])
-        labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
-
-        n_images = len([fn for fn in os.listdir(os.path.join(root, d)) if file_ending in fn])
-        dataset_np = np.empty((n_images//2, *image_size), dtype=np.uint8)
-        dataset_np2 = np.empty((n_images//2, *image_size), dtype=np.uint8)
-
-        with Pool() as p:
-            results = p.map(functools.partial(load_image, root, d, file_ending), range(n_images//2))
-
-        for ix, (img, img2) in enumerate(results):
-            dataset_np[ix] = img
-            dataset_np2[ix] = img2
-
-        dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
-
-        assert len(dataset_vu) == len(dataset_np), 'number of images should be equal to number of values'
-
-        images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
-        images_dataset2 = tf.data.Dataset.from_tensor_slices(dataset_np2)
-        values_dataset = tf.data.Dataset.from_tensor_slices(dataset_vu)
-        dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_image2":images_dataset2, "input_vector":values_dataset}, labels_dataset))
-        #dataset = tf.data.Dataset.zip(({"input_image":images_dataset}, labels_dataset))
-        dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
-        # return dataset
-        datasets.append(dataset)
-
-    # datasets = dataset_dirs.map(process_directory, num_parallel_calls=tf.data.AUTOTUNE)
+        datasets.append(pool.apply_async(process_directory, (d, root, image_size, file_ending, seq_len, shift, stride)))
 
     return datasets
 
