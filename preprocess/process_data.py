@@ -22,7 +22,7 @@ sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
 normalize = True
-num_drones = 2
+num_drones = 1
 CSV_NAME = "data_out_base.csv" if normalize else "data_out.csv"
 CSV_NAME_2 = "data_in.csv"
 POS_CSV = "pos.csv"
@@ -133,16 +133,30 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
             df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
 
             df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
-            df.columns = ['direction']
+            if num_drones > 1:
+                df.columns = ['leader', 'follower']
+            else:
+                df.columns = ['leader']
+            color_map = {
+                'R': [1, 0, 0],
+                'G': [0, 1, 0],
+                'B': [0, 0, 1],
+            }
             # create a new df with 2
             # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
             # if the value is equal to -1 write a line containing the values 0 and 1
-            nu_df = pd.DataFrame(columns=['L', 'R'])
+            if num_drones > 1:
+                nu_df = pd.DataFrame(columns=['R0', 'G0', 'B0', 'R1', 'G1', 'B1'])
+            else:
+                nu_df = pd.DataFrame(columns=['R0', 'G0', 'B0'])
             for index, row in df.iterrows():
-                if row['direction'] == 1:
-                    nu_df.loc[index] = [1, 0]
-                elif row['direction'] == -1:
-                    nu_df.loc[index] = [0, 1]
+                # 6 dimensional vector
+                if num_drones > 1 and row['leader'] in color_map and row['follower'] in color_map:
+                    instr = color_map[row['leader']] + color_map[row['follower']]
+                    nu_df.loc[index] = instr
+                elif num_drones == 1 and row['leader'] in color_map:
+                    instr = color_map[row['leader']]
+                    nu_df.loc[index] = instr
                 else:
                     raise ValueError("Invalid value in direction column")
             nu_df = nu_df[1:]
