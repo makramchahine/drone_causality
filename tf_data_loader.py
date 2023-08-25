@@ -62,7 +62,7 @@ def process_directory(d, root, image_size, file_ending, seq_len, shift, stride):
         dataset_np = np.empty((n_images, *image_size), dtype=np.uint8)
 
         for ix in range(n_images):
-            img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending))).convert('RGB')
+            img = Image.open(os.path.join(root, d, '%06da.%s' % (ix, file_ending))).convert('RGB')
             dataset_np[ix] = img
 
         dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
