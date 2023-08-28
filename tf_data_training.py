@@ -138,7 +138,7 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
 
     time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
 
-    file_path = os.path.join(save_dir, 'model-%s_seq-%d_lr-%f_epoch-{epoch:03d}'
+    file_path = os.path.join(save_dir, 'model-%s_seq-%d_lr-%f_epoch-{epoch:04d}'
                                        '_val-loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
                                  get_readable_name(model_params), model_params.seq_len, lr, time_str))
 
