@@ -247,6 +247,7 @@ def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int, n_epoch
         # decay_rate = 0.98
     print(f"decay_rate: {decay_rate}")
     print(f"lr: {lr}")
+    print(f"data_shift: {train_kwargs['data_shift']}")
     #decay_rate = 0.95
     prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
 

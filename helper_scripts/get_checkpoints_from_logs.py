@@ -124,7 +124,7 @@ def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
                 print(f"Could not parse json at {json_path}, skipping")
                 continue
 
-    print(json_map)
+    print(f"json_map: {json_map}")
     for candidate in ["val", "train"]:
         params_map = {}
         # for each class, get best checkpoint
