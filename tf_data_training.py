@@ -42,28 +42,28 @@ def sequence_augmentation(x, y, aug_params: Dict[str, Any]):
     :return: augmented data input, same data labels
     """
     xi = x["input_image"]
-    # xi2 = x["input_image2"]
+    xi2 = x["input_image2"]
     xv = x["input_vector"]
     bright_range = aug_params.get("brightness", None)
     if bright_range is not None:
         delta = tf.random.uniform((), -bright_range, bright_range)
         xi = tf.image.adjust_brightness(xi, delta)
-        # xi2 = tf.image.adjust_brightness(xi2, delta)
+        xi2 = tf.image.adjust_brightness(xi2, delta)
 
     contrast_range = aug_params.get("contrast", None)
     if contrast_range is not None:
         contrast_factor = tf.random.uniform((), 1 - contrast_range, 1 + contrast_range)
         xi = tf.image.adjust_contrast(xi, contrast_factor)
-        # xi2 = tf.image.adjust_contrast(xi2, contrast_factor)
+        xi2 = tf.image.adjust_contrast(xi2, contrast_factor)
 
     saturation_range = aug_params.get("saturation", None)
     if saturation_range is not None:
         saturation_factor = tf.random.uniform((), 1 - saturation_range, 1 + saturation_range)
         xi = tf.image.adjust_saturation(xi, saturation_factor)
-        # xi2 = tf.image.adjust_saturation(xi2, saturation_factor)
+        xi2 = tf.image.adjust_saturation(xi2, saturation_factor)
 
-    return {"input_image":xi, "input_vector":xv}, y
-    # return {"input_image":xi, "input_image2":xi2, "input_vector":xv}, y
+    # return {"input_image":xi, "input_vector":xv}, y
+    return {"input_image":xi, "input_image2":xi2, "input_vector":xv}, y
 
 
 def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,
@@ -169,6 +169,9 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
             optimizer = keras.optimizers.SGD(learning_rate=lr_schedule, momentum=momentum)
         else:
             raise Exception('Unsupported optimizer type %s' % opt)
+
+        # Add gradient clipping
+        optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer, dynamic=True)
 
         model = get_skeleton(params=model_params)
         model.compile(optimizer=optimizer, loss="mean_squared_error", metrics=['mse'])
