@@ -17,6 +17,7 @@ from keras_models import IMAGE_SHAPE
 from utils.model_utils import ModelParams, NCPParams, LSTMParams, CTRNNParams, TCNParams, get_skeleton, \
     get_readable_name
 
+num_drones = 2
 # physical_devices = tf.config.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -41,27 +42,32 @@ def sequence_augmentation(x, y, aug_params: Dict[str, Any]):
     :return: augmented data input, same data labels
     """
     xi = x["input_image"]
-    # xi2 = x["input_image2"]
+    if num_drones > 1:
+        xi2 = x["input_image2"]
     xv = x["input_vector"]
     bright_range = aug_params.get("brightness", None)
     if bright_range is not None:
         delta = tf.random.uniform((), -bright_range, bright_range)
         xi = tf.image.adjust_brightness(xi, delta)
-        # xi2 = tf.image.adjust_brightness(xi2, delta)
+        if num_drones > 1:
+            xi2 = tf.image.adjust_brightness(xi2, delta)
 
     contrast_range = aug_params.get("contrast", None)
     if contrast_range is not None:
         contrast_factor = tf.random.uniform((), 1 - contrast_range, 1 + contrast_range)
         xi = tf.image.adjust_contrast(xi, contrast_factor)
-        # xi2 = tf.image.adjust_contrast(xi2, contrast_factor)
+        if num_drones > 1:
+            xi2 = tf.image.adjust_contrast(xi2, contrast_factor)
 
     saturation_range = aug_params.get("saturation", None)
     if saturation_range is not None:
         saturation_factor = tf.random.uniform((), 1 - saturation_range, 1 + saturation_range)
         xi = tf.image.adjust_saturation(xi, saturation_factor)
-        # xi2 = tf.image.adjust_saturation(xi2, saturation_factor)
+        if num_drones > 1:
+            xi2 = tf.image.adjust_saturation(xi2, saturation_factor)
 
-    # return {"input_image":xi, "input_image2":xi2, "input_vector":xv}, y
+    if num_drones > 1:
+        return {"input_image":xi, "input_image2":xi2, "input_vector":xv}, y
     return {"input_image":xi, "input_vector":xv}, y
 
 
@@ -161,6 +167,10 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     strategy = tf.distribute.MirroredStrategy(gpus)
     with strategy.scope():
         model = get_skeleton(params=model_params)
+        for layer in model.layers:
+            if hasattr(layer, 'kernel_initializer'):
+                layer.kernel_initializer = tf.keras.initializers.GlorotNormal()
+
         model.compile(optimizer=optimizer, loss="mean_squared_error", metrics=['mse'])
         # Load pretrained weights
         if hotstart is not None:

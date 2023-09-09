@@ -24,6 +24,7 @@ DEFAULT_CFC_CONFIG = {
 }
 DEFAULT_NCP_SEED = 22222
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+num_drones = 2
 
 
 # Shapes for generate_*_model:
@@ -156,8 +157,8 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    # inputs_image, inputs_image2, inputs_value, x, x2, instr_translate = generate_network_trunk(
-    inputs_image, inputs_value, x, instr_translate = generate_network_trunk(
+    inputs_image, inputs_image2, inputs_value, x, x2, instr_translate = generate_network_trunk(
+    # inputs_image, inputs_value, x, instr_translate = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -200,7 +201,7 @@ def generate_ctrnn_model(rnn_sizes,
             wiring = kncp.wirings.NCP(
                 inter_neurons=18+4,  # Number of inter neurons
                 command_neurons=12+4,  # Number of command neurons
-                motor_neurons=4+2,  # Number of motor neurons
+                motor_neurons=4+3,  # Number of motor neurons
                 sensory_fanout=6+4,  # How many outgoing synapses has each sensory neuron
                 inter_fanout=4+4,  # How many outgoing synapses has each inter neuron
                 recurrent_command_synapses=4+4,  # Now many recurrent synapses are in the command neuron layer
@@ -237,56 +238,59 @@ def generate_ctrnn_model(rnn_sizes,
 
     v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
     v = v1
-    # comm_2 = x[:, 4:] if single_step else x[:, :, 4:]
-    # comm = keras.layers.Dense(units=128, activation='linear')(comm_2)
-    # # comm = instr_translate(comm_2)
+    if num_drones > 1:
+        comm_2 = x[:, 4:] if single_step else x[:, :, 4:]
+        comm = keras.layers.Dense(units=128, activation='linear')(comm_2)
+        # comm = instr_translate(comm_2)
 
-    # rnn2_input = keras.layers.concatenate([comm, x2], axis=-1)
-    # rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
-    
-    # twornn = True
-    # if twornn:
-    #     rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
-    #     rnn2 = keras.layers.RNN(rnn_cell2,
-    #             batch_input_shape=(batch_size, seq_len,
-    #                             x.shape[-1]),
-    #             return_sequences=True,
-    #             stateful=rnn_stateful,
-    #             time_major=False)
-    # else:
-    #     rnn_cell2 = rnn_cell
-    #     if not single_step:
-    #         rnn2 = rnn
-
-    # if single_step:
-    #     if isinstance(rnn_cell2.state_size, int):
-    #         # only 1 hidden state
-    #         hidden_inputs = [tf.keras.Input(shape=rnn_cell2.state_size)]
-    #         x, hidden = rnn_cell2(rnn2_input, hidden_inputs)  # assume hidden is list of length 1 with tensor
-    #         all_hidden_inputs.extend(hidden_inputs)
-    #         all_hidden_outputs.extend(hidden)
-    #     else:
-    #         # multiple hiddens
-    #         hidden_inputs = [tf.keras.Input(shape=size) for size in rnn_cell2.state_size]
-    #         x, hidden_outputs = rnn_cell2(rnn2_input, hidden_inputs)
-    #         all_hidden_inputs.extend(hidden_inputs)
-    #         all_hidden_outputs.extend(hidden_outputs)
-    # else:
-    #     x = rnn2(rnn2_input)
+        rnn2_input = keras.layers.concatenate([comm, x2], axis=-1)
+        rnn2_input = keras.layers.Dense(units=128, activation='linear')(rnn2_input)
         
-    # v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
-    # comm_trash = x[:, 4:] if single_step else x[:, :, 4:]
+        twornn = True
+        if twornn:
+            rnn_cell2 = WiredCfcCell(wiring=wiring, mode="default")
+            rnn2 = keras.layers.RNN(rnn_cell2,
+                    batch_input_shape=(batch_size, seq_len,
+                                    x.shape[-1]),
+                    return_sequences=True,
+                    stateful=rnn_stateful,
+                    time_major=False)
+        else:
+            rnn_cell2 = rnn_cell
+            if not single_step:
+                rnn2 = rnn
 
-    # v = keras.layers.concatenate([v1, v2], axis=-1)
+        if single_step:
+            if isinstance(rnn_cell2.state_size, int):
+                # only 1 hidden state
+                hidden_inputs = [tf.keras.Input(shape=rnn_cell2.state_size)]
+                x, hidden = rnn_cell2(rnn2_input, hidden_inputs)  # assume hidden is list of length 1 with tensor
+                all_hidden_inputs.extend(hidden_inputs)
+                all_hidden_outputs.extend(hidden)
+            else:
+                # multiple hiddens
+                hidden_inputs = [tf.keras.Input(shape=size) for size in rnn_cell2.state_size]
+                x, hidden_outputs = rnn_cell2(rnn2_input, hidden_inputs)
+                all_hidden_inputs.extend(hidden_inputs)
+                all_hidden_outputs.extend(hidden_outputs)
+        else:
+            x = rnn2(rnn2_input)
+            
+        v2 = x[:, 0:4] if single_step else x[:, :, 0:4]
+        comm_trash = x[:, 4:] if single_step else x[:, :, 4:]
 
-    # if single_step:
-    #     ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value, *all_hidden_inputs], [v, comm_2, comm_trash, *all_hidden_outputs])
-    # else:
-    #     ctrnn_model = keras.Model([inputs_image, inputs_value], [v, comm_2])
-    if single_step:
-        ctrnn_model = keras.Model([inputs_image, inputs_value, *all_hidden_inputs], [v, *all_hidden_outputs])
+        v = keras.layers.concatenate([v1, v2], axis=-1)
+
+        if single_step:
+            ctrnn_model = keras.Model([inputs_image, inputs_image2, inputs_value, *all_hidden_inputs], [v, comm_2, comm_trash, *all_hidden_outputs])
+        else:
+            ctrnn_model = keras.Model([inputs_image, inputs_value], [v, comm_2])
     else:
-        ctrnn_model = keras.Model([inputs_image, inputs_value], [v])
+        print("Single Drone")
+        if single_step:
+            ctrnn_model = keras.Model([inputs_image, inputs_value, *all_hidden_inputs], [v, *all_hidden_outputs])
+        else:
+            ctrnn_model = keras.Model([inputs_image, inputs_value], [v])
 
     return ctrnn_model
 
@@ -428,27 +432,32 @@ def generate_network_trunk(seq_len,
     Input has shape (batch, h, w, c) if single step is True and (batch, seq, h, w, c) otherwise
 
     """
-
+    input_shape = 3 if num_drones == 1 else 6
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
-        inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
-        inputs_value = keras.Input(shape=(3,), name="input_vector")
+        if num_drones > 1:
+            inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
+        inputs_value = keras.Input(shape=(input_shape,), name="input_vector")
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
-        inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
-        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 3), name="input_vector")
+        if num_drones > 1:
+            inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
+        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, input_shape), name="input_vector")
 
     xi = inputs_image
-    xi2 = inputs_image2
+    if num_drones > 1:
+        xi2 = inputs_image2
     xp = inputs_value
 
     if not no_norm_layer:
         xi = generate_normalization_layers(xi, single_step)
-        xi2 = generate_normalization_layers(xi2, single_step)
+        if num_drones > 1:
+            xi2 = generate_normalization_layers(xi2, single_step)
 
     if augmentation_params is not None:
         xi = generate_augmentation_layers(xi, augmentation_params, single_step)
-        xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
+        if num_drones > 1:
+            xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
 
     # keras sequential to wrap conv layers
     seq = keras.Sequential()
@@ -465,7 +474,8 @@ def generate_network_trunk(seq_len,
     seq.add(wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step))
 
     xi = seq(xi)
-    # xi2 = seq(xi2)
+    if num_drones > 1:
+        xi2 = seq(xi2)
 
     # xp = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xp)
     # xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
@@ -481,7 +491,7 @@ def generate_network_trunk(seq_len,
     # x = tf.concat([xi, xp], axis=-1)
     
     # x = xi
+    # if num_drones > 1:
     x2 = xi2
-
-    # return inputs_image, inputs_image2, inputs_value, x, x2, instr_translate
-    return inputs_image, inputs_value, x, instr_translate
+    return inputs_image, inputs_image2, inputs_value, x, x2, instr_translate
+    # return inputs_image, inputs_value, x, instr_translate

@@ -21,11 +21,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(SCRIPT_DIR, ".."))
 from keras_models import IMAGE_SHAPE
 
-normalize = True
-num_drones = 2
-CSV_NAME = "data_out_base.csv" if normalize else "data_out.csv"
+
+CSV_NAME = "data_out"
 CSV_NAME_2 = "data_in.csv"
-POS_CSV = "pos.csv"
+POS_CSV = "pos"
 
 def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
     """
@@ -52,9 +51,7 @@ def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
             else:
                 df_training['omega_z'][i] = df_training['omega_z'][i-1]
 
-    df_training = df_training[1:]
     df_training['time_total'] = df.time_total
-    # print duplicates for time_total
     df_training = df_training.drop_duplicates(subset='time_total', keep="first")
 
     df_training = df_training.drop('time_total', axis=1)
@@ -106,12 +103,12 @@ def process_image(img: Image.Image, flip_channels: bool = True) -> Image.Image:
     return img
 
 
-def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> None:
+def process_data(data_dir: str, out_dir: str, flip_channels: bool = False, num_drones: int = 1) -> None:
     """
     Processes all runs collected in the session by data_dir and saves to out_dir
     """
     dirs = os.listdir(data_dir)
-    dirs = sorted([d for d in dirs if ('csv' not in d and 'mp4' not in d)])
+    dirs = sorted([d for d in dirs if 'csv' not in d])
 
     def process_one_run(run_dir: str):
         run_abs = os.path.join(data_dir, run_dir)
@@ -119,66 +116,60 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
         Path(os.path.join(out_dir, run_out_dir)).mkdir(parents=True, exist_ok=True)
 
         try:
-            df = pd.read_csv(os.path.join(run_abs, 'log_0.csv'), header=0)
-            df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
-            if num_drones > 1:
-                df = pd.read_csv(os.path.join(run_abs, 'log_1.csv'), header=0)
-                df_training2 = process_csv(df, os.path.join(out_dir, run_out_dir))
-            df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
-            #skip first row
-            # duplicate all columns
-            if num_drones > 1:
-                df_training = pd.concat([df_training, df_training2], axis=1, ignore_index=False)
+            leader_drone = random.choice(range(num_drones))
             
-            # Note: moved this to process_csv
-            # df_training = df_training[1:]
-            df_training.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME), index=False)
-            df_training_pos = df_training_pos[1:]
-            df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, POS_CSV), index=False)
+            for d in range(num_drones):
+                df = pd.read_csv(os.path.join(run_abs, f'log_{d}.csv'), header=0)
+                df_training = process_csv(df, os.path.join(out_dir, run_out_dir))
+                df_training_pos = process_csv_pos(df, os.path.join(out_dir, run_out_dir))
+                
+                csv_name = f"{CSV_NAME}{d}.csv"
+                pos_csv_name = f"{POS_CSV}{d}.csv"
+                #skip first row
+                df_training = df_training[1:]
+                df_training.to_csv(os.path.join(out_dir, run_out_dir, csv_name), index=False)
+                df_training_pos = df_training_pos[1:]
+                df_training_pos.to_csv(os.path.join(out_dir, run_out_dir, pos_csv_name), index=False)
 
-            df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
-            if num_drones > 1:
-                df.columns = ['leader', 'follower']
-            else:
-                df.columns = ['leader']
-            color_map = {
-                'R': [1, 0, 0],
-                'G': [0, 1, 0],
-                'B': [0, 0, 1],
-            }
-            # create a new df with 2
-            # for each line in df, if the value is equal to 1 write a line containing the values 1 and 0
-            # if the value is equal to -1 write a line containing the values 0 and 1
-            if num_drones > 1:
-                nu_df = pd.DataFrame(columns=['R0', 'G0', 'B0', 'R1', 'G1', 'B1'])
-            else:
-                nu_df = pd.DataFrame(columns=['R0', 'G0', 'B0'])
-            for index, row in df.iterrows():
-                # 6 dimensional vector
-                if num_drones > 1 and row['leader'] in color_map and row['follower'] in color_map:
-                    instr = color_map[row['leader']] + color_map[row['follower']]
-                    nu_df.loc[index] = instr
-                elif num_drones == 1 and row['leader'] in color_map:
-                    instr = color_map[row['leader']]
-                    nu_df.loc[index] = instr
-                else:
-                    raise ValueError("Invalid value in direction column")
-            nu_df = nu_df[1:]
-            nu_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
+                if d == leader_drone:
+                    df = pd.read_csv(os.path.join(run_abs, 'values.csv'), header=None)
+                    df.columns = [str(d) for d in range(num_drones)]
+                    
+                    new_df = pd.DataFrame(columns=np.array([[f'R{d}', f'L{d}'] for d in range(num_drones)]).flatten())
+                    for index, row in df.iterrows():
+                        new_row = np.zeros(2 * num_drones)
+                        if row[str(d)] == 1:
+                            new_row[2 * d + 0] = 1
+                        elif row[str(d)] == -1:
+                            new_row[2 * d + 1] = 1
+                        else:
+                            raise ValueError("Invalid value in direction column")
+                        new_df.loc[index] = new_row
+                    new_df.to_csv(os.path.join(out_dir, run_out_dir, CSV_NAME_2), index=False)
+
+                    # for index, row in df.iterrows():
+                    #     if row['direction'] == 1:
+                    #         nu_df.loc[index] = [1, 0]
+                    #     elif row['direction'] == -1:
+                    #         nu_df.loc[index] = [0, 1]
+                    #     else:
+                    #         raise ValueError("Invalid value in direction column")
+                    # nu_df = nu_df[1:]
 
         except FileNotFoundError:
             print(f"Could not find csv for run {run_dir}. Assuming already processed and copying existing csv")
             shutil.copy(os.path.join(run_abs, CSV_NAME), os.path.join(out_dir, run_out_dir, CSV_NAME))
 
-        zipped = zip(range(2), ["a", "b"]) if num_drones > 1 else zip(range(1), ["a"])
-        for d, letter in zipped:
-            img_files = sorted(os.listdir(run_abs+f"/pics{d}"))
+        for d in range(num_drones):
+            img_files = sorted(os.listdir(run_abs + f"/pics{d}"))
             img_files = [os.path.join(run_abs, f"pics{d}", img) for img in img_files if "png" in img]
             img_files = img_files[1:]
 
+            if not os.path.exists(os.path.join(out_dir, run_out_dir, f"pics{d}")):
+                os.makedirs(os.path.join(out_dir, run_out_dir, f"pics{d}"))
+
             for (ix, im_path) in enumerate(img_files):
-                # f format string for ix with 6 digits:
-                img_out_path = os.path.join(out_dir, run_out_dir, f'{ix:06d}{letter}.png')
+                img_out_path = os.path.join(out_dir, run_out_dir, f"pics{d}", '%06d.png' % ix)
                 if os.path.exists(img_out_path):
                     continue
                 img = Image.open(im_path)
@@ -196,4 +187,4 @@ if __name__ == "__main__":
     parser.add_argument("out_dir", type=str, help="absolute path to output location for processed data")
     parser.add_argument("--flip_channels", action="store_true")
     args = parser.parse_args()
-    process_data(args.data_dir, args.out_dir, flip_channels=args.flip_channels)
+    process_data(args.data_dir, args.out_dir, flip_channels=args.flip_channels, num_drones=2)
