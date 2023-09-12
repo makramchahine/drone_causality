@@ -3,7 +3,6 @@ import functools
 import os
 from pathlib import Path
 from typing import List, Dict, Any
-import json
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -18,6 +17,7 @@ from keras_models import IMAGE_SHAPE
 from utils.model_utils import ModelParams, NCPParams, LSTMParams, CTRNNParams, TCNParams, get_skeleton, \
     get_readable_name
 
+num_drones = 1
 # physical_devices = tf.config.list_physical_devices('GPU')
 # tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
@@ -42,28 +42,33 @@ def sequence_augmentation(x, y, aug_params: Dict[str, Any]):
     :return: augmented data input, same data labels
     """
     xi = x["input_image"]
-    xi2 = x["input_image2"]
+    if num_drones > 1:
+        xi2 = x["input_image2"]
     xv = x["input_vector"]
     bright_range = aug_params.get("brightness", None)
     if bright_range is not None:
         delta = tf.random.uniform((), -bright_range, bright_range)
         xi = tf.image.adjust_brightness(xi, delta)
-        xi2 = tf.image.adjust_brightness(xi2, delta)
+        if num_drones > 1:
+            xi2 = tf.image.adjust_brightness(xi2, delta)
 
     contrast_range = aug_params.get("contrast", None)
     if contrast_range is not None:
         contrast_factor = tf.random.uniform((), 1 - contrast_range, 1 + contrast_range)
         xi = tf.image.adjust_contrast(xi, contrast_factor)
-        xi2 = tf.image.adjust_contrast(xi2, contrast_factor)
+        if num_drones > 1:
+            xi2 = tf.image.adjust_contrast(xi2, contrast_factor)
 
     saturation_range = aug_params.get("saturation", None)
     if saturation_range is not None:
         saturation_factor = tf.random.uniform((), 1 - saturation_range, 1 + saturation_range)
         xi = tf.image.adjust_saturation(xi, saturation_factor)
-        xi2 = tf.image.adjust_saturation(xi2, saturation_factor)
+        if num_drones > 1:
+            xi2 = tf.image.adjust_saturation(xi2, saturation_factor)
 
-    # return {"input_image":xi, "input_vector":xv}, y
-    return {"input_image":xi, "input_image2":xi2, "input_vector":xv}, y
+    if num_drones > 1:
+        return {"input_image":xi, "input_image2":xi2, "input_vector":xv}, y
+    return {"input_image":xi, "input_vector":xv}, y
 
 
 def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,
@@ -71,7 +76,6 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
                 epochs: int = 30, val_split: float = 0.1, hotstart: str = None, lr: float = 0.001, momentum: float = 0,
                 opt: str = "adam", label_scale: float = 1, data_shift: int = 1, data_stride: int = 1,
                 decay_rate: float = 0.95, callbacks: List = None, save_period: int = 1):
-    strategy = tf.distribute.MultiWorkerMirroredStrategy()
     # create model checkpoint directory if doesn't exist
     Path(save_dir).mkdir(parents=True, exist_ok=True)
 
@@ -136,9 +140,16 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
     lr_schedule = keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=lr, decay_steps=500,
                                                               decay_rate=decay_rate, staircase=True)
 
+    if opt == 'adam':
+        optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
+    elif opt == 'sgd':
+        optimizer = keras.optimizers.SGD(learning_rate=lr_schedule, momentum=momentum)
+    else:
+        raise Exception('Unsupported optimizer type %s' % opt)
+
     time_str = time.strftime("%Y:%m:%d:%H:%M:%S")
 
-    file_path = os.path.join(save_dir, 'model-%s_seq-%d_lr-%f_epoch-{epoch:04d}'
+    file_path = os.path.join(save_dir, 'model-%s_seq-%d_lr-%f_epoch-{epoch:03d}'
                                        '_val-loss:{val_loss:.4f}_train-loss:{loss:.4f}_mse:{mse:.4f}_%s.hdf5' % (
                                  get_readable_name(model_params), model_params.seq_len, lr, time_str))
 
@@ -153,27 +164,13 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
 
     # use data parallelism to split data across GPUs
     gpus = tf.config.list_logical_devices('GPU')
-    #strategy = tf.distribute.MirroredStrategy(gpus)
-
-    #tf_config = {
-    #    'cluster': {
-    #        'worker': ['localhost:12345', 'localhost:23456']
-    #     },
-    #    'task': {'type': 'worker', 'index': 0}
-    #}
-    #os.environ['TF_CONFIG'] = json.dumps(tf_config)
+    strategy = tf.distribute.MirroredStrategy(gpus)
     with strategy.scope():
-        if opt == 'adam':
-            optimizer = keras.optimizers.Adam(learning_rate=lr_schedule)
-        elif opt == 'sgd':
-            optimizer = keras.optimizers.SGD(learning_rate=lr_schedule, momentum=momentum)
-        else:
-            raise Exception('Unsupported optimizer type %s' % opt)
-
-        # Add gradient clipping
-        optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer, dynamic=True)
-
         model = get_skeleton(params=model_params)
+        for layer in model.layers:
+            if hasattr(layer, 'kernel_initializer'):
+                layer.kernel_initializer = tf.keras.initializers.GlorotNormal()
+
         model.compile(optimizer=optimizer, loss="mean_squared_error", metrics=['mse'])
         # Load pretrained weights
         if hotstart is not None:
@@ -181,11 +178,9 @@ def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data
 
         model.summary(line_length=80)
 
-    # Train
-    #training_dataset = strategy.distribute_datasets_from_function(training_dataset)
-    #validation_dataset = strategy.distribute_datasets_from_function(validation_dataset)
-    history = model.fit(x=training_dataset, validation_data=validation_dataset, epochs=epochs,
-                        use_multiprocessing=False, workers=1, max_queue_size=5, verbose=1, callbacks=callbacks)
+        # Train
+        history = model.fit(x=training_dataset, validation_data=validation_dataset, epochs=epochs,
+                            use_multiprocessing=False, workers=1, max_queue_size=5, verbose=1, callbacks=callbacks)
     return history, time_str
 
 
