@@ -16,7 +16,8 @@ sys.path.append(os.path.join(SCRIPT_PATH, ".."))
 from keras_models import IMAGE_SHAPE, DEFAULT_CFC_CONFIG, generate_ncp_model, generate_ctrnn_model, generate_lstm_model, \
     generate_tcn_model, DEFAULT_NCP_SEED
 
-num_drones = 2
+num_drones = 1
+has_instr = False
 # helper classes that contain all the parameters in the generate_*_model functions
 @dataclass
 class ModelParams:
@@ -184,9 +185,9 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
         lool = model.input_shape[0][0:]
     else:
         if num_drones > 1:
-            lool = model.input_shape[3:]
+            lool = model.input_shape[3:] if has_instr else model.input_shape[2:]
         else:
-            lool = model.input_shape[2:]
+            lool = model.input_shape[2:] if has_instr else model.input_shape[1:]
 
     for input_shape in lool:  # ignore 1st output, as is this control output
         hidden = []

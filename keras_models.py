@@ -24,8 +24,9 @@ DEFAULT_CFC_CONFIG = {
 }
 DEFAULT_NCP_SEED = 22222
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-num_drones = 2
 
+num_drones = 1
+has_instr = False
 
 # Shapes for generate_*_model:
 # if single_step, input is tuple of image input (batch [usually 1], h, w, c), and hiddens (batch, hidden_dim)
@@ -157,8 +158,8 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, inputs_image2, inputs_value, x, x2, instr_translate = generate_network_trunk(
     # inputs_image, inputs_value, x, instr_translate = generate_network_trunk(
+    inputs_image, inputs_image2, inputs_value, x, x2, instr_translate = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -199,13 +200,13 @@ def generate_ctrnn_model(rnn_sizes,
             rnn_cell = MixedCfcCell(units=s, hparams=config)
         elif ct_network_type == "wiredcfccell":
             wiring = kncp.wirings.NCP(
-                inter_neurons=18+4,  # Number of inter neurons
-                command_neurons=12+4,  # Number of command neurons
-                motor_neurons=4+3,  # Number of motor neurons
-                sensory_fanout=6+4,  # How many outgoing synapses has each sensory neuron
-                inter_fanout=4+4,  # How many outgoing synapses has each inter neuron
-                recurrent_command_synapses=4+4,  # Now many recurrent synapses are in the command neuron layer
-                motor_fanin=6+4,  # How many incoming syanpses has each motor neuron,
+                inter_neurons=18+0,  # Number of inter neurons
+                command_neurons=12+0,  # Number of command neurons
+                motor_neurons=4,  # Number of motor neurons
+                sensory_fanout=6+0,  # How many outgoing synapses has each sensory neuron
+                inter_fanout=4+0,  # How many outgoing synapses has each inter neuron
+                recurrent_command_synapses=4+0,  # Now many recurrent synapses are in the command neuron layer
+                motor_fanin=6+0,  # How many incoming syanpses has each motor neuron,
                 seed=kwargs.get("wiredcfc_seed", DEFAULT_NCP_SEED),  # random seed to generate connections between nodes
             )
             rnn_cell = WiredCfcCell(wiring=wiring, mode="default")
@@ -235,7 +236,7 @@ def generate_ctrnn_model(rnn_sizes,
                                  stateful=rnn_stateful,
                                  time_major=False)
             x = rnn(x)
-
+        #v = x
     v1 = x[:, 0:4] if single_step else x[:, :, 0:4]
     v = v1
     if num_drones > 1:
@@ -288,9 +289,9 @@ def generate_ctrnn_model(rnn_sizes,
     else:
         print("Single Drone")
         if single_step:
-            ctrnn_model = keras.Model([inputs_image, inputs_value, *all_hidden_inputs], [v, *all_hidden_outputs])
+            ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [v, *all_hidden_outputs])
         else:
-            ctrnn_model = keras.Model([inputs_image, inputs_value], [v])
+            ctrnn_model = keras.Model([inputs_image], [v])
 
     return ctrnn_model
 
@@ -432,34 +433,34 @@ def generate_network_trunk(seq_len,
     Input has shape (batch, h, w, c) if single step is True and (batch, seq, h, w, c) otherwise
 
     """
-    input_shape = 3 if num_drones == 1 else 6
+
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
-        if num_drones > 1:
-            inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
-        inputs_value = keras.Input(shape=(input_shape,), name="input_vector")
+        inputs_image2 = keras.Input(shape=image_shape, name="input_image2")
+        if has_instr:
+            inputs_value = keras.Input(shape=(6,), name="input_vector")
+        else:
+            inputs_value = None
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
-        if num_drones > 1:
-            inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
-        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, input_shape), name="input_vector")
+        inputs_image2 = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image2")
+        if has_instr:
+            inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 6), name="input_vector")
+        else:
+            inputs_value = None
 
     xi = inputs_image
-    if num_drones > 1:
-        xi2 = inputs_image2
+    xi2 = inputs_image2
     xp = inputs_value
 
     if not no_norm_layer:
         xi = generate_normalization_layers(xi, single_step)
-        if num_drones > 1:
-            xi2 = generate_normalization_layers(xi2, single_step)
+        xi2 = generate_normalization_layers(xi2, single_step)
 
     if augmentation_params is not None:
         xi = generate_augmentation_layers(xi, augmentation_params, single_step)
-        if num_drones > 1:
-            xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
+        xi2 = generate_augmentation_layers(xi2, augmentation_params, single_step)
 
-    # keras sequential to wrap conv layers
     seq = keras.Sequential()
 
     # Conv Layers
@@ -474,24 +475,40 @@ def generate_network_trunk(seq_len,
     seq.add(wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step))
 
     xi = seq(xi)
-    if num_drones > 1:
-        xi2 = seq(xi2)
+    xi2 = seq(xi2)
+    #xi = wrap_time(keras.layers.Conv2D(filters=24, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=36, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=48, kernel_size=(5, 5), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=64, kernel_size=(3, 3), strides=(1, 1), activation='relu'), single_step)(
+    #    xi)
+    #xi = wrap_time(keras.layers.Conv2D(filters=16, kernel_size=(3, 3), strides=(2, 2), activation='relu'), single_step)(
+    #    xi)
 
-    # xp = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xp)
-    # xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
-    instr_translate = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)
-    xp = instr_translate(xp)
+    #xi = wrap_time(keras.layers.Flatten(), single_step)(xi)
+    #xi = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(xi)
+    #xi = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xi)
 
-    x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
-    x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
+    #xp = wrap_time(keras.layers.Dense(units=128, activation='relu'), single_step)(xp)
+    #xp = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(xp)
+    if has_instr:
+        instr_translate = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)
+        xp = instr_translate(xp)
+        x = tf.concat([xi, xp], axis=-1)
+        x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
+    else:
+        x = xi
 
-
+    #x = wrap_time(keras.layers.Concatenate(axis=-1), single_step)([xi, xp])
+    #x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
     # concatenate xi and xp using tf.concat along the last axis
-    # x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
-    # x = tf.concat([xi, xp], axis=-1)
-    
-    # x = xi
-    # if num_drones > 1:
+    #print(xi.shape, xp.shape)
+    #x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
+
     x2 = xi2
-    return inputs_image, inputs_image2, inputs_value, x, x2, instr_translate
-    # return inputs_image, inputs_value, x, instr_translate
+
+    if has_instr:
+        return inputs_image, inputs_image2, inputs_value, x, x2, instr_translate
+    return inputs_image, inputs_image2, None, x, x2, None
