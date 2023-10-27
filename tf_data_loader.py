@@ -81,8 +81,7 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
         for ix in range(n_images):
             # dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
-            img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
-            # dataset_np[ix] = img[img.height - image_size[0]:, :, :]
+            img = Image.open(os.path.join(root, d, '%06da.%s' % (ix, file_ending))).convert('RGB')
             dataset_np[ix] = img
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)

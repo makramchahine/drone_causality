@@ -1,0 +1,73 @@
+*.pyc
+
+save/
+log/
+
+tags
+
+# Ignore PyCharm idea files
+.idea
+__pycache__
+
+# caches
+*.h5
+
+# Data
+data/*
+**/model_checkpoints/*
+filtered*
+processed-data/*
+training-histories/*
+model-piloted-runs/*
+console-log/*
+junk/*
+history/*
+histories/*
+logs/*
+airsim/*
+visualbackprop/*
+setup_path.py
+*~
+*.db
+*.tf
+*spec.txt
+cached_data
+
+# pyenv
+.python-version
+
+# keras
+.cache/*
+.keras/*
+
+# vim
+*.swp
+
+aaron*
+*_logs
+tuner_tests/
+*.vscode
+
+# visual backprop results
+*.png
+*.mp4
+
+# tuning results
+*.err
+*.log*
+*.out
+*.pkl
+**/*train_results.json
+
+# dataset jsons
+#dataset_jsons/
+
+# analysis results
+**/lipschitz_out/
+**/ssim_out/
+**/perturb_out/
+**/grid_out/
+**/loss_out/
+
+# shap rep
+shap/

@@ -66,7 +66,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
                    storage_name: str = "sqlite:///hyperparam_tuning.db",
                    storage_type: Union[str, StorageType] = StorageType.RDB, out_dir: str = "",
                    timeout: Optional[float] = None, train_kwargs: Optional[Dict[str, Any]] = None,
-                   hotstart_dir: Optional[str] = None):
+                   hotstart_dir: Optional[str] = None, n_epochs: int = None, decay_rate: float = None, lr: float = None, data_shift: int = None):
     """
     Runs obj_fn with the best parameters from study_name in storage_time
     """
@@ -121,7 +121,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
         train_kwargs["hotstart"] = hotstart_checkpoint
 
     train_kwargs["save_period"] = 1
-    obj_filled = functools.partial(objective_fn, data_dir=data_dir, batch_size=batch_size, **train_kwargs)
+    obj_filled = functools.partial(objective_fn, lr=lr, decay_rate=decay_rate, n_epochs=n_epochs, data_dir=data_dir, batch_size=batch_size, **train_kwargs)
 
     # account for previous trains in n_trains counting
     num_prev_trains = get_prev_trains(out_dir, study_name_network)
@@ -149,6 +149,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run hyperparameter bayesian optimization on deepdrone data')
     parser.add_argument("objective_fn", type=str, help="Name of objective function in this file to run")
     parser.add_argument("data_dir", type=str, help="Folder path of dataset")
+    parser.add_argument("--n_epochs", type=int, default=None, help="Number of epochs to train for")
+    parser.add_argument("--lr", type=float, default=None, help="Learning rate")
+    parser.add_argument("--decay_rate", type=float, default=None, help="Learning rate decay rate")
+    parser.add_argument("--data_shift", type=int, default=None, help="Number of frames to shift data by")
     parser.add_argument("--n_trains", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=300, help="Batch size for training")
     parser.add_argument("--storage_name", type=str, default="sqlite:///hyperparam_tuning.db",
@@ -167,4 +171,5 @@ if __name__ == "__main__":
     objective_fn = locals()[args.objective_fn]
     train_multiple(objective_fn, args.data_dir, args.study_name, n_trains=args.n_trains, batch_size=args.batch_size,
                    storage_name=args.storage_name, storage_type=args.storage_type, timeout=args.timeout,
-                   train_kwargs=training_args_dict, out_dir=args.out_dir, hotstart_dir=args.hotstart_dir)
+                   train_kwargs=training_args_dict, out_dir=args.out_dir, hotstart_dir=args.hotstart_dir,
+                   n_epochs=args.n_epochs,decay_rate=args.decay_rate, lr=args.lr, data_shift=args.data_shift)
