@@ -9,6 +9,10 @@ from typing import Optional, Union
 from tensorflow import keras
 from tensorflow.python.keras.layers import Normalization, Rescaling, Conv2D, TimeDistributed
 
+import sys
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(SCRIPT_DIR, ".."))
+
 from utils.model_utils import NCPParams, LSTMParams, CTRNNParams, TCNParams, load_model_from_weights, eval_model_params
 
 def remove_norm_rescaling_layers(checkpoint_path: str, params_path: str, dest_path: Optional[str] = None):
