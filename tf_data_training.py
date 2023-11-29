@@ -39,21 +39,23 @@ def sequence_augmentation(x, y, aug_params: Dict[str, Any]):
     :return: augmented data input, same data labels
     """
     bright_range = aug_params.get("brightness", None)
+    xi = x["input_image"]
+    xt = x["input_timedelta"]
     if bright_range is not None:
         delta = tf.random.uniform((), -bright_range, bright_range)
-        x = tf.image.adjust_brightness(x, delta)
+        xi = tf.image.adjust_brightness(xi, delta)
 
     contrast_range = aug_params.get("contrast", None)
     if contrast_range is not None:
         contrast_factor = tf.random.uniform((), 1 - contrast_range, 1 + contrast_range)
-        x = tf.image.adjust_contrast(x, contrast_factor)
+        xi = tf.image.adjust_contrast(xi, contrast_factor)
 
     saturation_range = aug_params.get("saturation", None)
     if saturation_range is not None:
         saturation_factor = tf.random.uniform((), 1 - saturation_range, 1 + saturation_range)
-        x = tf.image.adjust_saturation(x, saturation_factor)
+        xi = tf.image.adjust_saturation(xi, saturation_factor)
 
-    return x, y
+    return {"input_image":xi, "input_timedelta":xt}, y
 
 
 def train_model(model_params: ModelParams, data_dir: str = "./data", cached_data_dir: str = None,

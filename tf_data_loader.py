@@ -51,9 +51,10 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
     file_ending = 'png'
 
     def sub_to_batch(sub_feature, sub_label):
-        sfb = sub_feature.batch(seq_len, drop_remainder=True)
+        sfb = sub_feature["input_image"].batch(seq_len, drop_remainder=True)
+        std = sub_feature["input_timedelta"].batch(seq_len, drop_remainder=True)
         slb = sub_label.batch(seq_len, drop_remainder=True)
-        return tf.data.Dataset.zip((sfb, slb))
+        return tf.data.Dataset.zip(({"input_image":sfb, "input_timedelta":std}, slb))
         # return sub.batch(seq_len, drop_remainder=True)
 
     dirs = sorted(os.listdir(root))
@@ -64,12 +65,15 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
 
     for (run_number, d) in tqdm(enumerate(dirs)):
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
+        # timedeltas = np.genfromtxt(os.path.join(root, d, 'timedeltas.csv'), delimiter=',', skip_header=1, dtype=np.float32)
+        timedeltas = labels[:, 4]
+        # timedeltas = np.ones_like((labels.shape[0], 1))
 
         if labels.shape[1] == 4:
             labels = (labels - output_means) / output_stds
             # labels = labels * label_scale
         elif labels.shape[1] == 5:
-            labels = (labels[:, 1:] - output_means) / output_stds
+            labels = (labels[:, :4] - output_means) / output_stds
             # labels = labels[:,1:] * label_scale
         else:
             raise Exception('Wrong size of input data (expected 4, got %d' % labels.shape[1])
@@ -85,7 +89,9 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
             dataset_np[ix] = img
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
-        dataset = tf.data.Dataset.zip((images_dataset, labels_dataset))
+        timedeltas_dataset = tf.data.Dataset.from_tensor_slices(timedeltas)
+        # dataset = tf.data.Dataset.zip((images_dataset, timedeltas_dataset, labels_dataset))
+        dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_timedelta":timedeltas_dataset}, labels_dataset))
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
         datasets.append(dataset)
 

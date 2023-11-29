@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, x = generate_network_trunk(
+    inputs_image, x, inputs_timedelta = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -228,17 +228,17 @@ def generate_ctrnn_model(rnn_sizes,
 
         else:
             x = keras.layers.RNN(rnn_cell,
-                                 batch_input_shape=(batch_size, seq_len,
-                                                    x.shape[-1]),
+                                 batch_input_shape=((batch_size, seq_len, x.shape[-1]),
+                                                    (batch_size, seq_len, 1)),
                                  return_sequences=True,
                                  stateful=rnn_stateful,
-                                 time_major=False)(x)
+                                 time_major=False)((x, inputs_timedelta))
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
         ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [x, *all_hidden_outputs])
     else:
-        ctrnn_model = keras.Model([inputs_image], [x])
+        ctrnn_model = keras.Model([inputs_image, inputs_timedelta], [x])
 
     return ctrnn_model
 
@@ -386,9 +386,10 @@ def generate_network_trunk(seq_len,
     """
 
     if single_step:
-        inputs = keras.Input(shape=image_shape)
+        inputs = keras.Input(shape=image_shape, name="input_image")
     else:
-        inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape))
+        inputs = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
+        inputs_timedelta = keras.Input(batch_input_shape=(batch_size, seq_len, 1), name="input_timedelta")
 
     x = inputs
 
@@ -415,4 +416,4 @@ def generate_network_trunk(seq_len,
     x = wrap_time(keras.layers.Dense(units=128, activation='linear'), single_step)(x)
     x = wrap_time(keras.layers.Dropout(rate=DROPOUT), single_step)(x)
 
-    return inputs, x
+    return inputs, x, inputs_timedelta

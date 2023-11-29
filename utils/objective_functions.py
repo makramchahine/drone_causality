@@ -248,6 +248,9 @@ def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int, n_epoch
 
     if n_epochs is not None:
         COMMON_TRAIN_PARAMS["epochs"] = n_epochs
+    seq_len = None if train_kwargs.get('seq_len') is None else int(train_kwargs.pop('seq_len'))
+    if seq_len is not None:
+        COMMON_MODEL_PARAMS["seq_len"] = seq_len
     model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type="wiredcfccell", wiredcfc_seed=wiredcfc_seed,
                                **COMMON_MODEL_PARAMS)
     merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
