@@ -1,6 +1,6 @@
 # drone_causality
 
-All training, data processing, and analysis code used for the paper "Robust Visual Flight Navigation with Liquid Neural Networks". For code run onboard the drone, see [this repository](https://github.com/GoldenZephyr/rosetta_drone).
+All training, data processing, and analysis code used for the paper "Robust Visual Flight Navigation with Liquid Neural Networks". For code run onboard the drone, see [this repository](https://github.com/makramchahine/rosetta_drone).
 
 ## Installation Instructions
 
