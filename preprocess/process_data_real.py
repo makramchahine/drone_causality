@@ -24,9 +24,12 @@ from keras_models import IMAGE_SHAPE
 normalize = False
 num_drones = 1
 has_instr = False
+img_folder = "pybullet_pics"
+constant_timestep = True
 CSV_NAME = "data_out_base.csv" if normalize else "data_out.csv"
 CSV_NAME_2 = "data_in.csv"
 POS_CSV = "pos.csv"
+TIMEDELTA_MULTIPLIER = 5
 
 def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
     """
@@ -53,15 +56,20 @@ def process_csv(df: DataFrame, out_dir: str) -> DataFrame:
             else:
                 df_training['omega_z'][i] = df_training['omega_z'][i-1]
 
-    df_training = df_training[1:]
     df_training['time_total'] = df.time_total
-    # print duplicates for time_total
+    df_training.loc[0, 'time_total'] = 0
     df_training = df_training.drop_duplicates(subset='time_total', keep="first")
-
+    df_training['timedelta'] = pd.to_numeric(df_training['time_total']).diff()
+    df_training['timedelta'] = df_training['timedelta'] * TIMEDELTA_MULTIPLIER
+    if constant_timestep:
+        df_training['timedelta'] = pd.Series(np.ones(len(df_training['timedelta'])))
     df_training = df_training.drop('time_total', axis=1)
 
+    df_training = df_training[1:]
+    df_training.loc[df_training.index[0], 'timedelta'] = 0
+
     #add header to df with column names vx, vy, vz, omega_z
-    df_training.columns = ['vx', 'vy', 'vz', 'omega_z']
+    df_training.columns = ['vx', 'vy', 'vz', 'omega_z', 'timedelta']
 
 
     return df_training
@@ -174,8 +182,8 @@ def process_data(data_dir: str, out_dir: str, flip_channels: bool = False) -> No
 
         zipped = zip(range(2), ["a", "b"]) if num_drones > 1 else zip(range(1), ["a"])
         for d, letter in zipped:
-            img_files = sorted(os.listdir(run_abs+f"/pics{d}"))
-            img_files = [os.path.join(run_abs, f"pics{d}", img) for img in img_files if "png" in img]
+            img_files = sorted(os.listdir(run_abs+f"/{img_folder}{d}"))
+            img_files = [os.path.join(run_abs, f"{img_folder}{d}", img) for img in img_files if "png" in img]
             img_files = img_files[1:]
 
             for (ix, im_path) in enumerate(img_files):

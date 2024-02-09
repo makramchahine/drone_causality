@@ -17,7 +17,7 @@ from keras_models import IMAGE_SHAPE, DEFAULT_CFC_CONFIG, generate_ncp_model, ge
     generate_tcn_model, DEFAULT_NCP_SEED
 
 num_drones = 1
-has_instr = False
+has_instr_or_timestep = True
 # helper classes that contain all the parameters in the generate_*_model functions
 @dataclass
 class ModelParams:
@@ -169,7 +169,7 @@ def get_readable_name(params: Union[ModelParams, str]):
     return name
 
 
-def generate_hidden_list(model: Functional, return_numpy: bool = True):
+def generate_hidden_list(model: Functional, return_numpy: bool = True, lstm=False):
     """
     Generates a list of tensors that are used as the hidden state for the argument model when it is used in single-step
     mode. The batch dimension (0th dimension) is assumed to be 1 and any other dimensions (seq len dimensions) are
@@ -179,17 +179,22 @@ def generate_hidden_list(model: Functional, return_numpy: bool = True):
     :param model: Single step functional model to infer hidden states for
     :return: list of hidden states with 0 as value
     """
+
     constructor = np.zeros if return_numpy else tf.zeros
     hiddens = []
-    if len(model.input_shape)==1:
-        lool = model.input_shape[0][0:]
-    else:
-        if num_drones > 1:
-            lool = model.input_shape[3:] if has_instr else model.input_shape[2:]
-        else:
-            lool = model.input_shape[2:] if has_instr else model.input_shape[1:]
 
-    for input_shape in lool:  # ignore 1st output, as is this control output
+    # if not lstm:
+    #     if len(model.input_shape)==1:
+    #         lool = model.input_shape[0][0:]
+    #     else:
+    #         if num_drones > 1:
+    #             lool = model.input_shape[3:] if has_instr_or_timestep else model.input_shape[2:]
+    #         else:
+    #             lool = model.input_shape[2:] if has_instr_or_timestep else model.input_shape[1:]
+
+    input_shape_list = model.input_shape[1:] if lstm else model.input_shape[2:]
+
+    for input_shape in input_shape_list:  # ignore 1st output, as is this control output
         hidden = []
         for i, shape in enumerate(input_shape):
             if shape is None:

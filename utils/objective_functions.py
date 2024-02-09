@@ -237,7 +237,6 @@ def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int, **train
     seeds_to_try = list(range(22221, 22228)) + [55555]
     wiredcfc_seed = trial.suggest_categorical("wiredcfc_seed", seeds_to_try)
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
-
     lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
     decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
 

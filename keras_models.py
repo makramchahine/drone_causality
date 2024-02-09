@@ -46,7 +46,7 @@ def generate_lstm_model(
         single_step: bool = False,
         no_norm_layer: bool = False,
 ):
-    inputs_image, inputs_value, x = generate_network_trunk(
+    inputs_image, x, inputs_timedelta = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -88,9 +88,9 @@ def generate_lstm_model(
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
-        lstm_model = keras.Model([inputs_image, inputs_value, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
+        lstm_model = keras.Model([inputs_image, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
     else:
-        lstm_model = keras.Model([inputs_image, inputs_value], [x])
+        lstm_model = keras.Model([inputs_image], [x])
 
     return lstm_model
 
@@ -156,7 +156,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
-    inputs_image, inputs_value, x = generate_network_trunk(
+    inputs_image, x, inputs_timedelta = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -217,13 +217,15 @@ def generate_ctrnn_model(rnn_sizes,
             if isinstance(rnn_cell.state_size, int):
                 # only 1 hidden state
                 hidden_inputs = [tf.keras.Input(shape=rnn_cell.state_size)]
-                x, hidden = rnn_cell(x, hidden_inputs)  # assume hidden is list of length 1 with tensor
+                # x, hidden = rnn_cell(x, hidden_inputs)  # assume hidden is list of length 1 with tensor
+                x, hidden = rnn_cell((x, inputs_timedelta), hidden_inputs)  # assume hidden is list of length 1 with tensor
                 all_hidden_inputs.extend(hidden_inputs)
                 all_hidden_outputs.extend(hidden)
             else:
                 # multiple hiddens
                 hidden_inputs = [tf.keras.Input(shape=size) for size in rnn_cell.state_size]
-                x, hidden_outputs = rnn_cell(x, hidden_inputs)
+                # x, hidden_outputs = rnn_cell(x, hidden_inputs)
+                x, hidden_outputs = rnn_cell((x, inputs_timedelta), hidden_inputs)
                 all_hidden_inputs.extend(hidden_inputs)
                 all_hidden_outputs.extend(hidden_outputs)
 
@@ -237,7 +239,8 @@ def generate_ctrnn_model(rnn_sizes,
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
-        ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [x, *all_hidden_outputs])
+        ctrnn_model = keras.Model([inputs_image, inputs_timedelta, *all_hidden_inputs], [x, *all_hidden_outputs])
+        # ctrnn_model = keras.Model([inputs_image, *all_hidden_inputs], [x, *all_hidden_outputs])
     else:
         ctrnn_model = keras.Model([inputs_image], [x])
 
@@ -352,6 +355,11 @@ def generate_normalization_layers(x, single_step: bool):
         # GS mean and variance
         mean=[0.61458607, 0.54546455, 0.48525073],
         variance=[0.04947879, 0.05349994, 0.04740225])
+    
+        # Pybullet:
+        # mean=[0.77036332, 0.77839806, 0.8184656],
+        # variance=[0.03462567, 0.03656881, 0.02670783])
+    
         # Real world mean and variance
         # mean=[0.41718618, 0.48529191, 0.38133072],
         # variance=[.057, .05, .061])
@@ -388,13 +396,15 @@ def generate_network_trunk(seq_len,
 
     if single_step:
         inputs_image = keras.Input(shape=image_shape, name="input_image")
-        inputs_value = keras.Input(shape=(2,), name="input_vector")
+        # inputs_value = keras.Input(shape=(2,), name="input_vector")
+        inputs_timedelta = keras.Input(shape=(1,), name="input_timedelta")
     else:
         inputs_image = keras.Input(batch_input_shape=(batch_size, seq_len, *image_shape), name="input_image")
-        inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
+        # inputs_value = keras.Input(batch_input_shape=(batch_size, seq_len, 2), name="input_vector")
+        inputs_timedelta = keras.Input(shape=(1,), name="input_timedelta")
 
     xi = inputs_image
-    xp = inputs_value
+    # xp = inputs_value
 
     if not no_norm_layer:
         xi = generate_normalization_layers(xi, single_step)
@@ -429,4 +439,4 @@ def generate_network_trunk(seq_len,
     #x = wrap_time(keras.layers.Lambda(lambda y: tf.concat(y, axis=-1)), single_step)([xi, xp])
     #x = tf.concat([xi, xp], axis=-1)
 
-    return inputs_image, inputs_value, x
+    return inputs_image, x, inputs_timedelta
