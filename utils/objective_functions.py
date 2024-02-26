@@ -14,7 +14,7 @@ from utils.model_utils import NCPParams, CTRNNParams, LSTMParams, TCNParams
 
 # args to train_model that are shared between all objective function types
 COMMON_TRAIN_PARAMS = {
-    "epochs": 100,
+    "epochs": 150,
     "val_split": 0.05,
     "opt": "adam",
     "data_shift": 16,
@@ -179,7 +179,7 @@ def ltc_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs: 
                                 **train_kwargs)
 
 
-def lstm_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs: Dict[str, Any]):
+def lstm_objective(trial: Trial, data_dir: str, batch_size: int, n_epochs: float = None, lr: float = None, decay_rate: float = None, **train_kwargs: Dict[str, Any]):
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
     # use same dropout for dropout and recurrent_dropout to avoid too many vars
     dropout = trial.suggest_float("dropout", low=0.0, high=0.3)
@@ -191,6 +191,11 @@ def lstm_objective(trial: Trial, data_dir: str, batch_size: int, **train_kwargs:
 
     model_params = LSTMParams(rnn_sizes=[rnn_size], dropout=dropout, recurrent_dropout=dropout,
                               rnn_stateful=False, **COMMON_MODEL_PARAMS)
+    if n_epochs is not None:
+        COMMON_TRAIN_PARAMS["epochs"] = n_epochs
+    seq_len = None if train_kwargs.get('seq_len') is None else int(train_kwargs.pop('seq_len'))
+    if seq_len is not None:
+        COMMON_MODEL_PARAMS["seq_len"] = seq_len
     merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
     merged_kwargs.update(**train_kwargs)
     history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,

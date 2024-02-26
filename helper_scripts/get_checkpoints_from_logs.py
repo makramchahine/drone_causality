@@ -143,7 +143,7 @@ def process_json_list(json_dir: str, checkpoint_dir: str, out_dir: str):
         with open(os.path.join(dest, "params.json"), "w") as f:
             json.dump(params_map, f)
 
-    recurring_checkpoint_paths, checkpoint_epochs = get_spaced_out_checkpoints(candidate_jsons=json_data, checkpoint_dir=checkpoint_dir, frequency=100, val_best_prop_timestamp=val_best_prop_timestamp)
+    recurring_checkpoint_paths, checkpoint_epochs = get_spaced_out_checkpoints(candidate_jsons=json_data, checkpoint_dir=checkpoint_dir, frequency=50, val_best_prop_timestamp=val_best_prop_timestamp)
     dest = os.path.join(out_dir, "recurrent")
     Path(dest).mkdir(exist_ok=True, parents=True)
     for checkpoint_path, checkpoint_epoch in zip(recurring_checkpoint_paths, checkpoint_epochs):

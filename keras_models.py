@@ -46,7 +46,7 @@ def generate_lstm_model(
         single_step: bool = False,
         no_norm_layer: bool = False,
 ):
-    inputs_image, x = generate_network_trunk(
+    inputs_image, x, inputs_timedelta = generate_network_trunk(
         seq_len,
         image_shape,
         augmentation_params=augmentation_params,
@@ -349,8 +349,13 @@ def generate_normalization_layers(x, single_step: bool):
 
     normalization_layer = keras.layers.experimental.preprocessing.Normalization(
         # GS mean and variance
-        mean=[0.61458607, 0.54546455, 0.48525073],
-        variance=[0.04947879, 0.05349994, 0.04740225])
+        # mean=[0.61458607, 0.54546455, 0.48525073],
+        # variance=[0.04947879, 0.05349994, 0.04740225])
+
+        # Pybullet:
+        mean=[0.77036332, 0.77839806, 0.8184656],
+        variance=[0.03462567, 0.03656881, 0.02670783])
+
         # Real world mean and variance
         # mean=[0.41718618, 0.48529191, 0.38133072],
         # variance=[.057, .05, .061])
