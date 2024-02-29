@@ -5,13 +5,13 @@ import tensorflow as tf
 from PIL import Image
 from matplotlib.image import imread
 from tqdm import tqdm
-num_drones = 2
+
 
 def process_dataset(root, label_scale):
     run_dirs = os.listdir(root)  # should be directories named run%03d
     n = len(run_dirs)
     dataset = np.empty((n, 64, 256, 256, 3), dtype=np.uint8)
-    labels = np.empty((n, 64, 4 if num_drones == 1 else 8))
+    labels = np.empty((n, 64, 4))
     for (dx, d) in enumerate(run_dirs):
         for i in range(len(os.listdir(os.path.join(root, d))) - 1):
             dataset[dx, i] = imread(os.path.join(root, d, '%03d.jpg' % i))
@@ -35,14 +35,14 @@ def get_output_normalization(root):
         print('Loading training data output means from: %s' % training_output_mean_fn)
         output_means = np.genfromtxt(training_output_mean_fn, delimiter=',')
     else:
-        output_means = np.zeros(4 if num_drones == 1 else 8)
+        output_means = np.zeros(4)
 
     training_output_std_fn = os.path.join(root, 'stats', 'training_output_stds.csv')
     if os.path.exists(training_output_std_fn):
         print('Loading training data output std from: %s' % training_output_std_fn)
         output_stds = np.genfromtxt(training_output_std_fn, delimiter=',')
     else:
-        output_stds = np.ones(4 if num_drones == 1 else 8)
+        output_stds = np.ones(4)
 
     return output_means, output_stds
 
@@ -51,62 +51,47 @@ def load_dataset_multi(root, image_size, seq_len, shift, stride, label_scale):
     file_ending = 'png'
 
     def sub_to_batch(sub_feature, sub_label):
-        sib = sub_feature['input_image'].batch(seq_len, drop_remainder=True)
-        svb = sub_feature['input_vector'].batch(seq_len, drop_remainder=True)
+        sfb = sub_feature["input_image"].batch(seq_len, drop_remainder=True)
+        std = sub_feature["input_timedelta"].batch(seq_len, drop_remainder=True)
         slb = sub_label.batch(seq_len, drop_remainder=True)
-        if num_drones > 1:
-            sib2 = sub_feature['input_image2'].batch(seq_len, drop_remainder=True)
-            return tf.data.Dataset.zip(({"input_image":sib, "input_image2":sib2, "input_vector":svb}, slb))
-        return tf.data.Dataset.zip(({"input_image":sib, "input_vector":svb}, slb))
+        return tf.data.Dataset.zip(({"input_image":sfb, "input_timedelta":std}, slb))
         # return sub.batch(seq_len, drop_remainder=True)
 
     dirs = sorted(os.listdir(root))
-    dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d and 'DS_Store' not in d]
+    dirs = [d for d in dirs if 'cached' not in d and 'stats' not in d]
     datasets = []
 
     output_means, output_stds = get_output_normalization(root)
 
     for (run_number, d) in tqdm(enumerate(dirs)):
         labels = np.genfromtxt(os.path.join(root, d, 'data_out.csv'), delimiter=',', skip_header=1, dtype=np.float32)
+        # timedeltas = np.genfromtxt(os.path.join(root, d, 'timedeltas.csv'), delimiter=',', skip_header=1, dtype=np.float32)
+        timedeltas = labels[:, 4]
+        # timedeltas = np.ones_like((labels.shape[0], 1))
 
-        # if labels.shape[1] == 4:
-        #     labels = (labels - output_means) / output_stds
-        #     # labels = labels * label_scale
-        # elif labels.shape[1] == 5:
-        #     labels = (labels[:, 1:] - output_means) / output_stds
-        #     # labels = labels[:,1:] * label_scale
-        # else:
-        #     raise Exception('Wrong size of input data (expected 4, got %d' % labels.shape[1])
-        labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
-
-        n_images = len([fn for fn in os.listdir(os.path.join(root, d)) if file_ending in fn])
-        if num_drones == 1:
-            dataset_np = np.empty((n_images, *image_size), dtype=np.uint8)
+        if labels.shape[1] == 4:
+            labels = (labels - output_means) / output_stds
+            # labels = labels * label_scale
+        elif labels.shape[1] == 5:
+            labels = (labels[:, :4] - output_means) / output_stds
+            # labels = labels[:,1:] * label_scale
         else:
-            dataset_np = np.empty((n_images // 2, *image_size), dtype=np.uint8)
-            dataset_np2 = np.empty((n_images //2, *image_size), dtype=np.uint8)
+            raise Exception('Wrong size of input data (expected 4, got %d' % labels.shape[1])
+        labels_dataset = tf.data.Dataset.from_tensor_slices(labels)
+        # n_images = len(os.listdir(os.path.join(root, d))) - 1
+        n_images = len([fn for fn in os.listdir(os.path.join(root, d)) if file_ending in fn])
+        # dataset_np = np.empty((n_images, 256, 256, 3), dtype=np.uint8)
+        dataset_np = np.empty((n_images, *image_size), dtype=np.uint8)
 
-        for ix in range(n_images if num_drones == 1 else n_images // 2):
+        for ix in range(n_images):
             # dataset_np[ix] = imread(os.path.join(root, d, '%06d.jpeg' % ix))
-            # open image with rgb channels
-            #img = Image.open(os.path.join(root, d, '%06d.%s' % (ix, file_ending)))
             img = Image.open(os.path.join(root, d, '%06da.%s' % (ix, file_ending))).convert('RGB')
             dataset_np[ix] = img
-            if num_drones > 1:
-                img2 = Image.open(os.path.join(root, d, '%06db.%s' % (ix, file_ending))).convert('RGB')
-                dataset_np2[ix] = img2
-
-        dataset_vu = np.genfromtxt(os.path.join(root, d, 'data_in.csv'), delimiter=',', skip_header=1, dtype=np.uint8)
-
-        assert len(dataset_vu) == len(dataset_np), f'number of images should be equal to number of values ({len(dataset_vu)} vs {len(dataset_np)})'
 
         images_dataset = tf.data.Dataset.from_tensor_slices(dataset_np)
-        values_dataset = tf.data.Dataset.from_tensor_slices(dataset_vu)
-        if num_drones > 1:
-            images_dataset2 = tf.data.Dataset.from_tensor_slices(dataset_np2)
-            dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_image2": images_dataset2, "input_vector":values_dataset}, labels_dataset))
-        else:
-            dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_vector":values_dataset}, labels_dataset))
+        timedeltas_dataset = tf.data.Dataset.from_tensor_slices(timedeltas)
+        # dataset = tf.data.Dataset.zip((images_dataset, timedeltas_dataset, labels_dataset))
+        dataset = tf.data.Dataset.zip(({"input_image":images_dataset, "input_timedelta":timedeltas_dataset}, labels_dataset))
         dataset = dataset.window(seq_len, shift=shift, stride=stride, drop_remainder=True).flat_map(sub_to_batch)
         datasets.append(dataset)
 
@@ -186,7 +171,7 @@ def frames_to_array_rnn(root, dirs, image_size, seq_len):
     n_batches = min(int(np.ceil(max_run_length / seq_len)), run_len_threshold)
     data = np.zeros((n_batches, n_runs + total_extra_runs, seq_len, *image_size), dtype=np.uint8)
     full_batch_size = n_runs + total_extra_runs
-    labels = np.zeros((n_batches, full_batch_size, seq_len, 4+4))
+    labels = np.zeros((n_batches, full_batch_size, seq_len, 4))
     print('Data shape: ', data.shape)
     for (ix, dname) in enumerate(dirs):
         print('Loading directory %d of %d (%s)' % (ix, n_runs, dname))
