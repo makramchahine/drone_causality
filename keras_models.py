@@ -34,6 +34,106 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # if single_step, control output is (batch, 4), otherwise (batch, seq_len, 4)
 # if single_step, hidden outputs typically have shape (batch, hidden_dimension)
 
+def lecun_tanh(x):
+    return 1.7159 * tf.nn.tanh(0.666 * x)
+
+class LEMCell(tf.keras.layers.Layer):
+    # def __init__(self, units, dt, **kwargs):
+        # self.dt = dt
+    def __init__(self, units, **kwargs):
+        super(LEMCell, self).__init__(**kwargs)
+        self.units = units
+        self.state_size = [units, units]  # y and z state sizes
+
+    def build(self, input_shape):
+        input_dim = input_shape[-1]
+
+        # Define the weights for input to hidden transformations
+        self.inp2hid = self.add_weight(shape=(input_dim, 4 * self.units), initializer='uniform', name='inp2hid')
+        # Define the weights for hidden to hidden transformations
+        self.hid2hid = self.add_weight(shape=(self.units, 3 * self.units), initializer='uniform', name='hid2hid')
+        # Transformation for z
+        self.transform_z = self.add_weight(shape=(self.units, self.units), initializer='uniform', name='transform_z')
+
+        self.built = True
+
+    def call(self, inputs, states, dt):
+        x = inputs
+        y, z = states
+
+        # Transformations
+        transformed_inp = tf.matmul(x, self.inp2hid)
+        transformed_hid = tf.matmul(y, self.hid2hid)
+
+        # Split the transformations into their respective components
+        i_dt1, i_dt2, i_z, i_y = tf.split(transformed_inp, 4, axis=1)
+        h_dt1, h_dt2, h_y = tf.split(transformed_hid, 3, axis=1)
+
+        # Calculate the update gates and transformations
+        ms_dt_bar = dt * tf.sigmoid(i_dt1 + h_dt1)
+        ms_dt = dt * tf.sigmoid(i_dt2 + h_dt2)
+
+        z_new = (1. - ms_dt) * z + ms_dt * tf.tanh(i_y + h_y)
+        y_new = (1. - ms_dt_bar) * y + ms_dt_bar * tf.tanh(tf.matmul(z_new, self.transform_z) + i_z)
+
+        return y_new, [y_new, z_new]
+
+def generate_lem_model(
+        unit_size,
+        seq_len,
+        image_shape,
+        dropout=0.1,
+        recurrent_dropout=0.1,
+        rnn_stateful=False,
+        batch_size=None,
+        augmentation_params=None,
+        single_step: bool = False,
+        no_norm_layer: bool = False,
+):
+    inputs_image, x, inputs_timedelta = generate_network_trunk(
+        seq_len,
+        image_shape,
+        augmentation_params=augmentation_params,
+        batch_size=batch_size,
+        single_step=single_step,
+        no_norm_layer=no_norm_layer,
+    )
+
+    # vars for single step model
+    c_inputs = []
+    h_inputs = []
+    c_outputs = []
+    h_outputs = []
+
+    if single_step:
+        lem_cell = LEMCell(unit_size)
+        # keep track of input for each layer of rnn
+        c_input = tf.keras.Input(shape=(lem_cell.state_size[0]))
+        h_input = tf.keras.Input(shape=(lem_cell.state_size[1]))
+
+        x, [c_state, h_state] = lem_cell(x, [c_input, h_input], inputs_timedelta)
+        c_inputs.append(c_input)
+        h_inputs.append(h_input)
+        c_outputs.append(c_state)
+        h_outputs.append(h_state)
+    else:
+        x = keras.layers.RNN(lem_cell,
+                            batch_input_shape=((batch_size, seq_len, x.shape[-1]),
+                                                (batch_size, seq_len, 1)),
+                            return_sequences=True,
+                            stateful=rnn_stateful,
+                            dropout=dropout,
+                            recurrent_dropout=recurrent_dropout)((x, inputs_timedelta))
+
+    x = keras.layers.Dense(units=4, activation='linear')(x)
+    if single_step:
+        lem_model = keras.Model([inputs_image, inputs_timedelta, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
+    else:
+        lem_model = keras.Model([inputs_image, inputs_timedelta], [x])
+
+    return lem_model
+
+
 def generate_lstm_model(
         rnn_sizes,
         seq_len,

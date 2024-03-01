@@ -14,7 +14,7 @@ SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(SCRIPT_PATH, ".."))
 
 from keras_models import IMAGE_SHAPE, DEFAULT_CFC_CONFIG, generate_ncp_model, generate_ctrnn_model, generate_lstm_model, \
-    generate_tcn_model, DEFAULT_NCP_SEED
+    generate_tcn_model, generate_lem_model, DEFAULT_NCP_SEED
 
 num_drones = 1
 has_instr_or_timestep = True
@@ -51,6 +51,13 @@ class CTRNNParams(ModelParams):
     rnn_stateful: bool = False
     wiredcfc_seed: int = DEFAULT_NCP_SEED
 
+@dataclass
+class LEMParams(ModelParams):
+    rnn_sizes: List[int] = field(default=False, init=True)
+    ct_network_type: str = 'ctrnn'
+    config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
+    rnn_stateful: bool = False
+    wiredcfc_seed: int = DEFAULT_NCP_SEED
 
 @dataclass
 class TCNParams(ModelParams):
@@ -72,6 +79,8 @@ def get_skeleton(params: ModelParams):
         model_skeleton = generate_lstm_model(**asdict(params))
     elif isinstance(params, TCNParams) or "TCNParams" in params.__class__.__name__:
         model_skeleton = generate_tcn_model(**asdict(params))
+    elif isinstance(params, LEMParams) or "LEMParams" in params.__class__.__name__:
+        model_skeleton = generate_lem_model(**asdict(params))
     else:
         raise ValueError(f"Could not parse param type {params.__class__}")
     return model_skeleton

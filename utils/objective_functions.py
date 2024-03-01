@@ -266,6 +266,38 @@ def wiredcfccell_objective(trial: Trial, data_dir: str, batch_size: int, n_epoch
 
     return calculate_objective(trial, history)
 
+def lemcell_objective(trial: Trial, data_dir: str, batch_size: int, n_epochs: float = None, lr: float = None, decay_rate: float = None, **train_kwargs: Dict[str, Any]):
+    """
+    Even though wiredcfc is a type of ctrnn, it takes an additional parameter, wiring seed, so it gets a custom
+    objective function
+    """
+    seeds_to_try = list(range(22221, 22228)) + [55555]
+    wiredcfc_seed = trial.suggest_categorical("wiredcfc_seed", seeds_to_try)
+    rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
+
+    if lr is None:
+        lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
+    if decay_rate is None:
+        decay_rate = trial.suggest_float("decay_rate", 0.85, 1)
+    print(f"decay_rate: {decay_rate}")
+    print(f"lr: {lr}")
+    prune_callback = [KerasPruningCallbackFunction(trial, sum_val_train_loss)]
+
+    if n_epochs is not None:
+        COMMON_TRAIN_PARAMS["epochs"] = n_epochs
+    seq_len = None if train_kwargs.get('seq_len') is None else int(train_kwargs.pop('seq_len'))
+    if seq_len is not None:
+        COMMON_MODEL_PARAMS["seq_len"] = seq_len
+    model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type="wiredcfccell", wiredcfc_seed=wiredcfc_seed,
+                               **COMMON_MODEL_PARAMS)
+    merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
+    merged_kwargs.update(**train_kwargs)
+    history = train_model(lr=lr, decay_rate=decay_rate, callbacks=prune_callback,
+                          model_params=model_params, data_dir=data_dir, batch_size=batch_size, **merged_kwargs)
+    trial.set_user_attr("model_params", repr(model_params))
+
+    return calculate_objective(trial, history)
+
 
 # classes and functions that are called in objective functions. Can't be in hyperparameter_tuning.py or else circular
 # import
