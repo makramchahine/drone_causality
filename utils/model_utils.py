@@ -54,7 +54,7 @@ class CTRNNParams(ModelParams):
 @dataclass
 class LEMParams(ModelParams):
     rnn_sizes: List[int] = field(default=False, init=True)
-    ct_network_type: str = 'ctrnn'
+    ct_network_type: str = 'lem'
     config: Dict = field(default_factory=lambda: copy.deepcopy(DEFAULT_CFC_CONFIG))
     rnn_stateful: bool = False
     wiredcfc_seed: int = DEFAULT_NCP_SEED

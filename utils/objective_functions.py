@@ -10,7 +10,7 @@ from optuna.integration import TFKerasPruningCallback
 from tensorflow.python.keras.callbacks import History
 
 from tf_data_training import train_model
-from utils.model_utils import NCPParams, CTRNNParams, LSTMParams, TCNParams
+from utils.model_utils import NCPParams, CTRNNParams, LSTMParams, TCNParams, LEMParams
 
 # args to train_model that are shared between all objective function types
 COMMON_TRAIN_PARAMS = {
@@ -288,7 +288,7 @@ def lemcell_objective(trial: Trial, data_dir: str, batch_size: int, n_epochs: fl
     seq_len = None if train_kwargs.get('seq_len') is None else int(train_kwargs.pop('seq_len'))
     if seq_len is not None:
         COMMON_MODEL_PARAMS["seq_len"] = seq_len
-    model_params = CTRNNParams(rnn_sizes=[rnn_size], ct_network_type="wiredcfccell", wiredcfc_seed=wiredcfc_seed,
+    model_params = LEMParams(rnn_sizes=[rnn_size], ct_network_type="lem", wiredcfc_seed=wiredcfc_seed,
                                **COMMON_MODEL_PARAMS)
     merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
     merged_kwargs.update(**train_kwargs)

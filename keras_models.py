@@ -46,7 +46,12 @@ class LEMCell(tf.keras.layers.Layer):
         self.state_size = [units, units]  # y and z state sizes
 
     def build(self, input_shape):
-        input_dim = input_shape[-1]
+        print(f"input_shape: {input_shape}")
+        if isinstance(input_shape, tuple):
+            # Nested tuple -> First item represent feature dimension
+            input_dim = input_shape[0][-1]
+        else:
+            input_dim = input_shape[-1]
 
         # Define the weights for input to hidden transformations
         self.inp2hid = self.add_weight(shape=(input_dim, 4 * self.units), initializer='uniform', name='inp2hid')
@@ -57,8 +62,15 @@ class LEMCell(tf.keras.layers.Layer):
 
         self.built = True
 
-    def call(self, inputs, states, dt):
-        x = inputs
+    def call(self, inputs, states):
+        # Irregularly sampled mode
+        if isinstance(inputs, (tuple, list)):
+            x, dt = inputs
+            dt = tf.reshape(dt, [-1, 1])
+        else:
+            # Regularly sampled mode (elapsed time = 1 second)
+            x = inputs
+            dt = 1.0
         y, z = states
 
         # Transformations
@@ -79,7 +91,7 @@ class LEMCell(tf.keras.layers.Layer):
         return y_new, [y_new, z_new]
 
 def generate_lem_model(
-        unit_size,
+        rnn_sizes,
         seq_len,
         image_shape,
         dropout=0.1,
@@ -89,6 +101,7 @@ def generate_lem_model(
         augmentation_params=None,
         single_step: bool = False,
         no_norm_layer: bool = False,
+        **kwargs
 ):
     inputs_image, x, inputs_timedelta = generate_network_trunk(
         seq_len,
@@ -98,6 +111,9 @@ def generate_lem_model(
         single_step=single_step,
         no_norm_layer=no_norm_layer,
     )
+    print(f"\n\n LEM CELL")
+    rnn_sizes = rnn_sizes * 1
+    print(f"RNN SIZES: {rnn_sizes}")
 
     # vars for single step model
     c_inputs = []
@@ -105,25 +121,25 @@ def generate_lem_model(
     c_outputs = []
     h_outputs = []
 
-    if single_step:
-        lem_cell = LEMCell(unit_size)
-        # keep track of input for each layer of rnn
-        c_input = tf.keras.Input(shape=(lem_cell.state_size[0]))
-        h_input = tf.keras.Input(shape=(lem_cell.state_size[1]))
+    for rnn_size in rnn_sizes:
+        lem_cell = LEMCell(rnn_size)
+        if single_step:
+            # keep track of input for each layer of rnn
+            c_input = tf.keras.Input(shape=(lem_cell.state_size[0]))
+            h_input = tf.keras.Input(shape=(lem_cell.state_size[1]))
 
-        x, [c_state, h_state] = lem_cell(x, [c_input, h_input], inputs_timedelta)
-        c_inputs.append(c_input)
-        h_inputs.append(h_input)
-        c_outputs.append(c_state)
-        h_outputs.append(h_state)
-    else:
-        x = keras.layers.RNN(lem_cell,
-                            batch_input_shape=((batch_size, seq_len, x.shape[-1]),
-                                                (batch_size, seq_len, 1)),
-                            return_sequences=True,
-                            stateful=rnn_stateful,
-                            dropout=dropout,
-                            recurrent_dropout=recurrent_dropout)((x, inputs_timedelta))
+            x, [c_state, h_state] = lem_cell(x, [c_input, h_input], inputs_timedelta)
+            c_inputs.append(c_input)
+            h_inputs.append(h_input)
+            c_outputs.append(c_state)
+            h_outputs.append(h_state)
+        else:
+            x = keras.layers.RNN(lem_cell,
+                                batch_input_shape=((batch_size, seq_len, x.shape[-1]),
+                                                    (batch_size, seq_len, 1)),
+                                return_sequences=True,
+                                stateful=rnn_stateful,
+                                time_major=False)((x, inputs_timedelta))
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
@@ -256,6 +272,7 @@ def generate_ctrnn_model(rnn_sizes,
                          no_norm_layer: bool = False,
                          **kwargs,
                          ):
+    print(f"\n\n CTRNN CELL")
     inputs_image, x, inputs_timedelta = generate_network_trunk(
         seq_len,
         image_shape,
