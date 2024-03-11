@@ -73,22 +73,28 @@ class LEMCell(tf.keras.layers.Layer):
             dt = 1.0
         y, z = states
 
-        # Transformations
+        NUM_UPDATES = 6
+        dt = dt / NUM_UPDATES
+
         transformed_inp = tf.matmul(x, self.inp2hid)
-        transformed_hid = tf.matmul(y, self.hid2hid)
+        for _ in range(NUM_UPDATES):
+            # Transformations
+            transformed_hid = tf.matmul(y, self.hid2hid)
 
-        # Split the transformations into their respective components
-        i_dt1, i_dt2, i_z, i_y = tf.split(transformed_inp, 4, axis=1)
-        h_dt1, h_dt2, h_y = tf.split(transformed_hid, 3, axis=1)
+            # Split the transformations into their respective components
+            i_dt1, i_dt2, i_z, i_y = tf.split(transformed_inp, 4, axis=1)
+            h_dt1, h_dt2, h_y = tf.split(transformed_hid, 3, axis=1)
 
-        # Calculate the update gates and transformations
-        ms_dt_bar = dt * tf.sigmoid(i_dt1 + h_dt1)
-        ms_dt = dt * tf.sigmoid(i_dt2 + h_dt2)
+            # Calculate the update gates and transformations
+            ms_dt_bar = dt * tf.sigmoid(i_dt1 + h_dt1)
+            ms_dt = dt * tf.sigmoid(i_dt2 + h_dt2)
 
-        z_new = (1. - ms_dt) * z + ms_dt * tf.tanh(i_y + h_y)
-        y_new = (1. - ms_dt_bar) * y + ms_dt_bar * tf.tanh(tf.matmul(z_new, self.transform_z) + i_z)
+            z_new = (1. - ms_dt) * z + ms_dt * tf.tanh(i_y + h_y)
+            y_new = (1. - ms_dt_bar) * y + ms_dt_bar * tf.tanh(tf.matmul(z_new, self.transform_z) + i_z)
 
-        return y_new, [y_new, z_new]
+            y = y_new
+            z = z_new
+        return [y_new, z_new]
 
 def generate_lem_model(
         rnn_sizes,
@@ -128,7 +134,7 @@ def generate_lem_model(
             c_input = tf.keras.Input(shape=(lem_cell.state_size[0]))
             h_input = tf.keras.Input(shape=(lem_cell.state_size[1]))
 
-            x, [c_state, h_state] = lem_cell(x, [c_input, h_input], inputs_timedelta)
+            x, [c_state, h_state] = lem_cell((x, inputs_timedelta), [c_input, h_input])
             c_inputs.append(c_input)
             h_inputs.append(h_input)
             c_outputs.append(c_state)
