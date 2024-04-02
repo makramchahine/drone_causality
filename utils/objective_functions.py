@@ -306,6 +306,9 @@ def lemcell_objective(trial: Trial, data_dir: str, batch_size: int, n_epochs: fl
     seeds_to_try = list(range(22221, 22228)) + [55555]
     wiredcfc_seed = trial.suggest_categorical("wiredcfc_seed", seeds_to_try)
     rnn_size = trial.suggest_int("rnn_size", low=64, high=256)
+    num_updates = trial.suggest_int("num_updates", low=1, high=12)
+    task_delta_t = trial.suggest_float("task_delta_t", low=1, high=1)
+    alpha = trial.suggest_loguniform("alpha", low=1e-5, high=1)
 
     if lr is None:
         lr = trial.suggest_float("lr", low=1e-5, high=1e-2, log=True)
@@ -320,7 +323,8 @@ def lemcell_objective(trial: Trial, data_dir: str, batch_size: int, n_epochs: fl
     seq_len = None if train_kwargs.get('seq_len') is None else int(train_kwargs.pop('seq_len'))
     if seq_len is not None:
         COMMON_MODEL_PARAMS["seq_len"] = seq_len
-    model_params = LEMParams(rnn_sizes=[rnn_size], ct_network_type="lem", wiredcfc_seed=wiredcfc_seed,
+    model_params = LEMParams(rnn_sizes=[rnn_size], num_updates=num_updates, task_delta_t=task_delta_t, alpha=alpha,
+                                ct_network_type="lem", wiredcfc_seed=wiredcfc_seed,
                                **COMMON_MODEL_PARAMS)
     merged_kwargs = copy.deepcopy(COMMON_TRAIN_PARAMS)
     merged_kwargs.update(**train_kwargs)

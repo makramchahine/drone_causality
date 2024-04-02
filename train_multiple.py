@@ -85,7 +85,7 @@ def train_multiple(obj_fn: Callable, data_dir: str, study_name: str, n_trains: i
     optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
     study_name_network = f"{study_name}{obj_fn.__name__}"
     # TODO: FIX hardcoding CFC
-    study_name_network = study_name_network.replace("lem", "wiredcfc")
+    # study_name_network = study_name_network.replace("lem", "wiredcfc")
     study_name_network = study_name_network.replace("debug_ltc", "wiredcfc")
 
 

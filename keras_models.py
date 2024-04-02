@@ -1,6 +1,7 @@
 import os
 from typing import Iterable, Dict
 
+import numpy as np
 import kerasncp as kncp
 from kerasncp.tf import LTCCell, WiredCfcCell
 from tensorflow import keras
@@ -40,10 +41,13 @@ def lecun_tanh(x):
 class LEMCell(tf.keras.layers.Layer):
     # def __init__(self, units, dt, **kwargs):
         # self.dt = dt
-    def __init__(self, units, **kwargs):
+    def __init__(self, units, num_updates, task_delta_t, alpha,**kwargs):
         super(LEMCell, self).__init__(**kwargs)
         self.units = units
         self.state_size = [units, units]  # y and z state sizes
+        self.num_updates = num_updates
+        self.task_delta_t = task_delta_t
+        self.alpha = alpha
 
     def build(self, input_shape):
         print(f"input_shape: {input_shape}")
@@ -73,11 +77,10 @@ class LEMCell(tf.keras.layers.Layer):
             dt = 1.0
         y, z = states
 
-        NUM_UPDATES = 6
-        dt = dt / NUM_UPDATES
+        dt = dt / self.num_updates * self.task_delta_t * self.alpha
 
         transformed_inp = tf.matmul(x, self.inp2hid)
-        for _ in range(NUM_UPDATES):
+        for _ in range(self.num_updates):
             # Transformations
             transformed_hid = tf.matmul(y, self.hid2hid)
 
@@ -94,10 +97,13 @@ class LEMCell(tf.keras.layers.Layer):
 
             y = y_new
             z = z_new
-        return [y_new, z_new]
+        return y_new, [y_new, z_new]
 
 def generate_lem_model(
         rnn_sizes,
+        num_updates,
+        task_delta_t, 
+        alpha,
         seq_len,
         image_shape,
         dropout=0.1,
@@ -128,7 +134,7 @@ def generate_lem_model(
     h_outputs = []
 
     for rnn_size in rnn_sizes:
-        lem_cell = LEMCell(rnn_size)
+        lem_cell = LEMCell(rnn_size, num_updates, task_delta_t, alpha)
         if single_step:
             # keep track of input for each layer of rnn
             c_input = tf.keras.Input(shape=(lem_cell.state_size[0]))
