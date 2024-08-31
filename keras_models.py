@@ -55,6 +55,8 @@ def generate_lstm_model(
         no_norm_layer=no_norm_layer,
     )
 
+    x = keras.layers.Concatenate()([x, inputs_timedelta])
+
     # vars for single step model
     c_inputs = []
     h_inputs = []
@@ -88,9 +90,9 @@ def generate_lstm_model(
 
     x = keras.layers.Dense(units=4, activation='linear')(x)
     if single_step:
-        lstm_model = keras.Model([inputs_image, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
+        lstm_model = keras.Model([inputs_image, inputs_timedelta, *c_inputs, *h_inputs], [x, *c_outputs, *h_outputs])
     else:
-        lstm_model = keras.Model([inputs_image], [x])
+        lstm_model = keras.Model([inputs_image, inputs_timedelta], [x])
 
     return lstm_model
 
